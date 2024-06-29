@@ -2,10 +2,10 @@ program forWhoseAdvantage
     use trinary_module
     implicit none
     integer :: rows, cols
-    type(trinary), allocatable :: matrix(:,:)
+    type(trinary), allocatable :: brain(:,:)
     type(trinary), allocatable :: inputer(:)
     type(trinary), allocatable :: outputter(:)
-    real, allocatable :: matrix3d(:,:,:)
+    real, allocatable :: synapses(:,:,:)
     integer :: i, j, k
     character(len=10) :: arg1, arg2
     integer :: ios
@@ -27,16 +27,16 @@ program forWhoseAdvantage
         stop
     end if
 
-    ! Allocate the 2D matrix and 1D arrays
-    allocate(matrix(rows, cols))
+    ! Allocate the 2D brain and 1D arrays
+    allocate(brain(rows, cols))
     allocate(inputer(cols))
     allocate(outputter(cols))
-    allocate(matrix3d(rows, cols, 8))
+    allocate(synapses(rows, cols, 8))
 
-    ! Initialize the 2D matrix with all lows (0's)
+    ! Initialize the 2D brain with all lows (0's)
     do i = 1, rows
         do j = 1, cols
-            call matrix(i, j)%set(low)
+            call brain(i, j)%set(low)
         end do
     end do
 
@@ -56,12 +56,12 @@ program forWhoseAdvantage
         call outputter(j)%set(inputer(j)%get())
     end do
 
-    ! Initialize the 3D matrix with random floats between 0 and 1
+    ! Initialize the 3D synapses with random floats between 0 and 1
     call random_seed()
     do i = 1, rows
         do j = 1, cols
             do k = 1, 8
-                call random_number(matrix3d(i, j, k))
+                call random_number(synapses(i, j, k))
             end do
         end do
     end do
@@ -70,21 +70,21 @@ program forWhoseAdvantage
     print *, "Inputer array of trinary states:"
     write(*, "(100(I3,1X))") (inputer(j)%get(), j=1, cols)
 
-    ! Print the 2D matrix
-    print *, "2D Matrix of trinary states:"
+    ! Print the 2D brain
+    print *, "2D Brain of trinary states:"
     do i = 1, rows
-        write(*, "(100(I3,1X))") (matrix(i, j)%get(), j=1, cols)
+        write(*, "(100(I3,1X))") (brain(i, j)%get(), j=1, cols)
     end do
 
     ! Print the outputter array
     print *, "Outputter array of trinary states:"
     write(*, "(100(I3,1X))") (outputter(j)%get(), j=1, cols)
 
-    ! Print the 3D matrix
-    print *, "3D Matrix with 8 floats per cell:"
+    ! Print the 3D synapses
+    print *, "3D Synapses with 8 floats per cell:"
     do i = 1, rows
         do j = 1, cols
-            write(*, "(8F6.3, 1X)") (matrix3d(i, j, k), k=1, 8)
+            write(*, "(8F6.3, 1X)") (synapses(i, j, k), k=1, 8)
         end do
         print *
     end do
