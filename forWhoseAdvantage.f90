@@ -5,7 +5,8 @@ program forWhoseAdvantage
     type(trinary), allocatable :: matrix(:,:)
     type(trinary), allocatable :: inputer(:)
     type(trinary), allocatable :: outputter(:)
-    integer :: i, j
+    real, allocatable :: matrix3d(:,:,:)
+    integer :: i, j, k
     character(len=10) :: arg1, arg2
     integer :: ios
 
@@ -30,6 +31,7 @@ program forWhoseAdvantage
     allocate(matrix(rows, cols))
     allocate(inputer(cols))
     allocate(outputter(cols))
+    allocate(matrix3d(rows, cols, 8))
 
     ! Initialize the 2D matrix with all lows (0's)
     do i = 1, rows
@@ -54,6 +56,16 @@ program forWhoseAdvantage
         call outputter(j)%set(inputer(j)%get())
     end do
 
+    ! Initialize the 3D matrix with random floats between 0 and 1
+    call random_seed()
+    do i = 1, rows
+        do j = 1, cols
+            do k = 1, 8
+                call random_number(matrix3d(i, j, k))
+            end do
+        end do
+    end do
+
     ! Print the inputer array
     print *, "Inputer array of trinary states:"
     write(*, "(100(I3,1X))") (inputer(j)%get(), j=1, cols)
@@ -67,5 +79,14 @@ program forWhoseAdvantage
     ! Print the outputter array
     print *, "Outputter array of trinary states:"
     write(*, "(100(I3,1X))") (outputter(j)%get(), j=1, cols)
+
+    ! Print the 3D matrix
+    print *, "3D Matrix with 8 floats per cell:"
+    do i = 1, rows
+        do j = 1, cols
+            write(*, "(8F6.3, 1X)") (matrix3d(i, j, k), k=1, 8)
+        end do
+        print *
+    end do
 
 end program forWhoseAdvantage
