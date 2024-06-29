@@ -2,11 +2,12 @@ program forWhoseAdvantage
     use trinary_module
     implicit none
     integer :: rows, cols
-    integer, allocatable :: matrix(:,:)
+    type(trinary), allocatable :: matrix(:,:)
+    type(trinary), allocatable :: inputer(:)
+    type(trinary), allocatable :: outputter(:)
     integer :: i, j
     character(len=10) :: arg1, arg2
     integer :: ios
-    type(trinary) :: tri_state
 
     ! Read command line arguments
     call get_command_argument(1, arg1)
@@ -25,30 +26,46 @@ program forWhoseAdvantage
         stop
     end if
 
-    ! Allocate the 2D matrix
+    ! Allocate the 2D matrix and 1D arrays
     allocate(matrix(rows, cols))
+    allocate(inputer(cols))
+    allocate(outputter(cols))
 
-    ! Initialize the 2D matrix
+    ! Initialize the 2D matrix with all lows (0's)
     do i = 1, rows
         do j = 1, cols
-            matrix(i, j) = (i - 1) * cols + j
+            call matrix(i, j)%set(low)
         end do
     end do
 
-    ! Set and get trinary state example
-    call tri_state%set(low)
-    print *, "Trinary state set to low:", tri_state%get()
+    ! Initialize the inputer array with alternating trinary states
+    do j = 1, cols
+        if (mod(j, 3) == 0) then
+            call inputer(j)%set(low)
+        elseif (mod(j, 3) == 1) then
+            call inputer(j)%set(medium)
+        else
+            call inputer(j)%set(high)
+        end if
+    end do
 
-    call tri_state%set(medium)
-    print *, "Trinary state set to medium:", tri_state%get()
+    ! Initialize the outputter array with the same values as inputer
+    do j = 1, cols
+        call outputter(j)%set(inputer(j)%get())
+    end do
 
-    call tri_state%set(high)
-    print *, "Trinary state set to high:", tri_state%get()
+    ! Print the inputer array
+    print *, "Inputer array of trinary states:"
+    write(*, "(100(I3,1X))") (inputer(j)%get(), j=1, cols)
 
     ! Print the 2D matrix
-    print *, "2D Matrix of integers:"
+    print *, "2D Matrix of trinary states:"
     do i = 1, rows
-        print *, matrix(i, :)
+        write(*, "(100(I3,1X))") (matrix(i, j)%get(), j=1, cols)
     end do
+
+    ! Print the outputter array
+    print *, "Outputter array of trinary states:"
+    write(*, "(100(I3,1X))") (outputter(j)%get(), j=1, cols)
 
 end program forWhoseAdvantage

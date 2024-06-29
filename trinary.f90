@@ -1,7 +1,7 @@
 module trinary_module
     implicit none
     private
-    public :: trinary, low, medium, high, set_trinary, get_trinary
+    public :: trinary, low, medium, high
 
     type :: trinary
         private
@@ -11,7 +11,7 @@ module trinary_module
         procedure :: get => get_trinary
     end type trinary
 
-    integer, parameter :: low = 1, medium = 2, high = 3
+    integer, parameter :: low = 0, medium = 1, high = 2
 
 contains
 
