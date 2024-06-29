@@ -1,0 +1,19 @@
+# Ignore module files
+*.mod
+
+# Ignore compiled executable
+forWhoseAdvantage
+
+# Ignore other temporary or build files (optional)
+*.o
+*.out
+*.exe
+*.bin
+*.obj
+*.so
+*.a
+*.dylib
+
+# Ignore directories (optional)
+build/
+bin/
