@@ -1,7 +1,7 @@
 module trinary_module
     implicit none
     private
-    public :: trinary, low, medium, high
+    public :: trinary, low, medium, high, up, down
 
     type :: trinary
         private
@@ -9,9 +9,10 @@ module trinary_module
     contains
         procedure :: set => set_trinary
         procedure :: get => get_trinary
+        procedure :: shift => change_trinary_state
     end type trinary
 
-    integer, parameter :: low = 0, medium = 1, high = 2
+    integer, parameter :: low = 0, medium = 1, high = 2, up = 1, down = -1
 
 contains
 
@@ -33,5 +34,16 @@ contains
 
         state = this%value
     end function get_trinary
+
+    subroutine change_trinary_state(this, direction)
+        class(trinary), intent(inout) :: this
+        integer, intent(in) :: direction
+
+        ! Apply the change based on the direction parameter
+        ! direction: +1 for up, -1 for down
+        if (this%value < high) then
+            this%value = min(max(this%value + direction, low), high)
+        end if
+    end subroutine change_trinary_state
 
 end module trinary_module

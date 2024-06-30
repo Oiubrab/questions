@@ -9,7 +9,7 @@ program forWhoseAdvantage
     type(trinary), allocatable :: brain(:,:)
     type(trinary), allocatable :: inputter(:)
     type(trinary), allocatable :: outputter(:)
-    real, allocatable :: synapses(:,:,:)
+    integer, allocatable :: synapses(:,:,:)
     integer :: i, j, k, step, max_steps
     character(len=10) :: arg1, arg2
     integer :: ios
@@ -37,11 +37,20 @@ program forWhoseAdvantage
     call initialize_outputter(outputter, inputter, cols)
     call initialize_synapses(synapses, rows, cols)
 
+    ! Print the initial 3D synapses
+    print *, "Initial 3D Synapses with 8 integers per cell:"
+    do i = 1, rows
+        do j = 1, cols
+            write(*, "(8I6, 1X)") (synapses(i, j, k), k=1, 8)
+        end do
+        print *
+    end do
+
     ! Apply decay in a loop
-    max_steps = 1000
+    max_steps = 50
     do step = 1, max_steps
-        call apply_decay(synapses, rows, cols, step)
-        if (decay_factor(step) <= 0.005) exit
+        call apply_decay(synapses, rows, cols)
+        if (all(synapses <= 1)) exit
     end do
 
     ! Print the inputter array
@@ -58,11 +67,11 @@ program forWhoseAdvantage
     print *, "Outputter array of trinary states:"
     write(*, "(100(I3,1X))") (outputter(j)%get(), j=1, cols)
 
-    ! Print the 3D synapses
-    print *, "3D Synapses with 8 floats per cell after decay:"
+    ! Print the 3D synapses after decay
+    print *, "3D Synapses with 8 integers per cell after decay:"
     do i = 1, rows
         do j = 1, cols
-            write(*, "(8F6.3, 1X)") (synapses(i, j, k), k=1, 8)
+            write(*, "(8I6, 1X)") (synapses(i, j, k), k=1, 8)
         end do
         print *
     end do
