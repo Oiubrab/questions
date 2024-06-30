@@ -31,8 +31,9 @@ This project aims to create a simulated brain-like system using Fortran. It invo
 
 Run the compiled program with the following arguments:
 
-```bash
-./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
+    ```bash
+    ./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
+    ```
 
     <rows>: Number of rows in the brain matrix.
     <cols>: Number of columns in the brain matrix.
