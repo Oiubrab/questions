@@ -35,11 +35,11 @@ Run the compiled program with the following arguments:
 ./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
 ```
 
-- <rows>: Number of rows in the brain matrix.
-- <cols>: Number of columns in the brain matrix.
-- <offset>: Offset position for the inputter array in the brain matrix.
-- <input_length>: Length of the inputter and outputter arrays (must be less than or equal to the number of columns).
-- <print_synapses_flag>: Boolean flag to enable (true) or disable (false) synapse printout.
+<rows>: Number of rows in the brain matrix.
+<cols>: Number of columns in the brain matrix.
+<offset>: Offset position for the inputter array in the brain matrix.
+<input_length>: Length of the inputter and outputter arrays (must be less than or equal to the number of columns).
+<print_synapses_flag>: Boolean flag to enable (true) or disable (false) synapse printout.
 
 ### Example
 
