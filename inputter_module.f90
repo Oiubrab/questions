@@ -3,15 +3,15 @@ module inputter_module
     implicit none
     contains
 
-    subroutine initialize_inputter(inputter, cols)
+    subroutine initialize_inputter(inputter, input_length)
         type(trinary), allocatable :: inputter(:)
-        integer, intent(in) :: cols
+        integer, intent(in) :: input_length
         integer :: j
 
-        allocate(inputter(cols))
+        allocate(inputter(input_length))
 
         ! Initialize the inputter array with alternating trinary states
-        do j = 1, cols
+        do j = 1, input_length
             if (mod(j, 3) == 0) then
                 call inputter(j)%set(low)
             elseif (mod(j, 3) == 1) then
