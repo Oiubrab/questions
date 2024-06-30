@@ -31,43 +31,43 @@ This project aims to create a simulated brain-like system using Fortran. It invo
 
 Run the compiled program with the following arguments:
 
-    ```bash
-    ./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
-    ```
+```bash
+./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
+```
 
-    <rows>: Number of rows in the brain matrix.
-    <cols>: Number of columns in the brain matrix.
-    <offset>: Offset position for the inputter array in the brain matrix.
-    <input_length>: Length of the inputter and outputter arrays (must be less than or equal to the number of columns).
-    <print_synapses_flag>: Boolean flag to enable (true) or disable (false) synapse printout.
+- <rows>: Number of rows in the brain matrix.
+- <cols>: Number of columns in the brain matrix.
+- <offset>: Offset position for the inputter array in the brain matrix.
+- <input_length>: Length of the inputter and outputter arrays (must be less than or equal to the number of columns).
+- <print_synapses_flag>: Boolean flag to enable (true) or disable (false) synapse printout.
 
-Example
+### Example
 
 To run the program with 3 rows, 4 columns, an offset of 1, an input length of 2, and synapse printout enabled:
 
 bash
-
+```bash
 ./forWhoseAdvantage 3 4 1 2 true
+```
+## Code Structure
 
-Code Structure
+- trinary_module.f90: Defines the trinary type and its operations.
+- brain_module.f90: Manages the brain matrix initialization and updates based on synapses.
+- inputter_module.f90: Initializes the inputter array and manages copying values to the brain matrix.
+- outputter_module.f90: Initializes the outputter array based on the inputter array.
+- synapses_module.f90: Manages synapse initialization, decay, and updates based on brain states.
+- forWhoseAdvantage.f90: Main program that initializes all components and runs the main simulation loop.
 
-    trinary_module.f90: Defines the trinary type and its operations.
-    brain_module.f90: Manages the brain matrix initialization and updates based on synapses.
-    inputter_module.f90: Initializes the inputter array and manages copying values to the brain matrix.
-    outputter_module.f90: Initializes the outputter array based on the inputter array.
-    synapses_module.f90: Manages synapse initialization, decay, and updates based on brain states.
-    forWhoseAdvantage.f90: Main program that initializes all components and runs the main simulation loop.
-
-Project Evolution
+## Project Evolution
 
 The main simulation loop includes the following steps:
 
-    Copy non-low states from the inputter array to the top row of the brain matrix.
-    Update synapses based on the current state of the brain matrix.
-    Apply decay to the synapses.
-    Print the state of the inputter, brain, outputter, and optionally the synapses.
-    Pause for 1 second between each step to observe the evolution.
+1. Copy non-low states from the inputter array to the top row of the brain matrix.
+2. Update synapses based on the current state of the brain matrix.
+3. Apply decay to the synapses.
+4. Print the state of the inputter, brain, outputter, and optionally the synapses.
+5. Pause for 1 second between each step to observe the evolution.
 
-Contributing
+## Contributing
 
 Feel free to submit issues or pull requests to improve the project. Contributions are welcome!
