@@ -30,9 +30,9 @@ module inputter_module
 
         ! Copy non-low states from inputter to the top row of the brain matrix
         do j = 1, size(inputter)
-            if (inputter(j)%get() /= low .and. (offset + j) <= brain_cols) then
-                if (brain(1, offset + j)%get() < inputter(j)%get()) then
-                    call brain(1, offset + j)%set(inputter(j)%get())
+            if (inputter(j)%get() /= low .and. (offset + j - 1) <= brain_cols) then
+                if (brain(1, offset + j - 1)%get() < inputter(j)%get()) then
+                    call brain(1, offset + j - 1)%set(inputter(j)%get())
                 end if
             end if
         end do
