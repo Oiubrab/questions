@@ -5,18 +5,19 @@ program forWhoseAdvantage
     use outputter_module
     use synapses_module
     implicit none
-    integer :: rows, cols
+    integer :: rows, cols, offset
     type(trinary), allocatable :: brain(:,:)
     type(trinary), allocatable :: inputter(:)
     type(trinary), allocatable :: outputter(:)
     integer, allocatable :: synapses(:,:,:)
     integer :: i, j, k, step, max_steps
-    character(len=10) :: arg1, arg2
+    character(len=10) :: arg1, arg2, arg3
     integer :: ios
 
     ! Read command line arguments
     call get_command_argument(1, arg1)
     call get_command_argument(2, arg2)
+    call get_command_argument(3, arg3)
 
     ! Convert command line arguments to integers
     read(arg1, *, iostat=ios) rows
@@ -28,6 +29,12 @@ program forWhoseAdvantage
     read(arg2, *, iostat=ios) cols
     if (ios /= 0) then
         print *, "Error: Invalid input for cols."
+        stop
+    end if
+
+    read(arg3, *, iostat=ios) offset
+    if (ios /= 0) then
+        print *, "Error: Invalid input for offset."
         stop
     end if
 
@@ -47,9 +54,17 @@ program forWhoseAdvantage
     end do
 
     ! Apply decay in a loop
-    max_steps = 50
+    max_steps = 100
     do step = 1, max_steps
+        ! Copy non-low states from inputter to the top row of the brain matrix
+        call copy_non_low_to_brain_top_row(inputter, brain, offset, size(inputter), cols)
+
+        ! Update synapses based on brain state
+        call update_brain_state_based_on_synapses(brain, synapses, rows, cols)
+
+        ! Apply decay
         call apply_decay(synapses, rows, cols)
+
         if (all(synapses <= 1)) exit
     end do
 
