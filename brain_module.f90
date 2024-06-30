@@ -23,7 +23,7 @@ module brain_module
         type(trinary), allocatable :: brain(:,:)
         integer, allocatable :: synapses(:,:,:)
         integer, intent(in) :: rows, cols
-        integer :: i, j, k, rand_val, total_value, index
+        integer :: i, j, k, total_value, index
         real :: cumulative_prob(8), random_num
         real, allocatable :: synapse_values(:)
         integer, dimension(8, 2) :: directions = reshape([ &
@@ -65,11 +65,14 @@ module brain_module
                         end if
                     end do
 
-                    ! Update the corresponding direction
+                    ! Update the corresponding direction if it is not already high
                     if (i + directions(index, 1) >= 1 .and. i + directions(index, 1) <= rows .and. &
                         j + directions(index, 2) >= 1 .and. j + directions(index, 2) <= cols) then
-                        call brain(i + directions(index, 1), j + directions(index, 2))%shift(up)
-                        call brain(i, j)%shift(down)
+                        if (brain(i + directions(index, 1), j + directions(index, 2))%get() /= high) then
+                            call brain(i + directions(index, 1), j + directions(index, 2))%shift(up)
+                            call brain(i, j)%shift(down)
+                            synapses(i, j, index) = synapses(i, j, index) + rows * cols
+                        end if
                     end if
 
                     deallocate(synapse_values)

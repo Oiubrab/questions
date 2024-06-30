@@ -66,8 +66,11 @@ program forWhoseAdvantage
     ! Main loop of the entire system
     max_steps = 100
     do step = 1, max_steps
+        ! Print the step number
+        print *, "Step ", step, ":"
+
         ! Copy non-low states from inputter to the top row of the brain matrix
-        call copy_non_low_to_brain_top_row(inputter, brain, offset, size(inputter), cols)
+        call copy_non_low_to_brain_top_row(inputter, brain, offset, cols)
 
         ! Update synapses based on brain state
         call update_brain_state_based_on_synapses(brain, synapses, rows, cols)
@@ -76,7 +79,7 @@ program forWhoseAdvantage
         call apply_decay(synapses, rows, cols)
 
         ! Print the inputter array with offset alignment
-        print *, "Step ", step, ": Inputter array of trinary states:"
+        print *, "Inputter array of trinary states:"
         do j = 1, offset - 1
             write(*, "(A)", advance='no') '    '  ! 4 spaces instead of 5
         end do
@@ -84,13 +87,13 @@ program forWhoseAdvantage
         print *
 
         ! Print the 2D brain
-        print *, "Step ", step, ": 2D Brain of trinary states:"
+        print *, "2D Brain of trinary states:"
         do i = 1, rows
             write(*, "(100(I3,1X))") (brain(i, j)%get(), j=1, cols)
         end do
 
         ! Print the outputter array with offset alignment
-        print *, "Step ", step, ": Outputter array of trinary states:"
+        print *, "Outputter array of trinary states:"
         do j = 1, offset - 1
             write(*, "(A)", advance='no') '    '  ! 4 spaces instead of 5
         end do
@@ -99,7 +102,7 @@ program forWhoseAdvantage
 
         ! Print the 3D synapses after decay if flag is true
         if (print_synapses) then
-            print *, "Step ", step, ": 3D Synapses with 8 integers per cell:"
+            print *, "3D Synapses with 8 integers per cell:"
             do i = 1, rows
                 do j = 1, cols
                     write(*, "(8I6, 1X)") (synapses(i, j, k), k=1, 8)
