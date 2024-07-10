@@ -60,12 +60,15 @@ program forWhoseAdvantage
     ! Initialize the brain, inputter, outputter, and synapses
     call initialize_brain(brain, rows, cols)
     call initialize_inputter(inputter, input_length)
-    call initialize_outputter(outputter, inputter, input_length)
+    call initialize_outputter(outputter, input_length)
     call initialize_synapses(synapses, rows, cols)
 
     ! Main loop of the entire system
     max_steps = 100
     do step = 1, max_steps
+        ! Save and reset the outputter array
+        call save_and_reset_outputter(outputter)
+
         ! Print the step number
         print *, "Step ", step, ":"
 
@@ -73,7 +76,7 @@ program forWhoseAdvantage
         call copy_non_low_to_brain_top_row(inputter, brain, offset, cols)
 
         ! Update synapses based on brain state
-        call update_brain_state_based_on_synapses(brain, synapses, rows, cols)
+        call update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, offset)
 
         ! Apply decay
         call apply_decay(synapses, rows, cols)

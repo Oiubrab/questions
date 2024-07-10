@@ -1,6 +1,7 @@
 module brain_module
     use trinary_module
     use synapses_module
+    use outputter_module
     implicit none
     contains
 
@@ -19,10 +20,11 @@ module brain_module
         end do
     end subroutine initialize_brain
 
-    subroutine update_brain_state_based_on_synapses(brain, synapses, rows, cols)
+    subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, offset)
         type(trinary), allocatable :: brain(:,:)
+        type(trinary), allocatable :: outputter(:)
         integer, allocatable :: synapses(:,:,:)
-        integer, intent(in) :: rows, cols
+        integer, intent(in) :: rows, cols, offset
         integer :: i, j, k, total_value, index
         real :: cumulative_prob(8), random_num
         real, allocatable :: synapse_values(:)
@@ -70,6 +72,13 @@ module brain_module
                         j + directions(index, 2) >= 1 .and. j + directions(index, 2) <= cols) then
                         if (brain(i + directions(index, 1), j + directions(index, 2))%get() /= high) then
                             call brain(i + directions(index, 1), j + directions(index, 2))%shift(up)
+                            call brain(i, j)%shift(down)
+                            synapses(i, j, index) = synapses(i, j, index) + rows * cols
+                        end if
+                    else if (i + directions(index, 1) > rows .and. (j - offset + 1) >= 1 .and. (j - offset + 1) <= size(outputter)) then
+                        ! If the direction is off the bottom of the matrix, update the outputter
+                        if (outputter(j - offset + 1)%get() /= high) then
+                            call outputter(j - offset + 1)%shift(up)
                             call brain(i, j)%shift(down)
                             synapses(i, j, index) = synapses(i, j, index) + rows * cols
                         end if
