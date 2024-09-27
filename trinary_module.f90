@@ -41,9 +41,10 @@ contains
 
         ! Apply the change based on the direction parameter
         ! direction: +1 for up, -1 for down
-        if (this%value < high) then
+        if ((direction == up .and. this%value < high) .or. (direction == down .and. this%value > low)) then
             this%value = min(max(this%value + direction, low), high)
         end if
     end subroutine change_trinary_state
+
 
 end module trinary_module
