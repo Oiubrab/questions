@@ -5,16 +5,16 @@ module outputter_module
 
     contains
 
-    subroutine initialize_outputter(outputter, input_length)
+    subroutine initialize_outputter(outputter, output_length)
         type(trinary), allocatable :: outputter(:)
-        integer, intent(in) :: input_length
+        integer, intent(in) :: output_length
         integer :: j
 
-        allocate(outputter(input_length))
-        allocate(backup_outputter(input_length))
+        allocate(outputter(output_length))
+        allocate(backup_outputter(output_length))
 
         ! Initialize the outputter array and backup array with all lows (0's)
-        do j = 1, input_length
+        do j = 1, output_length
             call outputter(j)%set(low)
             call backup_outputter(j)%set(low)
         end do

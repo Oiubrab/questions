@@ -20,7 +20,7 @@ module brain_module
         end do
     end subroutine initialize_brain
 
-subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, offset)
+subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, input_offset, output_offset, output_length)
     use trinary_module
     use outputter_module
     implicit none
@@ -28,7 +28,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
     type(trinary), allocatable :: brain(:,:)
     type(trinary), allocatable :: outputter(:)
     integer, allocatable :: synapses(:,:,:)
-    integer, intent(in) :: rows, cols, offset
+    integer, intent(in) :: rows, cols, input_offset, output_offset, output_length
     type(trinary), allocatable :: brain_next(:,:)
     integer :: i, j, k, index
     real :: total_value, random_num
@@ -40,6 +40,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
     integer :: num_valid_directions
     integer, allocatable :: valid_indices(:)
     real, allocatable :: valid_synapse_values(:), cumulative_prob(:)
+    integer, parameter :: max_synapse_strength = 200000, reinforcement_amount=10
 
     ! Initialize directions array explicitly
     directions(1,1) = -1   ! Up-Left
@@ -98,8 +99,9 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
                         if (brain(ni, nj)%get() /= high) then
                             valid_move = .true.
                         end if
-                    else if (i == rows .and. ni == rows + 1 .and. (nj - offset + 1) >= 1 .and. (nj - offset + 1) <= size(outputter)) then
-                        if (outputter(nj - offset + 1)%get() /= high) then
+                    ! Check if the move is from the last row into the outputter array
+                    else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
+                        if (outputter(nj - output_offset + 1)%get() /= high) then
                             valid_move = .true.
                         end if
                     end if
@@ -165,11 +167,14 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
                 if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
                     call brain_next(ni, nj)%shift(up)
                     call brain_next(i, j)%shift(down)
-                    synapses(i, j, index) = synapses(i, j, index) + 1
-                else if (i == rows .and. ni == rows + 1 .and. (nj - offset + 1) >= 1 .and. (nj - offset + 1) <= size(outputter)) then
-                    call outputter(nj - offset + 1)%shift(up)
+                    ! Reinforce the synapse, but cap its strength
+                    synapses(i, j, index) = min(synapses(i, j, index) + reinforcement_amount, max_synapse_strength)
+                ! Perform the move into the outputter array if from the last row moving down
+                else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
+                    call outputter(nj - output_offset + 1)%shift(up)
                     call brain_next(i, j)%shift(down)
-                    synapses(i, j, index) = synapses(i, j, index) + 1
+                    ! Reinforce the synapse, but cap its strength
+                    synapses(i, j, index) = min(synapses(i, j, index) + reinforcement_amount, max_synapse_strength)
                 end if
 
                 ! Deallocate arrays

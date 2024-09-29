@@ -22,18 +22,15 @@ module inputter_module
         end do
     end subroutine initialize_inputter
 
-    subroutine copy_non_low_to_brain_top_row(inputter, brain, offset, brain_cols)
+    subroutine copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
         type(trinary), allocatable :: inputter(:)
         type(trinary), allocatable :: brain(:,:)
-        integer, intent(in) :: offset, brain_cols
-        integer :: j
+        integer, intent(in) :: input_offset, cols
+        integer :: i
 
-        ! Copy non-low states from inputter to the top row of the brain matrix
-        do j = 1, size(inputter)
-            if (inputter(j)%get() /= low .and. (offset + j - 1) <= brain_cols) then
-                if (brain(1, offset + j - 1)%get() < inputter(j)%get()) then
-                    call brain(1, offset + j - 1)%set(inputter(j)%get())
-                end if
+        do i = 1, size(inputter)
+            if (inputter(i)%get() /= low) then
+                call brain(1, input_offset - 1 + i)%set(inputter(i)%get())
             end if
         end do
     end subroutine copy_non_low_to_brain_top_row
