@@ -20,136 +20,173 @@ module brain_module
         end do
     end subroutine initialize_brain
 
-    subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, offset)
-        use trinary_module
-        use outputter_module
-        implicit none
-        ! Declarations
-        type(trinary), allocatable :: brain(:,:)
-        type(trinary), allocatable :: outputter(:)
-        integer, allocatable :: synapses(:,:,:)
-        integer, intent(in) :: rows, cols, offset
-        ! Add temporary brain matrix
-        type(trinary), allocatable :: brain_next(:,:)
-        integer :: i, j, k, total_value, index
-        real :: cumulative_prob(8), random_num
-        real, allocatable :: synapse_values(:)
-        integer, dimension(8, 2) :: directions
-        integer :: ni, nj
-        logical :: valid_move
+subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, offset)
+    use trinary_module
+    use outputter_module
+    implicit none
+    ! Declarations
+    type(trinary), allocatable :: brain(:,:)
+    type(trinary), allocatable :: outputter(:)
+    integer, allocatable :: synapses(:,:,:)
+    integer, intent(in) :: rows, cols, offset
+    type(trinary), allocatable :: brain_next(:,:)
+    integer :: i, j, k, index
+    real :: total_value, random_num
+    real, allocatable :: synapse_values(:)
+    integer, dimension(8, 2) :: directions
+    integer :: ni, nj
+    logical :: valid_move
+    real, dimension(8) :: direction_bias
+    integer :: num_valid_directions
+    integer, allocatable :: valid_indices(:)
+    real, allocatable :: valid_synapse_values(:), cumulative_prob(:)
 
-        ! Initialize directions array
-        directions = reshape([ &
-            -1, -1, & ! Up and left
-            -1,  0, & ! Up
-            -1,  1, & ! Up and right
-            0, -1, & ! Left
-            0,  1, & ! Right
-            1, -1, & ! Down and left
-            1,  0, & ! Down
-            1,  1  & ! Down and right
-        ], shape=[8, 2])
+    ! Initialize directions array explicitly
+    directions(1,1) = -1   ! Up-Left
+    directions(1,2) = -1
+    directions(2,1) = -1   ! Up
+    directions(2,2) =  0
+    directions(3,1) = -1   ! Up-Right
+    directions(3,2) =  1
+    directions(4,1) =  0   ! Left
+    directions(4,2) = -1
+    directions(5,1) =  0   ! Right
+    directions(5,2) =  1
+    directions(6,1) =  1   ! Down-Left
+    directions(6,2) = -1
+    directions(7,1) =  1   ! Down
+    directions(7,2) =  0
+    directions(8,1) =  1   ! Down-Right
+    directions(8,2) =  1
 
-        ! Allocate and initialize brain_next
-        allocate(brain_next(rows, cols))
-        do i = 1, rows
-            do j = 1, cols
-                call brain_next(i, j)%set(brain(i, j)%get())
-            end do
-        end do
+    ! Initialize bias factors for each direction explicitly
+    direction_bias(1) = 0.5  ! Up-Left
+    direction_bias(2) = 0.5  ! Up
+    direction_bias(3) = 0.5  ! Up-Right
+    direction_bias(4) = 1.0  ! Left
+    direction_bias(5) = 1.0  ! Right
+    direction_bias(6) = 1.5  ! Down-Left
+    direction_bias(7) = 1.8  ! Down
+    direction_bias(8) = 1.5  ! Down-Right
 
-        do i = 1, rows
-            do j = 1, cols
-                if (brain(i, j)%get() /= low) then
-                    ! Extract the synapse values
-                    allocate(synapse_values(8))
-                    do k = 1, 8
-                        synapse_values(k) = synapses(i, j, k)
-                    end do
+    ! Allocate and initialize brain_next
+    allocate(brain_next(rows, cols))
+    brain_next = brain  ! Copy current brain state
 
-                    ! Check each direction for viability
-                    do k = 1, 8
-                        ni = i + directions(k, 1)
-                        nj = j + directions(k, 2)
-                        valid_move = .false.
+    ! Rest of your existing code remains the same, with no changes needed in the logic
+    ! ...
 
-                        ! Check if the target position is within the brain matrix
-                        if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
-                            if (brain(ni, nj)%get() /= high) then
-                                valid_move = .true.
-                            end if
-                        ! Check if the move is from the last row into the outputter array
-                        else if (i == rows .and. ni == rows + 1 .and. (nj - offset + 1) >= 1 .and. (nj - offset + 1) <= size(outputter)) then
-                            if (outputter(nj - offset + 1)%get() /= high) then
-                                valid_move = .true.
-                            end if
-                        end if
+    do i = 1, rows
+        do j = 1, cols
+            if (brain(i, j)%get() /= low) then
+                ! Extract the synapse values
+                allocate(synapse_values(8))
+                do k = 1, 8
+                    synapse_values(k) = synapses(i, j, k)
+                end do
 
-                        ! If the move is not valid, set the synapse value to zero
-                        if (.not. valid_move) then
-                            synapse_values(k) = 0
-                        end if
-                    end do
+                num_valid_directions = 0
 
-                    ! Calculate total value of valid synapses
-                    total_value = sum(synapse_values)
-                    if (total_value == 0) then
-                        ! No valid moves; skip to the next cell
-                        deallocate(synapse_values)
-                        cycle
-                    end if
+                ! Check each direction for viability and apply bias
+                do k = 1, 8
+                    ni = i + directions(k, 1)
+                    nj = j + directions(k, 2)
+                    valid_move = .false.
 
-                    ! Calculate cumulative probabilities for valid directions
-                    cumulative_prob(1) = synapse_values(1) / total_value
-                    do k = 2, 8
-                        cumulative_prob(k) = cumulative_prob(k - 1) + synapse_values(k) / total_value
-                    end do
-
-                    ! Generate a random number between 0 and 1
-                    call random_number(random_num)
-
-                    ! Find which synapse the random number maps to
-                    do k = 1, 8
-                        if (random_num <= cumulative_prob(k)) then
-                            index = k
-                            exit
-                        end if
-                    end do
-
-                    ! Compute target position based on selected direction
-                    ni = i + directions(index, 1)
-                    nj = j + directions(index, 2)
-
-                    ! Perform the move if it's within the brain matrix
+                    ! Validity checks
                     if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
-                        call brain_next(ni, nj)%shift(up)
-                        call brain_next(i, j)%shift(down)
-                        synapses(i, j, index) = synapses(i, j, index) + rows * cols
-                    ! Perform the move into the outputter array if from the last row moving down
+                        if (brain(ni, nj)%get() /= high) then
+                            valid_move = .true.
+                        end if
                     else if (i == rows .and. ni == rows + 1 .and. (nj - offset + 1) >= 1 .and. (nj - offset + 1) <= size(outputter)) then
-                        call outputter(nj - offset + 1)%shift(up)
-                        call brain_next(i, j)%shift(down)
-                        synapses(i, j, index) = synapses(i, j, index) + rows * cols
+                        if (outputter(nj - offset + 1)%get() /= high) then
+                            valid_move = .true.
+                        end if
                     end if
 
-                    ! Deallocate the synapse_values array
+                    ! Apply bias if move is valid
+                    if (valid_move) then
+                        synapse_values(k) = synapse_values(k) * direction_bias(k)
+                        if (synapse_values(k) > 0.0) then
+                            num_valid_directions = num_valid_directions + 1
+                        else
+                            synapse_values(k) = 0.0
+                        end if
+                    else
+                        synapse_values(k) = 0.0
+                    end if
+                end do
+
+                ! Check for valid directions
+                if (num_valid_directions == 0) then
                     deallocate(synapse_values)
+                    cycle
                 end if
-            end do
+
+                ! Allocate arrays for valid directions
+                allocate(valid_indices(num_valid_directions))
+                allocate(valid_synapse_values(num_valid_directions))
+
+                num_valid_directions = 0
+                do k = 1, 8
+                    if (synapse_values(k) > 0.0) then
+                        num_valid_directions = num_valid_directions + 1
+                        valid_indices(num_valid_directions) = k
+                        valid_synapse_values(num_valid_directions) = synapse_values(k)
+                    end if
+                end do
+
+                ! Calculate total value
+                total_value = sum(valid_synapse_values)
+
+                ! Calculate cumulative probabilities
+                allocate(cumulative_prob(num_valid_directions))
+                cumulative_prob(1) = valid_synapse_values(1) / total_value
+                do k = 2, num_valid_directions
+                    cumulative_prob(k) = cumulative_prob(k - 1) + valid_synapse_values(k) / total_value
+                end do
+
+                ! Generate random number
+                call random_number(random_num)
+
+                ! Select direction
+                do k = 1, num_valid_directions
+                    if (random_num <= cumulative_prob(k)) then
+                        index = valid_indices(k)
+                        exit
+                    end if
+                end do
+
+                ! Compute target position based on selected direction
+                ni = i + directions(index, 1)
+                nj = j + directions(index, 2)
+
+                ! Perform the move
+                if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
+                    call brain_next(ni, nj)%shift(up)
+                    call brain_next(i, j)%shift(down)
+                    synapses(i, j, index) = synapses(i, j, index) + 1
+                else if (i == rows .and. ni == rows + 1 .and. (nj - offset + 1) >= 1 .and. (nj - offset + 1) <= size(outputter)) then
+                    call outputter(nj - offset + 1)%shift(up)
+                    call brain_next(i, j)%shift(down)
+                    synapses(i, j, index) = synapses(i, j, index) + 1
+                end if
+
+                ! Deallocate arrays
+                deallocate(synapse_values)
+                deallocate(valid_indices)
+                deallocate(valid_synapse_values)
+                deallocate(cumulative_prob)
+            end if
         end do
+    end do
 
-        ! Replace the current brain state with the next state
-        do i = 1, rows
-            do j = 1, cols
-                call brain(i, j)%set(brain_next(i, j)%get())
-            end do
-        end do
+    ! Replace the current brain state with the next state
+    brain = brain_next
 
-        ! Deallocate brain_next
-        deallocate(brain_next)
-
-    end subroutine update_brain_state_based_on_synapses
-
+    ! Deallocate brain_next
+    deallocate(brain_next)
+end subroutine update_brain_state_based_on_synapses
 
 
 
