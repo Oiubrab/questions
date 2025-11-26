@@ -26,12 +26,13 @@ module inputter_module
         type(trinary), allocatable :: inputter(:)
         type(trinary), allocatable :: brain(:,:)
         integer, intent(in) :: input_offset, cols
-        integer :: i
+        integer :: i, current_state, new_state
 
+        ! Add inputter states to the existing brain top row states, capped at high (2)
         do i = 1, size(inputter)
-            if (inputter(i)%get() /= low) then
-                call brain(1, input_offset - 1 + i)%set(inputter(i)%get())
-            end if
+            current_state = brain(1, input_offset - 1 + i)%get()
+            new_state = min(current_state + inputter(i)%get(), high)
+            call brain(1, input_offset - 1 + i)%set(new_state)
         end do
     end subroutine copy_non_low_to_brain_top_row
 

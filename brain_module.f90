@@ -96,7 +96,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
 
                     ! Validity checks
                     if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
-                        if (brain(ni, nj)%get() /= high) then
+                        if (brain_next(ni, nj)%get() /= high) then
                             valid_move = .true.
                         end if
                     ! Check if the move is from the last row into the outputter array

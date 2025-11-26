@@ -14,7 +14,7 @@ program forWhoseAdvantage
     type(trinary), allocatable :: outputter(:)
     integer, allocatable :: synapses(:,:,:)
     integer :: i, j, k, step, max_steps
-    character(len=10) :: arg1, arg2, arg3, arg4, arg5, arg6, arg7
+    character(len=10) :: arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8
     integer :: ios
 
     ! Read command line arguments
@@ -25,6 +25,7 @@ program forWhoseAdvantage
     call get_command_argument(5, arg5)
     call get_command_argument(6, arg6)
     call get_command_argument(7, arg7)
+    call get_command_argument(8, arg8)
 
     ! Convert command line arguments to integers
     read(arg1, *, iostat=ios) rows
@@ -73,6 +74,13 @@ program forWhoseAdvantage
         stop
     end if
 
+    ! Read max_steps from command line
+    read(arg8, *, iostat=ios) max_steps
+    if (ios /= 0 .or. max_steps < 1) then
+        print *, "Error: Invalid input for max_steps."
+        stop
+    end if
+
     ! Validate offsets and lengths
     if (input_offset < 1 .or. input_offset + input_length - 1 > cols) then
         print *, "Error: Inputter array exceeds brain matrix dimensions."
@@ -91,7 +99,6 @@ program forWhoseAdvantage
     call initialize_synapses(synapses, rows, cols)
 
     ! Main loop of the entire system
-    max_steps = 100
     do step = 1, max_steps
         ! Save and reset the outputter array
         call save_and_reset_outputter(outputter)
@@ -99,14 +106,8 @@ program forWhoseAdvantage
         ! Print the step number
         print *, "Step ", step, ":"
 
-        ! Copy non-low states from inputter to the top row of the brain matrix
+        ! Copy ALL states from inputter to the top row of the brain matrix
         call copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
-
-        ! Update synapses based on brain state
-        call update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, input_offset, output_offset, output_length)
-
-        ! Apply decay
-        call apply_decay(synapses, rows, cols)
 
         ! Print the inputter array with offset alignment
         print *, "Inputter array of trinary states:"
@@ -116,8 +117,20 @@ program forWhoseAdvantage
         write(*, "(100(I3,1X))", advance='no') (inputter(j)%get(), j=1, input_length)
         print *
 
-        ! Print the 2D brain
-        print *, "2D Brain of trinary states:"
+        ! Print the 2D brain BEFORE updating (shows input state)
+        print *, "2D Brain of trinary states (before update):"
+        do i = 1, rows
+            write(*, "(100(I3,1X))") (brain(i, j)%get(), j=1, cols)
+        end do
+
+        ! Update synapses based on brain state
+        call update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, input_offset, output_offset, output_length)
+
+        ! Apply decay
+        call apply_decay(synapses, rows, cols)
+
+        ! Print the 2D brain AFTER updating (shows propagation)
+        print *, "2D Brain of trinary states (after update):"
         do i = 1, rows
             write(*, "(100(I3,1X))") (brain(i, j)%get(), j=1, cols)
         end do
