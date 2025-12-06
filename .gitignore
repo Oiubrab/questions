@@ -1,8 +1,11 @@
 # Ignore module files
 *.mod
 
-# Ignore compiled executable
+# Ignore compiled executables
 forWhoseAdvantage
+modify_array
+test_*
+analyze_*
 
 # Ignore other temporary or build files (optional)
 *.o
@@ -13,6 +16,10 @@ forWhoseAdvantage
 *.so
 *.a
 *.dylib
+
+# IDE directories
+.vscode/
+.idea/
 
 # Ignore directories (optional)
 build/

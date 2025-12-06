@@ -29,8 +29,35 @@ call cell%shift(up)  ! Moves toward high, capped
 ### Direction System (Brain Module)
 8-direction array with **biased probabilities** - downward movement (indices 6-8) has higher bias (1.5-1.8×) than upward (0.5×) or lateral (1.0×). The `directions` array maps indices to (row_delta, col_delta) pairs.
 
-### Synapse Reinforcement
-When a state successfully propagates through a synapse, it's reinforced by `reinforcement_amount=10` and capped at `max_synapse_strength=200000`. This implements Hebbian-like learning.
+### Synapse Reinforcement and Decay Dynamics (CRITICAL DESIGN)
+This system implements a **self-regulating competitive learning mechanism** with sophisticated equilibrium properties:
+
+**Parameters:**
+- `reinforcement_amount = 10` (additive per firing in `brain_module.f90`)
+- `decay_multiplier = 0.9 to 1.0` (random per step in `synapses_module.f90`)
+- `min_synapse_strength = 1` (hard floor)
+- `max_synapse_strength = 200000` (hard ceiling)
+
+**Key Properties:**
+1. **Non-linear ratio-based selection**: Probabilities determined by synapse strength ratios, not absolute values
+   - Synapse A=1, B=10 → B is 10× more likely
+   - After decay: A=1, B=9 → B is still 9× more likely
+   - Relative advantage changes slowly, creating stable pathway preferences
+
+2. **Equilibrium zone** (~100-200): Heavily-used synapses reach saturation where reinforcement balances decay
+   - At equilibrium: +10 reinforcement ≈ ×(0.9-1.0) decay
+   - Overuse doesn't dominate - hits ceiling effect
+   - Random decay (0.9-1.0) creates "fuzzy equilibrium zone" rather than hard limit
+
+3. **Usage-dependent competition**:
+   - Frequently used pathways: oscillate near equilibrium strength
+   - Rarely used pathways: decay to floor (1), becoming background noise
+   - Multiple active pathways can coexist at similar strengths (fair competition)
+   - This prevents runaway winners while maintaining learned patterns
+
+4. **Biological analogy**: Resembles homeostatic plasticity - the system naturally forms stable pathway preferences without any single route completely dominating.
+
+**DO NOT** change reinforcement/decay balance without understanding these emergent properties. The current values create intentional saturation behavior that prevents single pathways from monopolizing signal flow.
 
 ### State Propagation Logic
 In `update_brain_state_based_on_synapses()`:
