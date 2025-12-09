@@ -20,6 +20,21 @@ module brain_module
         end do
     end subroutine initialize_brain
 
+subroutine copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
+    type(trinary), allocatable :: inputter(:), brain(:,:)
+    integer, intent(in) :: input_offset, cols
+    integer :: i, brain_col
+    
+    do i = 1, size(inputter)
+        brain_col = input_offset + i - 1
+        if (brain_col >= 1 .and. brain_col <= cols) then
+            if (inputter(i)%get() /= low) then
+                call brain(1, brain_col)%set(inputter(i)%get())
+            end if
+        end if
+    end do
+end subroutine copy_non_low_to_brain_top_row
+
 subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, input_offset, output_offset, output_length)
     use trinary_module
     use outputter_module
