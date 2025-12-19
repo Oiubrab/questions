@@ -10,6 +10,7 @@ program cat_mouse_gui_demo
     ! Brain system
     type(trinary), allocatable :: brain(:,:), inputter(:), outputter(:)
     integer, allocatable :: synapses(:,:,:)
+    logical, allocatable :: synapse_usage(:,:,:)  ! Track which synapses fire during Bar
     integer :: rows, cols, input_length, output_length
     integer :: input_offset, output_offset
     
@@ -22,11 +23,16 @@ program cat_mouse_gui_demo
     integer, dimension(8, 2) :: move_directions
     
     ! Simulation
-    integer :: step, max_steps
+    integer :: bar, max_bars
+    integer :: brain_step, steps_per_bar
     integer :: i, j, brain_energy, output_energy
     integer :: active_slice
     integer :: output_action, move_distance
     real :: new_x, new_y
+    
+    ! Reinforcement tracking
+    real :: current_distance, previous_distance
+    real :: dx, dy
     
     ! Parameters
     rows = 6
@@ -35,7 +41,8 @@ program cat_mouse_gui_demo
     input_length = 6       ! 6 vision slices
     output_offset = 1
     output_length = 8      ! 8 movement directions
-    max_steps = 1000
+    max_bars = 1000        ! Real-world time steps
+    steps_per_bar = 10     ! Brain steps per real-world step
     
     ! Vision parameters
     field_size = 100.0
@@ -57,6 +64,7 @@ program cat_mouse_gui_demo
     call initialize_inputter(inputter, input_length)
     call initialize_outputter(outputter, output_length)
     call initialize_synapses(synapses, rows, cols)
+    call reset_synapse_usage(synapse_usage, rows, cols)
     
     ! Initialize cat at center of field
     cat_pos%x = field_size / 2.0
@@ -65,12 +73,31 @@ program cat_mouse_gui_demo
     ! Initialize mouse at random position
     call initialize_mouse(mouse_pos, field_size)
     
+    ! Calculate initial distance
+    dx = mouse_pos%x - cat_pos%x
+    dy = mouse_pos%y - cat_pos%y
+    if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+    if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+    previous_distance = sqrt(dx*dx + dy*dy)
+    
     ! Print header for GUI script (to stderr so it doesn't interfere)
     write(0, '(A)') "# Cat & Mouse GUI Simulation Starting..."
+    write(0, '(A,I0,A)') "# ", steps_per_bar, " brain steps per Bar (real-world step)"
+    write(0, '(A)') "# Reinforcement: distance decrease = strengthen, increase = weaken"
     
-    ! Simulation loop
-    do step = 1, max_steps
-        ! Move mouse
+    ! Simulation loop - each Bar is one real-world time step
+    do bar = 1, max_bars
+        ! Record distance at start of Bar (before any actions)
+        dx = mouse_pos%x - cat_pos%x
+        dy = mouse_pos%y - cat_pos%y
+        if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+        if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+        previous_distance = sqrt(dx*dx + dy*dy)
+        
+        ! Reset synapse usage tracker for this Bar
+        call reset_synapse_usage(synapse_usage, rows, cols)
+        
+        ! Move mouse (real-world action)
         call move_mouse(mouse_pos, field_size, step_size)
         
         ! Update vision input based on mouse position
@@ -85,19 +112,24 @@ program cat_mouse_gui_demo
             end if
         end do
         
-        ! Apply input to brain
+        ! Apply input to brain ONCE at start of Bar
         call copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
         
-        ! Update brain
+        ! Reset outputter for this Bar
         call save_and_reset_outputter(outputter)
-        call update_brain_state_based_on_synapses(brain, synapses, outputter, &
-                                                   rows, cols, input_offset, &
-                                                   output_offset, output_length)
         
-        ! Apply decay to synapses
-        call apply_decay(synapses, rows, cols)
+        ! Run multiple brain steps within this Bar
+        do brain_step = 1, steps_per_bar
+            ! Update brain state (tracks which synapses are used)
+            call update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, &
+                                                       rows, cols, input_offset, &
+                                                       output_offset, output_length)
+            
+            ! Apply decay to synapses after each brain step
+            call apply_decay(synapses, rows, cols)
+        end do
         
-        ! Calculate brain energy
+        ! After all brain steps in this Bar, calculate brain energy
         brain_energy = 0
         do i = 1, rows
             do j = 1, cols
@@ -115,7 +147,7 @@ program cat_mouse_gui_demo
             end if
         end do
         
-        ! Move cat based on output
+        ! Move cat based on output (real-world action)
         if (output_action > 0 .and. output_action <= 8) then
             move_distance = outputter(output_action)%get()  ! 1 or 2 units
             new_x = cat_pos%x + move_directions(output_action, 2) * move_distance * 5.0
@@ -131,9 +163,26 @@ program cat_mouse_gui_demo
             cat_pos%y = new_y
         end if
         
-        ! Output state for GUI: step,mouse_x,mouse_y,cat_x,cat_y,slice,brain_energy,output_energy
+        ! Now measure distance AFTER cat moved to determine reward/punishment
+        dx = mouse_pos%x - cat_pos%x
+        dy = mouse_pos%y - cat_pos%y
+        if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+        if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+        current_distance = sqrt(dx*dx + dy*dy)
+        
+        ! Apply selective reinforcement based on whether cat's action improved distance
+        if (current_distance < previous_distance) then
+            ! Distance decreased - reward only synapses that were used
+            call apply_selective_reinforcement(synapses, synapse_usage, rows, cols)
+        else if (current_distance > previous_distance) then
+            ! Distance increased - punish only synapses that were used
+            call apply_selective_decay(synapses, synapse_usage, rows, cols)
+        end if
+        ! If distance unchanged, no selective reinforcement applied
+        
+        ! Output state for GUI: bar,mouse_x,mouse_y,cat_x,cat_y,slice,brain_energy,output_energy
         write(*, '(I0,",",F0.1,",",F0.1,",",F0.1,",",F0.1,",",I0,",",I0,",",I0)') &
-            step, mouse_pos%x, mouse_pos%y, cat_pos%x, cat_pos%y, &
+            bar, mouse_pos%x, mouse_pos%y, cat_pos%x, cat_pos%y, &
             active_slice, brain_energy, output_energy
         
         ! Flush output immediately so GUI can read it

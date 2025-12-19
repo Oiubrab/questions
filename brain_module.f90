@@ -35,7 +35,7 @@ subroutine copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
     end do
 end subroutine copy_non_low_to_brain_top_row
 
-subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows, cols, input_offset, output_offset, output_length)
+subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, rows, cols, input_offset, output_offset, output_length)
     use trinary_module
     use outputter_module
     implicit none
@@ -43,6 +43,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
     type(trinary), allocatable :: brain(:,:)
     type(trinary), allocatable :: outputter(:)
     integer, allocatable :: synapses(:,:,:)
+    logical, allocatable :: synapse_usage(:,:,:)  ! Track which synapses were used
     integer, intent(in) :: rows, cols, input_offset, output_offset, output_length
     type(trinary), allocatable :: brain_next(:,:)
     integer :: i, j, k, index
@@ -55,7 +56,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
     integer :: num_valid_directions
     integer, allocatable :: valid_indices(:)
     real, allocatable :: valid_synapse_values(:), cumulative_prob(:)
-    integer, parameter :: max_synapse_strength = 200000, reinforcement_amount=10
+    integer, parameter :: max_synapse_strength = 2000000, reinforcement_amount=1000
 
     ! Initialize directions array explicitly
     directions(1,1) = -1   ! Up-Left
@@ -184,12 +185,16 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, rows
                     call brain_next(i, j)%shift(down)
                     ! Reinforce the synapse, but cap its strength
                     synapses(i, j, index) = min(synapses(i, j, index) + reinforcement_amount, max_synapse_strength)
+                    ! Mark this synapse as used
+                    synapse_usage(i, j, index) = .true.
                 ! Perform the move into the outputter array if from the last row moving down
                 else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
                     call outputter(nj - output_offset + 1)%shift(up)
                     call brain_next(i, j)%shift(down)
                     ! Reinforce the synapse, but cap its strength
                     synapses(i, j, index) = min(synapses(i, j, index) + reinforcement_amount, max_synapse_strength)
+                    ! Mark this synapse as used
+                    synapse_usage(i, j, index) = .true.
                 end if
 
                 ! Deallocate arrays
