@@ -72,57 +72,25 @@ In `update_brain_state_based_on_synapses()`:
 
 ## Build & Run
 
-**Use the Makefile** - The project uses NVIDIA nvfortran compiler:
-
-```bash
-# Build main executable
-make
-
-# Build specific program
-make test_trinary
-
-# Build all programs
-make all-programs
-
-# Clean all build artifacts
-make clean
-
-# Clean and rebuild
-make rebuild
-
-# See all available targets
-make help
-```
-
 **Compilation order matters** due to module dependencies:
-- `trinary_module.f90` (base)
-- `synapses_module.f90` 
-- `outputter_module.f90`
-- `inputter_module.f90`
-- `brain_module.f90` (depends on synapses and outputter)
-- Main program files
-
-**Manual compilation** (if not using Makefile):
 ```bash
-nvfortran trinary_module.f90 synapses_module.f90 outputter_module.f90 inputter_module.f90 brain_module.f90 forWhoseAdvantage.f90 -o forWhoseAdvantage
+nvfortran trinary_module.f90 brain_module.f90 inputter_module.f90 outputter_module.f90 synapses_module.f90 forWhoseAdvantage.f90 -o forWhoseAdvantage
 ```
 
-**Execution requires 8 command-line arguments:**
+Alternative compiler: replace `nvfortran` with `gfortran`
+
+**Execution requires 7 command-line arguments:**
 ```bash
-./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses_flag> <max_steps>
+./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses_flag>
 ```
 
-Example: `./forWhoseAdvantage 6 12 6 6 1 6 false 10`
+Example: `./forWhoseAdvantage 6 12 6 6 1 6 false`
 
 **Validation**: `input_offset + input_length - 1 ≤ cols` and `output_offset + output_length - 1 ≤ cols`
 
 ## File Artifacts
 
-`.mod` files and compiled binaries are **build artifacts** - treat them like `.o` object files:
-- **Never commit** `.mod` files to version control
-- **Always run** `make clean` when switching compilers or encountering module errors
-- `.mod` files are compiler-specific (nvfortran vs gfortran) and version-specific
-- Run `make clean` before building after git pull/checkout if encountering "not a GNU Fortran module file" errors
+`.mod` files and compiled binaries (`forWhoseAdvantage`, `modify_array`) are build artifacts. Source files are `.f90` only.
 
 ## Utility Files
 

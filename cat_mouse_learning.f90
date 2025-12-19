@@ -1,7 +1,7 @@
 program cat_mouse_learning
     use trinary_module
-    use brain_module
-    use inputter_module
+    use brain_module, only: initialize_brain, update_brain_state_based_on_synapses, copy_non_low_to_brain_top_row
+    use inputter_module, only: initialize_inputter
     use outputter_module
     use synapses_module
     use vision_simulation_module
