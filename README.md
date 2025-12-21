@@ -1,18 +1,44 @@
 # ForWhoseAdvantage
 
-ForWhoseAdvantage is a Fortran-based simulation that models a brain-like system. It features a grid of trinary states (`low`, `medium`, `high`) and simulates synaptic connections and their evolution over time. The system includes an `inputter` array to feed stimuli into the brain matrix and an `outputter` array to capture the system's responses.
+ForWhoseAdvantage is a Fortran-based simulation that models brain-like behavior using trinary states (`low`, `medium`, `high`) with **4D directional routing** - a context-dependent pathway selection system where each neuron learns different routes based on signal origin. The system includes a complete sensorimotor learning loop with vision, brain processing, and motor output.
 
 ## Features
 
-- **Brain Matrix Simulation**: A 2D grid representing the brain, where each cell holds a trinary state.
-- **Inputter and Outputter Arrays**: Interfaces for feeding input into the brain matrix and capturing output from it.
-- **Synaptic Connections**: Simulates synapses with dynamic strengths that evolve based on activity and decay over time.
-- **Customizable Parameters**: Configure the size of the brain matrix, input/output arrays, and synapse behavior.
-- **Optional Synapse Visualization**: Toggle the display of synapse states at each simulation step.
+- **4D Directional Routing**: Each neuron has 64 connection strengths (8 incoming × 8 outgoing directions) enabling context-dependent signal routing
+- **Brain Matrix Simulation**: A 2D grid representing the brain with probabilistic state propagation
+- **Vision System**: 8-slice angular vision (45° each) detecting mouse position
+- **Motor Output**: 8-direction movement system with learned behaviors
+- **Adaptive Reinforcement**: Direction-based reward system independent of environmental changes
+- **Energy Conservation**: Signals propagate through the brain preserving total energy
+- **Comprehensive Testing**: Test suite validating signal propagation, routing, and learning mechanics
+- **Visualization**: Color-coded brain state showing dominant incoming directions for each synapse
+
+## Architecture
+
+### Core Modules
+- **`trinary_module.f90`**: Trinary state type with encapsulated operations
+- **`brain_module.f90`**: Brain grid with 4D synaptic routing and incoming direction tracking
+- **`synapses_module.f90`**: 4D synapse array with decay, reinforcement, and punishment
+- **`inputter_module.f90`**: Vision input interface (8 angular slices)
+- **`outputter_module.f90`**: Motor output interface (8 movement directions)
+- **`vision_simulation_module.f90`**: Cat-mouse field simulation with angular vision
+
+### Main Programs
+- **`forWhoseAdvantage.f90`**: Original simulation with command-line parameters
+- **`cat_mouse_learning.f90`**: Sensorimotor learning with direction-based reward
+- **`cat_mouse_gui_demo.f90`**: Real-time GUI visualization version
+
+### Testing & Visualization
+- **`test_4d_mechanics.f90`**: Comprehensive validation of 4D routing and reward systems
+- **`visualize_brain.py`**: Matplotlib brain visualization with color-coded directional routing
+- **`cat_mouse_gui.py`**: Pygame real-time visualization
+- **`run_learning_tests.sh`**: Multi-trial statistical analysis framework
 
 ## Prerequisites
 
-- **Fortran Compiler**: An environment capable of compiling Fortran 90 code (e.g., `nvfortran`, `gfortran`).
+- **Fortran Compiler**: `nvfortran` (preferred) or `gfortran`
+- **Python 3**: For visualization tools
+- **Required Python packages**: `matplotlib`, `numpy`, `pygame` (for GUI)
 
 ## Installation
 
@@ -20,80 +46,185 @@ ForWhoseAdvantage is a Fortran-based simulation that models a brain-like system.
 
     ```bash
     git clone git@github.com:Oiubrab/questions.git
-    cd question
+    cd questions
     ```
 
-2. **Compile the Project**:
+2. **Install Python Dependencies**:
 
     ```bash
-    nvfortran trinary_module.f90 brain_module.f90 inputter_module.f90 outputter_module.f90 synapses_module.f90 forWhoseAdvantage.f90 -o forWhoseAdvantage
+    pip install matplotlib numpy pygame
     ```
 
-    *Replace `nvfortran` with your Fortran compiler if different.*
+3. **Compile the Project**:
+
+    Use the Makefile for automatic compiler detection:
+
+    ```bash
+    make clean          # Clean build artifacts
+    make learning       # Build cat-mouse learning system
+    make all-programs   # Build all executables
+    ```
+
+    Or compile manually:
+
+    ```bash
+    nvfortran trinary_module.f90 synapses_module.f90 outputter_module.f90 \
+              inputter_module.f90 brain_module.f90 vision_simulation_module.f90 \
+              cat_mouse_learning.f90 -o cat_mouse_learning
+    ```
 
 ## Usage
 
-Run the compiled program with the following syntax:
+### Cat-Mouse Learning System (Recommended)
 
-    ./forWhoseAdvantage <rows> <cols> <offset> <input_length> <print_synapses_flag>
+Run comprehensive learning experiments with statistical analysis:
 
-### Parameters
+```bash
+./run_learning_tests.sh    # 5-trial test with visualization
+```
 
-- `<rows>`: **Integer**
-  Number of rows in the brain matrix.
+Or run a single trial:
 
-- `<cols>`: **Integer**
-  Number of columns in the brain matrix.
+```bash
+./cat_mouse_learning <random_seed>
+# Example: ./cat_mouse_learning 1000
+```
 
-- `<offset>`: **Integer**
-  Starting column in the brain matrix where the `inputter` array is aligned.
+**Current Performance (Stationary Mouse):**
+- Success Rate: 100% (5/5 trials)
+- Average Completion: 475 Bars
+- Range: 207-1162 Bars
 
-- `<input_length>`: **Integer**
-  Length of the `inputter` and `outputter` arrays. Must be less than or equal to the number of columns.
+### Visualization Tools
 
-- `<print_synapses_flag>`: **Boolean** (`true` or `false`)
-  Enables or disables the printing of synapse states at each simulation step.
+**Brain State Visualization** (after learning run):
+```bash
+python3 visualize_brain.py
+```
+Generates `brain_visualization.png` showing:
+- Neuron states (gray=low, green=medium, red=high)
+- Synapse connections colored by dominant incoming direction
+- Input/output arrays
 
-### Example
+**Real-time GUI** (during learning):
+```bash
+./run_gui.sh
+```
+Shows cat (blue triangle), mouse (red circle), and vision rays in real-time.
 
-To run the program with 6 rows, 12 columns, an offset of 6, an input length of 6, and synapse printout disabled:
+### Testing Core Mechanics
 
-    ./forWhoseAdvantage 6 12 6 6 false
+Validate 4D routing, energy conservation, and reward system:
+
+```bash
+nvfortran trinary_module.f90 synapses_module.f90 outputter_module.f90 \
+          inputter_module.f90 brain_module.f90 test_4d_mechanics.f90 \
+          -o test_4d_mechanics
+./test_4d_mechanics
+```
+
+### Original Simulation
+
+Run the basic brain simulation:
+
+```bash
+./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses>
+# Example: ./forWhoseAdvantage 6 12 6 6 1 6 false
+```
+
+## Key Concepts
+
+### 4D Directional Routing
+Each neuron maintains 64 synaptic strengths organized as an 8×8 matrix:
+- **Rows**: 8 possible incoming signal directions
+- **Columns**: 8 possible outgoing signal directions
+- **Behavior**: Neuron selects which outgoing synapses to use based on where the signal came from
+- **Benefit**: Different input patterns can learn different routes through the brain
+
+### Direction-Based Reward
+Learning uses the direction of cat movement, not the outcome:
+- Calculate unit vector: cat → mouse (desired direction)
+- Measure: dot product with cat's actual movement
+- Reward: positive dot product (moved towards mouse)
+- Punish: negative dot product (moved away)
+- **Critical advantage**: Reward independent of mouse movement, enables learning with moving targets
+
+### Temporal Organization (Bars)
+One **Bar** = one real-world time step containing:
+- 12 brain processing steps (signal propagation)
+- 1 decay application (after all brain steps)
+- Reinforcement/punishment only at Bar boundaries
+- See `BAR_STRUCTURE.md` for detailed explanation
+
+### Adaptive Learning
+- **Immediate reinforcement**: +1000 per synapse firing (encourages active pathways)
+- **Global decay**: ×0.92-0.98 per Bar on ALL synapses (maintains exploration)
+- **Selective reward**: `1.05/(0.95^12)` ≈ 2.0× on synapses that fired when cat moved towards mouse
+- **Selective punishment**: `0.8×(0.95^12)` ≈ 0.43× on synapses that fired when cat moved away
 
 ## Code Structure
 
 - **`trinary_module.f90`**
-  Defines the `trinary` type and its operations, representing the trinary states of each cell.
+  Trinary state type (low=0, medium=1, high=2) with encapsulated operations.
 
 - **`brain_module.f90`**
-  Manages the brain matrix initialization and updates based on synaptic interactions.
-
-- **`inputter_module.f90`**
-  Initializes the `inputter` array and handles the transfer of input values into the brain matrix.
-
-- **`outputter_module.f90`**
-  Initializes the `outputter` array and manages the capture of output values from the brain matrix.
+  Brain grid with 4D synaptic routing, incoming direction tracking, and probabilistic propagation.
 
 - **`synapses_module.f90`**
-  Handles synapse initialization, updates, and decay mechanisms to simulate synaptic plasticity.
+  4D synapse array (rows × cols × 8 incoming × 8 outgoing) with decay, reinforcement, and punishment.
+
+- **`inputter_module.f90`**
+  Vision input interface - 8 angular slices detecting mouse position.
+
+- **`outputter_module.f90`**
+  Motor output interface - 8 movement directions with learned activation.
+
+- **`vision_simulation_module.f90`**
+  Cat-mouse field simulation with angular vision system and movement logic.
+
+- **`cat_mouse_learning.f90`**
+  Main sensorimotor learning program with direction-based reward system.
+
+- **`test_4d_mechanics.f90`**
+  Comprehensive test suite validating core 4D mechanics and reward systems.
+
+- **`visualize_brain.py`**
+  Matplotlib visualization showing learned brain structure with color-coded directional routing.
 
 - **`forWhoseAdvantage.f90`**
-  The main program that orchestrates the simulation, integrating all modules and managing the simulation loop.
+  Original simulation program with command-line parameter control.
 
-## Simulation Overview
+## Learning System Overview
 
-The simulation progresses through a series of steps, modeling the evolution of the brain matrix over time:
+The cat-mouse learning system demonstrates sensorimotor learning through these key steps:
 
-1. **Initialization**:
-   - The brain matrix, inputter, outputter, and synapses are initialized based on user-defined parameters.
-   - Synapses are assigned random strengths to simulate initial variability.
+1. **Vision Input**:
+   - 8 angular slices (45° each) detect mouse position
+   - Active slice sets corresponding inputter cell to MEDIUM
+   - Vision pattern copied to brain top row with `incoming_direction = 7` (Down)
 
-2. **Main Simulation Loop**:
-   - **Input Integration**: Non-`low` states from the `inputter` array are copied to the top row of the brain matrix.
-   - **State Update**: The brain matrix updates its states based on synaptic strengths and probabilistic state transitions.
-   - **Synapse Decay**: Synaptic strengths undergo decay to simulate the weakening of unused connections.
-   - **Output Capture**: States propagating beyond the bottom of the brain matrix are captured in the `outputter` array.
-   - **Display**: The current states of the `inputter`, brain matrix, and `outputter` are printed. Synapses are displayed if enabled.
+2. **Brain Processing** (12 steps per Bar):
+   - Signals propagate through brain using 4D directional routing
+   - Each neuron selects outgoing synapses based on incoming signal direction
+   - HIGH neurons average values from both incoming directions
+   - Synapse usage tracked for credit assignment
+
+3. **Motor Output**:
+   - Signals reaching bottom row activate corresponding output cells
+   - Strongest output determines movement direction (1-8)
+   - Cat moves 5 units in selected direction
+
+4. **Reinforcement Learning**:
+   - Calculate desired direction: unit vector cat → mouse
+   - Measure cat movement direction
+   - Dot product > 0: reward synapses that fired
+   - Dot product < 0: punish synapses that fired
+   - Global decay applied to all synapses every Bar
+
+5. **Emergent Behavior**:
+   - Cat learns to move towards mouse over ~200-1200 Bars
+   - Different vision inputs learn different motor outputs
+   - Context-dependent routing enables complex behaviors
    - **Pause**: The simulation pauses briefly (1 second) between steps to allow observation.
 
 3. **Termination**:
