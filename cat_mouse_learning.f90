@@ -38,6 +38,34 @@ program cat_mouse_learning
     real :: t, closest_x, closest_y, closest_dist
     real :: desired_length  ! For normalized direction-based reward
     
+    ! Anti-oscillation mechanisms
+    integer, parameter :: history_size = 10
+    integer :: movement_history(history_size)
+    integer :: history_index, repeated_count
+    real :: adaptive_threshold, threshold_min, threshold_max
+    real :: direction_multiplier, epoch_progress  ! For graduated rewards
+    integer :: last_rewarded_direction, momentum_bonus, momentum_streak
+    integer :: bars_since_progress, progress_check_interval
+    real :: best_distance, progress_factor
+    
+    ! Success-based pathway boosting
+    integer, parameter :: success_history_size = 100
+    logical, allocatable :: synapse_history(:,:,:,:,:)  ! 5D: (history_index, row, col, incoming, outgoing)
+    integer :: history_write_index
+    
+    ! Continuous hunting performance tracking
+    integer :: catches_count
+    integer :: moves_towards, moves_away, moves_perpendicular, total_moves
+    
+    ! Epoch tracking for temporal analysis
+    integer, parameter :: epoch_size = 2000  ! Bars per epoch
+    integer :: current_epoch, num_epochs
+    integer, allocatable :: epoch_catches(:)
+    integer :: catches_this_epoch
+    integer, allocatable :: epoch_moves_towards(:), epoch_moves_away(:), epoch_moves_perpendicular(:)
+    integer :: moves_towards_this_epoch, moves_away_this_epoch, moves_perpendicular_this_epoch
+    integer :: epoch_total_moves  ! For calculating percentages
+    
     ! Logging
     integer :: csv_unit
     character(len=100) :: csv_filename
@@ -93,6 +121,11 @@ program cat_mouse_learning
     allocate(incoming_direction(rows, cols, 2))
     incoming_direction = 0  ! No incoming direction initially
     
+    ! Initialize success history buffer (circular buffer for last 100 Bars)
+    allocate(synapse_history(success_history_size, rows, cols, 8, 8))
+    synapse_history = .false.
+    history_write_index = 1
+    
     ! Seed random number generator with user-provided seed or system time
     ! This ensures different brain structures across trials
     call random_seed(size=seed_size)
@@ -133,22 +166,74 @@ program cat_mouse_learning
     if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
     if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
     previous_distance = sqrt(dx*dx + dy*dy)
+    best_distance = previous_distance
+    
+    ! Initialize anti-oscillation mechanisms
+    movement_history = 0  ! No movements yet
+    history_index = 1
+    adaptive_threshold = 0.7  ! STRICT: Only reward ~45° cone or better (cos(45°) ≈ 0.707)
+    threshold_min = 0.6      ! Minimum 53° cone
+    threshold_max = 0.85     ! Maximum 32° cone (tightens with progress)
+    last_rewarded_direction = 0  ! No momentum yet
+    momentum_streak = 0  ! No streak yet
+    bars_since_progress = 0
+    progress_check_interval = 50
+    
+    ! Initialize continuous hunting counter
+    catches_count = 0
+    moves_towards = 0
+    moves_away = 0
+    moves_perpendicular = 0
+    total_moves = 0
+    
+    ! Initialize epoch tracking
+    num_epochs = max_bars / epoch_size
+    allocate(epoch_catches(num_epochs))
+    allocate(epoch_moves_towards(num_epochs))
+    allocate(epoch_moves_away(num_epochs))
+    allocate(epoch_moves_perpendicular(num_epochs))
+    epoch_catches = 0
+    epoch_moves_towards = 0
+    epoch_moves_away = 0
+    epoch_moves_perpendicular = 0
+    current_epoch = 1
+    catches_this_epoch = 0
+    moves_towards_this_epoch = 0
+    moves_away_this_epoch = 0
+    moves_perpendicular_this_epoch = 0
     
     ! Open CSV file for logging
     csv_filename = 'simulation_log.csv'
     open(newunit=csv_unit, file=csv_filename, status='replace', action='write')
-    write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist'
+    write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist,catches'
     
-    print *, "=== CAT & MOUSE LEARNING SIMULATION ==="
+    print *, "=== CAT & MOUSE CONTINUOUS HUNTING SIMULATION ==="
     print *, "Max Bars (real-world steps):", max_bars
     print *, "Brain steps per Bar:", steps_per_bar
-    print *, "Reinforcement: distance-based (global)"
+    print *, "Mouse movement: every 25 Bars, 2 units random direction"
+    print *, "Epoch size:", epoch_size, "Bars (", num_epochs, "epochs total)"
     print *, "Logging to:", trim(csv_filename)
     print *, "Snapshot interval:", snapshot_interval
     print *
     
     ! Simulation loop - each Bar is one real-world time step
     do bar = 1, max_bars
+        ! Check for epoch boundary
+        if (bar > 1 .and. mod(bar - 1, epoch_size) == 0) then
+            ! Save data for completed epoch
+            epoch_catches(current_epoch) = catches_this_epoch
+            epoch_moves_towards(current_epoch) = moves_towards_this_epoch
+            epoch_moves_away(current_epoch) = moves_away_this_epoch
+            epoch_moves_perpendicular(current_epoch) = moves_perpendicular_this_epoch
+            print *, "Epoch", current_epoch, "complete:", catches_this_epoch, "catches"
+            ! Move to next epoch
+            current_epoch = current_epoch + 1
+            catches_this_epoch = 0
+            moves_towards_this_epoch = 0
+            moves_away_this_epoch = 0
+            moves_perpendicular_this_epoch = 0
+        end if
+        
         ! Record distance at start of Bar (before any actions)
         dx = mouse_pos%x - cat_pos%x
         dy = mouse_pos%y - cat_pos%y
@@ -159,7 +244,22 @@ program cat_mouse_learning
         ! Reset synapse usage tracker for this Bar
         call reset_synapse_usage(synapse_usage, rows, cols)
         
-        ! Mouse is stationary at center - no movement
+        ! Mouse movement: every 25 Bars, move in random direction by small amount
+        if (mod(bar, 25) == 0) then
+            ! Generate random direction (0 to 2*PI radians)
+            call random_number(dx)
+            dx = dx * 2.0 * 3.14159265359
+            
+            ! Small movement: 2 units in random direction
+            mouse_pos%x = mouse_pos%x + 2.0 * cos(dx)
+            mouse_pos%y = mouse_pos%y + 2.0 * sin(dx)
+            
+            ! Keep mouse within field boundaries
+            if (mouse_pos%x < 0.0) mouse_pos%x = 0.0
+            if (mouse_pos%x > field_size) mouse_pos%x = field_size
+            if (mouse_pos%y < 0.0) mouse_pos%y = 0.0
+            if (mouse_pos%y > field_size) mouse_pos%y = field_size
+        end if
         
         ! Update vision input
         call update_vision_input(inputter, cat_pos, mouse_pos, num_vision_slices)
@@ -187,8 +287,15 @@ program cat_mouse_learning
                                                        output_offset, output_length)
         end do
         
-        ! Apply decay ONCE per Bar (after all brain steps)
-        call apply_decay(synapses, rows, cols)
+        ! Apply decay only every 5 Bars (much less aggressive) to preserve learned pathways
+        if (mod(bar, 5) == 0) then
+            call apply_decay(synapses, rows, cols)
+        end if
+        
+        ! Store current Bar's synapse usage in circular history buffer
+        synapse_history(history_write_index, :, :, :, :) = synapse_usage(:, :, :, :)
+        history_write_index = history_write_index + 1
+        if (history_write_index > success_history_size) history_write_index = 1
         
         ! Calculate brain energy
         brain_energy = 0
@@ -215,6 +322,11 @@ program cat_mouse_learning
             ! Store old position for path intersection check
             old_cat_x = cat_pos%x
             old_cat_y = cat_pos%y
+            
+            ! Track movement history for oscillation detection
+            movement_history(history_index) = output_action
+            history_index = history_index + 1
+            if (history_index > history_size) history_index = 1
             
             ! Calculate movement vector
             cat_move_x = move_directions(output_action, 2) * move_distance * 5.0
@@ -247,23 +359,68 @@ program cat_mouse_learning
                 
                 ! Check if path passed within success threshold
                 if (closest_dist < 2.0) then
-                    print *, "SUCCESS! Cat path crossed mouse at Bar", bar, "of", max_bars
-                    print *, "Closest approach distance:", closest_dist
-                    cat_pos%x = mouse_pos%x  ! Snap to mouse position
-                    cat_pos%y = mouse_pos%y
+                    ! Cat caught the mouse!
+                    catches_count = catches_count + 1
+                    catches_this_epoch = catches_this_epoch + 1
+                    print *, "CATCH #", catches_count, "at Bar", bar, "(distance:", closest_dist, ")"
                     
-                    ! Log final state
-                    write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
-                                                    ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
-                                                    ',', output_action, ',', brain_energy, &
-                                                    ',', output_energy, ',', output_action, &
-                                                    ',', move_distance
-                    exit  ! End test early on success
+                    ! SUCCESS-BASED PATHWAY BOOSTING: Massively reinforce all synapses used in last 100 Bars
+                    ! This creates temporal credit assignment - recent pathways led to success
+                    do brain_step = 1, success_history_size
+                        do i = 1, rows
+                            do j = 1, cols
+                                do ni = 1, 8  ! incoming directions
+                                    do nj = 1, 8  ! outgoing directions
+                                        if (synapse_history(brain_step, i, j, ni, nj)) then
+                                            ! Apply massive 10× boost directly to successful pathway synapses
+                                            synapses(i, j, ni, nj) = int(synapses(i, j, ni, nj) * 1.5)
+                                            ! Cap at max strength
+                                            if (synapses(i, j, ni, nj) > 2000000) synapses(i, j, ni, nj) = 2000000
+                                        end if
+                                    end do
+                                end do
+                            end do
+                        end do
+                    end do
+                    
+                    ! Respawn mouse at random location (distance 30-45 from cat)
+                    call random_number(dx)
+                    call random_number(dy)
+                    dx = (dx - 0.5) * 2.0  ! Range: -1 to 1
+                    dy = (dy - 0.5) * 2.0
+                    ! Normalize and scale
+                    previous_distance = sqrt(dx*dx + dy*dy)
+                    if (previous_distance > 0.0) then
+                        dx = dx / previous_distance
+                        dy = dy / previous_distance
+                    end if
+                    call random_number(previous_distance)
+                    previous_distance = 30.0 + previous_distance * 15.0  ! Distance 30-45
+                    mouse_pos%x = cat_pos%x + dx * previous_distance
+                    mouse_pos%y = cat_pos%y + dy * previous_distance
+                    ! Clamp to field
+                    if (mouse_pos%x < 0.0) mouse_pos%x = 0.0
+                    if (mouse_pos%x > field_size) mouse_pos%x = field_size
+                    if (mouse_pos%y < 0.0) mouse_pos%y = 0.0
+                    if (mouse_pos%y > field_size) mouse_pos%y = field_size
+                    
+                    ! Reset adaptive mechanisms for new hunt
+                    best_distance = sqrt((mouse_pos%x - cat_pos%x)**2 + (mouse_pos%y - cat_pos%y)**2)
+                    bars_since_progress = 0
+                    
+                    ! Continue hunting - don't exit
                 end if
             end if
             
             cat_pos%x = new_x
             cat_pos%y = new_y
+            
+            ! Calculate NEW distance immediately after movement
+            dx = mouse_pos%x - cat_pos%x
+            dy = mouse_pos%y - cat_pos%y
+            if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+            if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+            current_distance = sqrt(dx*dx + dy*dy)
             
             ! Direction-based reward: did cat move TOWARDS mouse?
             ! Calculate unit vector from cat → mouse
@@ -280,31 +437,119 @@ program cat_mouse_learning
                 ! This is the magnitude of movement towards the mouse
                 dot_product = cat_move_x * desired_dx + cat_move_y * desired_dy
                 
-                ! Apply selective reinforcement based on movement direction
-                if (dot_product > 0.0) then
-                    ! Moved towards mouse - REWARD
-                    call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
-                else if (dot_product < 0.0) then
-                    ! Moved away from mouse - PUNISH
-                    call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                ! Track movement directionality for analysis
+                total_moves = total_moves + 1
+                if (dot_product > 0.01) then
+                    moves_towards = moves_towards + 1
+                    moves_towards_this_epoch = moves_towards_this_epoch + 1
+                else if (dot_product < -0.01) then
+                    moves_away = moves_away + 1
+                    moves_away_this_epoch = moves_away_this_epoch + 1
+                else
+                    moves_perpendicular = moves_perpendicular + 1
+                    moves_perpendicular_this_epoch = moves_perpendicular_this_epoch + 1
                 end if
-                ! If dot_product == 0, movement was perpendicular - no reinforcement
+                
+                ! Mechanism 1: Check for repetitive movements (oscillation)
+                repeated_count = 0
+                do i = 1, history_size
+                    if (movement_history(i) == output_action) repeated_count = repeated_count + 1
+                end do
+                
+                ! Mechanism 2: Adaptive threshold - tighten when making progress, loosen when stuck
+                ! Check progress periodically
+                bars_since_progress = bars_since_progress + 1
+                if (bars_since_progress >= progress_check_interval) then
+                    if (current_distance < best_distance * 0.9) then
+                        ! Made significant progress - tighten threshold (be more selective)
+                        adaptive_threshold = min(threshold_max, adaptive_threshold + 0.03)
+                        best_distance = current_distance
+                        bars_since_progress = 0
+                    else if (bars_since_progress >= progress_check_interval * 2) then
+                        ! Stuck for too long - loosen threshold (explore more)
+                        adaptive_threshold = max(threshold_min, adaptive_threshold - 0.02)
+                        bars_since_progress = progress_check_interval  ! Don't reset to 0, keep pressure
+                    end if
+                end if
+                
+                ! Mechanism 3: Direction momentum - EXPONENTIAL bonus for continuing successful direction
+                if (output_action == last_rewarded_direction .and. last_rewarded_direction > 0) then
+                    momentum_streak = momentum_streak + 1
+                else
+                    momentum_streak = 0  ! Reset streak if direction changes
+                end if
+                
+                ! Exponential momentum bonus: 2× for 1 step, 3× for 2 steps, 4× for 3+ steps
+                momentum_bonus = min(momentum_streak + 1, 4)  ! Cap at 4× multiplier
+                
+                ! Calculate directional accuracy multiplier based on dot product magnitude
+                ! dot_product ranges from -1 (opposite) to +1 (directly towards)
+                ! Scale reward: barely towards (0.01) = 0.5× base, directly towards (1.0) = 2.0× base
+                direction_multiplier = 1.0
+                if (dot_product > adaptive_threshold) then
+                    ! Map dot product [0.01, 1.0] to multiplier [0.5, 2.0]
+                    direction_multiplier = 0.5 + 1.5 * dot_product
+                end if
+                
+                ! Progressive punishment based on epoch (stronger in later epochs)
+                epoch_progress = real(current_epoch) / real(num_epochs)  ! 0.0 to 1.0
+                
+                ! Apply selective reinforcement with strict threshold
+                if (dot_product > adaptive_threshold) then
+                    ! Moved DIRECTLY towards mouse (narrow cone only) - but check for repetition
+                    if (repeated_count <= 4) then
+                        ! Not too repetitive (≤40% of history) - REWARD
+                        ! Apply graduated reward based on directional accuracy
+                        do k = 1, nint(direction_multiplier * 2.0)  ! 1-4 reinforcements based on accuracy
+                            call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                        end do
+                        last_rewarded_direction = output_action  ! Track for momentum
+                        
+                        ! Exponential momentum bonus: 1-3 extra reinforcements based on streak
+                        do k = 1, momentum_bonus - 1
+                            call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                        end do
+                    else
+                        ! Too repetitive (>40% of last 10 moves) - PUNISH to break oscillation
+                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)  ! Double punishment
+                        last_rewarded_direction = 0  ! Break momentum
+                        momentum_streak = 0  ! Reset streak
+                    end if
+                else if (dot_product < -0.01) then
+                    ! Moved away from mouse - PROGRESSIVE PUNISH (stronger in later epochs)
+                    do k = 1, nint(1.0 + epoch_progress * 2.0)  ! 1-3 punishments based on epoch
+                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                    end do
+                    last_rewarded_direction = 0  ! Break momentum
+                    momentum_streak = 0  ! Reset streak
+                else
+                    ! Between -0.01 and adaptive_threshold: either perpendicular or weak towards
+                    ! PUNISH after epoch 1 - we want precision, not vague wandering
+                    if (current_epoch > 1) then
+                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                        last_rewarded_direction = 0  ! Break momentum
+                        momentum_streak = 0  ! Reset streak
+                    end if
+                end if
             end if
         end if
         
-        ! Update distance for logging only (not used for reward anymore)
-        dx = mouse_pos%x - cat_pos%x
-        dy = mouse_pos%y - cat_pos%y
-        if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
-        if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
-        current_distance = sqrt(dx*dx + dy*dy)
+        ! If cat didn't move, still update distance for progress tracking
+        if (move_distance == 0) then
+            dx = mouse_pos%x - cat_pos%x
+            dy = mouse_pos%y - cat_pos%y
+            if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+            if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+            current_distance = sqrt(dx*dx + dy*dy)
+        end if
         
         ! Log to CSV
-        write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
+        write(csv_unit, '(I0,10(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
                                         ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
                                         ',', output_action, ',', brain_energy, &
                                         ',', output_energy, ',', output_action, &
-                                        ',', move_distance
+                                        ',', move_distance, ',', catches_count
         
         ! Periodic snapshots
         if (mod(bar, snapshot_interval) == 0) then
@@ -413,7 +658,69 @@ program cat_mouse_learning
     end do
     close(csv_unit)
     
+    ! Save final epoch if not already saved
+    if (catches_this_epoch > 0 .or. moves_towards_this_epoch > 0) then
+        epoch_catches(current_epoch) = catches_this_epoch
+        epoch_moves_towards(current_epoch) = moves_towards_this_epoch
+        epoch_moves_away(current_epoch) = moves_away_this_epoch
+        epoch_moves_perpendicular(current_epoch) = moves_perpendicular_this_epoch
+    end if
+    
     print *, "=== SIMULATION COMPLETE ==="
+    print *, "Total mice caught:", catches_count
+    print *, "Catch rate:", real(catches_count) / real(max_bars), "per Bar"
+    print *
+    print *, "=== TEMPORAL LEARNING ANALYSIS (EPOCH BREAKDOWN) ==="
+    print *, "Epoch size:", epoch_size, "Bars"
+    do i = 1, num_epochs
+        ! Calculate directionality percentages for this epoch
+        epoch_total_moves = epoch_moves_towards(i) + epoch_moves_away(i) + epoch_moves_perpendicular(i)
+        if (epoch_total_moves > 0) then
+            print *, "  Epoch", i, ":", epoch_catches(i), "catches (rate:", &
+                     real(epoch_catches(i))/real(epoch_size), "per Bar)", &
+                     "Directionality:", &
+                     real(epoch_moves_towards(i))/real(epoch_total_moves)*100.0, "% towards,", &
+                     real(epoch_moves_away(i))/real(epoch_total_moves)*100.0, "% away,", &
+                     real(epoch_moves_perpendicular(i))/real(epoch_total_moves)*100.0, "% perpendicular"
+        else
+            print *, "  Epoch", i, ":", epoch_catches(i), "catches (rate:", &
+                     real(epoch_catches(i))/real(epoch_size), "per Bar)"
+        end if
+    end do
+    ! Calculate learning trend (early vs late)
+    if (num_epochs >= 2) then
+        brain_energy = 0  ! Reuse for early sum
+        output_energy = 0  ! Reuse for late sum
+        do i = 1, num_epochs/3
+            brain_energy = brain_energy + epoch_catches(i)
+        end do
+        do i = (2*num_epochs/3)+1, num_epochs
+            output_energy = output_energy + epoch_catches(i)
+        end do
+        print *, "Early third avg:", real(brain_energy) / real(num_epochs/3), "catches/epoch"
+        print *, "Late third avg:", real(output_energy) / real(num_epochs - 2*num_epochs/3), "catches/epoch"
+        if (output_energy > brain_energy * 1.2) then
+            print *, "✓ TEMPORAL IMPROVEMENT - Cat learning over time"
+        else if (output_energy > brain_energy) then
+            print *, "~ SLIGHT IMPROVEMENT - Modest learning over time"
+        else
+            print *, "✗ NO TEMPORAL IMPROVEMENT - Performance stable or declining"
+        end if
+    end if
+    print *
+    print *, "=== MOVEMENT DIRECTIONALITY ANALYSIS ==="
+    print *, "Total moves:", total_moves
+    print *, "Moves TOWARDS mouse:", moves_towards, "(", 100.0*real(moves_towards)/real(total_moves), "%)"
+    print *, "Moves AWAY from mouse:", moves_away, "(", 100.0*real(moves_away)/real(total_moves), "%)"
+    print *, "Moves PERPENDICULAR:", moves_perpendicular, "(", 100.0*real(moves_perpendicular)/real(total_moves), "%)"
+    if (moves_towards > moves_away * 1.5) then
+        print *, "✓ DIRECTIONAL LEARNING DETECTED - Cat preferentially moves towards mouse"
+    else if (moves_towards > moves_away) then
+        print *, "~ WEAK DIRECTIONAL BIAS - Slight preference for moving towards mouse"
+    else
+        print *, "✗ NO DIRECTIONAL LEARNING - Movement appears random"
+    end if
+    print *
     print *, "Results saved to:", trim(csv_filename)
     print *, "Brain state saved to: brain_state.csv"
     print *, "Synapse state saved to: synapse_state.csv"

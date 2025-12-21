@@ -78,12 +78,13 @@ def draw_vision_line(cat_x, cat_y, mouse_x, mouse_y, slice_num):
     color = (100, 255, 100, 100)
     pygame.draw.line(screen, GREEN, (px1, py1), (px2, py2), 1)
 
-def draw_info(step, brain_energy, output_energy, slice_num, distance):
+def draw_info(step, brain_energy, output_energy, slice_num, distance, catches=0):
     """Draw info text"""
     font = pygame.font.Font(None, 24)
     
     texts = [
         f"Step: {step}",
+        f"Catches: {catches}",
         f"Vision Slice: {slice_num}",
         f"Brain Energy: {brain_energy}",
         f"Output Energy: {output_energy}",
@@ -106,6 +107,7 @@ def main():
     brain_energy = 0
     output_energy = 0
     slice_num = 0
+    catches = 0
     
     print("GUI started. Waiting for input...", file=sys.stderr)
     
@@ -124,7 +126,7 @@ def main():
             if not running:
                 break
             
-            # Parse input line: step,mouse_x,mouse_y,cat_x,cat_y,slice,brain_energy,output_energy
+            # Parse input line: step,mouse_x,mouse_y,cat_x,cat_y,slice,brain_energy,output_energy,output_action,move_dist,catches
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
@@ -139,6 +141,9 @@ def main():
                 slice_num = int(parts[5])
                 brain_energy = int(parts[6])
                 output_energy = int(parts[7])
+                # New: catches counter (last column)
+                if len(parts) > 10:
+                    catches = int(parts[10])
             except (ValueError, IndexError):
                 continue
             
@@ -169,7 +174,7 @@ def main():
             draw_cat(cat_x, cat_y)
             
             # Draw info
-            draw_info(step, brain_energy, output_energy, slice_num, distance)
+            draw_info(step, brain_energy, output_energy, slice_num, distance, catches)
             
             # Update display
             pygame.display.flip()
