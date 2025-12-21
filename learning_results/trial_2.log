@@ -5,7 +5,7 @@
  Logging to:simulation_log.csv
  Snapshot interval:         1000
  
- SUCCESS! Cat path crossed mouse at Bar          413 of        20000
+ SUCCESS! Cat path crossed mouse at Bar          366 of        20000
  Closest approach distance:    0.000000    
  === SIMULATION COMPLETE ===
  Results saved to:simulation_log.csv

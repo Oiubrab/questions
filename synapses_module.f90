@@ -115,8 +115,8 @@ module synapses_module
         integer :: i, j, k, m
         real :: target_multiplier, rand_factor
         
-        ! Calculate punishment: 0.8 / (0.95^num_steps)
-        target_multiplier = 0.8 / (0.95 ** num_steps)
+        ! Calculate punishment: 0.8 * (0.95^num_steps) - amplifies decay effect
+        target_multiplier = 0.8 * (0.95 ** num_steps)
         
         do i = 1, rows
             do j = 1, cols

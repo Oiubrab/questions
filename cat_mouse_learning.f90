@@ -33,8 +33,10 @@ program cat_mouse_learning
     ! Reinforcement tracking
     real :: current_distance, previous_distance
     real :: dx, dy
+    real :: cat_move_x, cat_move_y, desired_dx, desired_dy, dot_product
     real :: old_cat_x, old_cat_y, path_dx, path_dy, path_length
     real :: t, closest_x, closest_y, closest_dist
+    real :: desired_length  ! For normalized direction-based reward
     
     ! Logging
     integer :: csv_unit
@@ -183,12 +185,10 @@ program cat_mouse_learning
             call update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, &
                                                        incoming_direction, rows, cols, input_offset, &
                                                        output_offset, output_length)
-            
-            ! Apply decay every 2 brain steps - optimal balance between persistence and learning
-            if (mod(brain_step, 2) == 0) then
-                call apply_decay(synapses, rows, cols)
-            end if
         end do
+        
+        ! Apply decay ONCE per Bar (after all brain steps)
+        call apply_decay(synapses, rows, cols)
         
         ! Calculate brain energy
         brain_energy = 0
@@ -216,8 +216,12 @@ program cat_mouse_learning
             old_cat_x = cat_pos%x
             old_cat_y = cat_pos%y
             
-            new_x = cat_pos%x + move_directions(output_action, 2) * move_distance * 5.0
-            new_y = cat_pos%y + move_directions(output_action, 1) * move_distance * 5.0
+            ! Calculate movement vector
+            cat_move_x = move_directions(output_action, 2) * move_distance * 5.0
+            cat_move_y = move_directions(output_action, 1) * move_distance * 5.0
+            
+            new_x = cat_pos%x + cat_move_x
+            new_y = cat_pos%y + cat_move_y
             
             ! Clamp to field boundaries
             if (new_x < 0.0) new_x = 0.0
@@ -260,26 +264,40 @@ program cat_mouse_learning
             
             cat_pos%x = new_x
             cat_pos%y = new_y
+            
+            ! Direction-based reward: did cat move TOWARDS mouse?
+            ! Calculate unit vector from cat → mouse
+            desired_dx = mouse_pos%x - old_cat_x
+            desired_dy = mouse_pos%y - old_cat_y
+            desired_length = sqrt(desired_dx*desired_dx + desired_dy*desired_dy)
+            
+            if (desired_length > 0.001) then
+                ! Normalize to unit vector
+                desired_dx = desired_dx / desired_length
+                desired_dy = desired_dy / desired_length
+                
+                ! Dot product with movement vector gives component in desired direction
+                ! This is the magnitude of movement towards the mouse
+                dot_product = cat_move_x * desired_dx + cat_move_y * desired_dy
+                
+                ! Apply selective reinforcement based on movement direction
+                if (dot_product > 0.0) then
+                    ! Moved towards mouse - REWARD
+                    call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                else if (dot_product < 0.0) then
+                    ! Moved away from mouse - PUNISH
+                    call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                end if
+                ! If dot_product == 0, movement was perpendicular - no reinforcement
+            end if
         end if
         
-        ! Now measure distance AFTER cat moved to determine reward/punishment
+        ! Update distance for logging only (not used for reward anymore)
         dx = mouse_pos%x - cat_pos%x
         dy = mouse_pos%y - cat_pos%y
         if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
         if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
         current_distance = sqrt(dx*dx + dy*dy)
-        
-        ! Apply selective reinforcement ONLY if cat actually moved AND distance change is significant
-        if (move_distance > 0) then
-            if (current_distance < previous_distance - 1.0) then
-                ! Distance decreased - reward proportional to steps_per_bar
-                call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
-            else if (current_distance > previous_distance + 1.0) then
-                ! Distance increased - punish proportional to steps_per_bar
-                call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
-            end if
-        end if
-        ! No reinforcement if cat didn't move or distance change < 1.0 units
         
         ! Log to CSV
         write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
@@ -368,7 +386,7 @@ program cat_mouse_learning
     ! Note: Now 4D (incoming_dir, outgoing_dir), so we'll aggregate for visualization
     ! Save maximum strength across all incoming directions for each connection
     open(newunit=csv_unit, file='synapse_state.csv', status='replace', action='write')
-    write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength'
+    write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength,dominant_incoming_dir'
     do i = 1, rows
         do j = 1, cols
             do k = 1, 8
@@ -380,11 +398,15 @@ program cat_mouse_learning
                     (i == rows .and. ni == rows + 1)) then
                     ! Find maximum strength across all incoming directions for this outgoing direction
                     output_energy = 0  ! Reuse variable for max strength
+                    move_distance = 0  ! Reuse variable for dominant incoming direction
                     do brain_step = 1, 8  ! Loop through incoming directions
-                        output_energy = max(output_energy, synapses(i, j, brain_step, k))
+                        if (synapses(i, j, brain_step, k) > output_energy) then
+                            output_energy = synapses(i, j, brain_step, k)
+                            move_distance = brain_step  ! Track which incoming direction is dominant
+                        end if
                     end do
-                    write(csv_unit, '(I0,A,I0,A,I0,A,I0,A,I0)') &
-                        i, ',', j, ',', ni, ',', nj, ',', output_energy
+                    write(csv_unit, '(I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+                        i, ',', j, ',', ni, ',', nj, ',', output_energy, ',', move_distance
                 end if
             end do
         end do

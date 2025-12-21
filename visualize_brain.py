@@ -29,7 +29,8 @@ def load_synapse_state(filename='synapse_state.csv'):
             synapses.append({
                 'from': (int(row['from_row']), int(row['from_col'])),
                 'to': (int(row['to_row']), int(row['to_col'])),
-                'strength': int(row['strength'])
+                'strength': int(row['strength']),
+                'dominant_incoming_dir': int(row['dominant_incoming_dir'])
             })
     return synapses
 
@@ -77,6 +78,10 @@ def visualize_brain(brain, synapses, inputter, outputter, output_file='brain_vis
     # State colors and labels
     state_colors = {0: '#cccccc', 1: '#4CAF50', 2: '#FF5722'}
     state_labels = {0: 'Low', 1: 'Medium', 2: 'High'}
+    
+    # Create colormap for incoming directions (8 directions)
+    # Direction meanings: 1=Up-Left, 2=Up, 3=Up-Right, 4=Left, 5=Right, 6=Down-Left, 7=Down, 8=Down-Right
+    direction_colors = plt.cm.hsv(np.linspace(0, 1, 9))[:8]  # 8 distinct colors
     
     # Draw synapses first (so they appear behind neurons)
     print(f"Drawing {len(synapses)} synapses...")
@@ -133,8 +138,12 @@ def visualize_brain(brain, synapses, inputter, outputter, output_file='brain_vis
         # Alpha (transparency) based on strength (increased minimum for visibility)
         alpha = 0.3 + 0.6 * norm_strength
         
-        # Color gradient from yellow (weak) to red (strong)
-        color = plt.cm.YlOrRd(norm_strength)
+        # Color based on dominant incoming direction (0 means no dominant direction, use gray)
+        incoming_dir = syn.get('dominant_incoming_dir', 0)
+        if incoming_dir > 0 and incoming_dir <= 8:
+            color = direction_colors[incoming_dir - 1]
+        else:
+            color = plt.cm.YlOrRd(norm_strength)  # Fallback to strength-based color
         
         # Draw arrow with visible arrowhead
         arrow = FancyArrowPatch((x1_offset, y1_offset), (x2_offset, y2_offset),
@@ -208,16 +217,24 @@ def visualize_brain(brain, synapses, inputter, outputter, output_file='brain_vis
     ax.set_ylabel('Row', fontsize=12)
     ax.grid(True, alpha=0.3, linestyle='--')
     
-    # Create legend
-    legend_elements = [
+    # Create legend for neuron states
+    state_legend_elements = [
         patches.Patch(facecolor=state_colors[0], edgecolor='black', label='Low State'),
         patches.Patch(facecolor=state_colors[1], edgecolor='black', label='Medium State'),
-        patches.Patch(facecolor=state_colors[2], edgecolor='black', label='High State'),
-        plt.Line2D([0], [0], color='yellow', linewidth=1, alpha=0.3, label='Weak Synapse'),
-        plt.Line2D([0], [0], color='orange', linewidth=2, alpha=0.6, label='Medium Synapse'),
-        plt.Line2D([0], [0], color='red', linewidth=3, alpha=0.9, label='Strong Synapse')
+        patches.Patch(facecolor=state_colors[2], edgecolor='black', label='High State')
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+    
+    # Add legend for incoming direction colors
+    direction_labels = ['\u2196 Up-Left', '\u2191 Up', '\u2197 Up-Right', '\u2190 Left', 
+                       '\u2192 Right', '\u2199 Down-Left', '\u2193 Down', '\u2198 Down-Right']
+    direction_legend_elements = [plt.Line2D([0], [0], color=direction_colors[i], lw=4, 
+                                            label=f'{i+1}: {direction_labels[i]}') 
+                                for i in range(8)]
+    
+    # Combine legends
+    all_legend_elements = state_legend_elements + direction_legend_elements
+    ax.legend(handles=all_legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1), 
+             title='States & Dominant Incoming Direction', fontsize=8)
     
     # Add statistics text
     stats_text = f'Grid: {rows}×{cols} | Synapses: {len(synapses)} | '
