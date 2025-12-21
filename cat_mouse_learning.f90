@@ -9,8 +9,9 @@ program cat_mouse_learning
     
     ! Brain system
     type(trinary), allocatable :: brain(:,:), inputter(:), outputter(:)
-    integer, allocatable :: synapses(:,:,:)
-    logical, allocatable :: synapse_usage(:,:,:)  ! Track which synapses fire during Bar
+    integer, allocatable :: synapses(:,:,:,:)  ! Now 4D: (row, col, incoming_dir, outgoing_dir)
+    logical, allocatable :: synapse_usage(:,:,:,:)  ! Now 4D: track which synapses fire during Bar
+    integer, allocatable :: incoming_direction(:,:,:)  ! Track up to 2 incoming directions per neuron
     integer :: rows, cols, input_length, output_length
     integer :: input_offset, output_offset
     
@@ -85,6 +86,10 @@ program cat_mouse_learning
     call initialize_outputter(outputter, output_length)
     call initialize_synapses(synapses, rows, cols)
     call reset_synapse_usage(synapse_usage, rows, cols)
+    
+    ! Initialize incoming direction tracker
+    allocate(incoming_direction(rows, cols, 2))
+    incoming_direction = 0  ! No incoming direction initially
     
     ! Seed random number generator with user-provided seed or system time
     ! This ensures different brain structures across trials
@@ -167,7 +172,7 @@ program cat_mouse_learning
         end do
         
         ! Apply input to brain ONCE at start of Bar
-        call copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
+        call copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, input_offset, cols)
         
         ! Reset outputter for this Bar
         call save_and_reset_outputter(outputter)
@@ -176,7 +181,7 @@ program cat_mouse_learning
         do brain_step = 1, steps_per_bar
             ! Update brain state (tracks which synapses are used)
             call update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, &
-                                                       rows, cols, input_offset, &
+                                                       incoming_direction, rows, cols, input_offset, &
                                                        output_offset, output_length)
             
             ! Apply decay every 2 brain steps - optimal balance between persistence and learning
@@ -360,6 +365,8 @@ program cat_mouse_learning
     close(csv_unit)
     
     ! Save final synapse strengths for visualization
+    ! Note: Now 4D (incoming_dir, outgoing_dir), so we'll aggregate for visualization
+    ! Save maximum strength across all incoming directions for each connection
     open(newunit=csv_unit, file='synapse_state.csv', status='replace', action='write')
     write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength'
     do i = 1, rows
@@ -371,8 +378,13 @@ program cat_mouse_learning
                 ! Only record valid synapses (within brain bounds or to output)
                 if ((ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) .or. &
                     (i == rows .and. ni == rows + 1)) then
+                    ! Find maximum strength across all incoming directions for this outgoing direction
+                    output_energy = 0  ! Reuse variable for max strength
+                    do brain_step = 1, 8  ! Loop through incoming directions
+                        output_energy = max(output_energy, synapses(i, j, brain_step, k))
+                    end do
                     write(csv_unit, '(I0,A,I0,A,I0,A,I0,A,I0)') &
-                        i, ',', j, ',', ni, ',', nj, ',', synapses(i, j, k)
+                        i, ',', j, ',', ni, ',', nj, ',', output_energy
                 end if
             end do
         end do
