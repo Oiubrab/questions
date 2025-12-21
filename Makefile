@@ -1,7 +1,15 @@
 # Makefile for ForWhoseAdvantage Fortran simulation
-# Compiler: NVIDIA nvfortran
+# Auto-detect best available Fortran compiler
 
-FC = nvfortran
+# Detect available compiler
+ifeq ($(shell command -v nvfortran 2>/dev/null),)
+    FC = gfortran
+    FC_NAME = gfortran
+else
+    FC = nvfortran
+    FC_NAME = nvfortran
+endif
+
 FFLAGS = 
 LDFLAGS =
 
@@ -10,10 +18,12 @@ MODULES = trinary_module.f90 \
           synapses_module.f90 \
           outputter_module.f90 \
           inputter_module.f90 \
-          brain_module.f90
+          brain_module.f90 \
+          vision_simulation_module.f90
 
 # Main programs
 MAIN_PROGRAMS = forWhoseAdvantage \
+                cat_mouse_learning \
                 modify_array \
                 analyze_decay_math \
                 test_conservation \
@@ -29,7 +39,29 @@ all: forWhoseAdvantage
 
 # Main simulation executable
 forWhoseAdvantage: $(MODULES) forWhoseAdvantage.f90
+	@echo "Building forWhoseAdvantage with $(FC_NAME)"
 	$(FC) $(FFLAGS) $(MODULES) forWhoseAdvantage.f90 -o forWhoseAdvantage $(LDFLAGS)
+
+# Cat-mouse learning programs
+cat_mouse_learning: $(MODULES) cat_mouse_learning.f90
+	@echo "Building cat_mouse_learning with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) cat_mouse_learning.f90 -o cat_mouse_learning $(LDFLAGS)
+
+cat_mouse_gui_demo: $(MODULES) cat_mouse_gui_demo.f90
+	@echo "Building cat_mouse_gui_demo with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) cat_mouse_gui_demo.f90 -o cat_mouse_gui_demo $(LDFLAGS)
+
+evolutionary_learning: $(MODULES) evolutionary_learning.f90
+	@echo "Building evolutionary_learning with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) evolutionary_learning.f90 -o evolutionary_learning $(LDFLAGS)
+
+evolved_brain_gui_demo: $(MODULES) evolved_brain_gui_demo.f90
+	@echo "Building evolved_brain_gui_demo with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) evolved_brain_gui_demo.f90 -o evolved_brain_gui_demo $(LDFLAGS)
+
+targeted_evolution: $(MODULES) targeted_evolution.f90
+	@echo "Building targeted_evolution with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) targeted_evolution.f90 -o targeted_evolution $(LDFLAGS)
 
 # Utility programs
 modify_array: trinary_module.f90 modify_array.f90
@@ -65,10 +97,14 @@ all-programs: $(MAIN_PROGRAMS)
 
 # Clean build artifacts
 clean:
-	rm -f *.mod *.o $(MAIN_PROGRAMS)
+	rm -f *.mod *.o $(MAIN_PROGRAMS) cat_mouse_learning_gfortran cat_mouse_gui_demo_gfortran
 
 # Clean and rebuild
 rebuild: clean forWhoseAdvantage
+
+# Build learning system
+learning: cat_mouse_learning
+	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
 
 # Help target
 help:

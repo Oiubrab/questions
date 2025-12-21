@@ -8,6 +8,7 @@ module inputter_module
         integer, intent(in) :: input_length
         integer :: j
 
+        if (allocated(inputter)) deallocate(inputter)
         allocate(inputter(input_length))
 
         ! Initialize the inputter array with alternating trinary states

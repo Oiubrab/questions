@@ -9,7 +9,9 @@ program cat_mouse_learning
     
     ! Brain system
     type(trinary), allocatable :: brain(:,:), inputter(:), outputter(:)
-    integer, allocatable :: synapses(:,:,:)
+    integer, allocatable :: synapses(:,:,:,:)  ! Now 4D: (row, col, incoming_dir, outgoing_dir)
+    logical, allocatable :: synapse_usage(:,:,:,:)  ! Now 4D: track which synapses fire during Bar
+    integer, allocatable :: incoming_direction(:,:,:)  ! Track up to 2 incoming directions per neuron
     integer :: rows, cols, input_length, output_length
     integer :: input_offset, output_offset
     
@@ -22,24 +24,48 @@ program cat_mouse_learning
     integer, dimension(8, 2) :: move_directions
     
     ! Simulation
-    integer :: step, max_steps, snapshot_interval
-    integer :: i, j, brain_energy, output_energy
+    integer :: bar, max_bars, snapshot_interval
+    integer :: brain_step, steps_per_bar
+    integer :: i, j, k, ni, nj, brain_energy, output_energy
     integer :: output_action, move_distance
     real :: new_x, new_y
+    
+    ! Reinforcement tracking
+    real :: current_distance, previous_distance
+    real :: dx, dy
+    real :: cat_move_x, cat_move_y, desired_dx, desired_dy, dot_product
+    real :: old_cat_x, old_cat_y, path_dx, path_dy, path_length
+    real :: t, closest_x, closest_y, closest_dist
+    real :: desired_length  ! For normalized direction-based reward
     
     ! Logging
     integer :: csv_unit
     character(len=100) :: csv_filename
     
+    ! Random seed variables
+    integer :: seed_size, clock
+    integer, allocatable :: seed(:)
+    integer :: user_seed
+    character(len=32) :: arg
+    
+    ! Get seed from command line if provided, otherwise use system clock
+    if (command_argument_count() > 0) then
+        call get_command_argument(1, arg)
+        read(arg, *) user_seed
+    else
+        call system_clock(count=user_seed)
+    end if
+    
     ! Parameters
     rows = 6
     cols = 12
-    input_offset = 1
-    input_length = 6       ! 6 vision slices
-    output_offset = 1
+    input_offset = 3       ! Centered on brain (8 slices centered on 12 columns)
+    input_length = 8       ! 8 vision slices (45° each, was 6 @ 60°)
+    output_offset = 3      ! Centered on brain (8 directions centered on 12 columns)
     output_length = 8      ! 8 movement directions
-    max_steps = 10000
-    snapshot_interval = 500  ! Print full state every N steps
+    max_bars = 20000       ! Real-world time steps (balanced for learning)
+    steps_per_bar = 12     ! Brain steps per Bar (reduced for better temporal precision)
+    snapshot_interval = 1000  ! Print full state every N Bars
     
     ! Vision parameters
     field_size = 100.0
@@ -61,29 +87,79 @@ program cat_mouse_learning
     call initialize_inputter(inputter, input_length)
     call initialize_outputter(outputter, output_length)
     call initialize_synapses(synapses, rows, cols)
+    call reset_synapse_usage(synapse_usage, rows, cols)
     
-    ! Initialize cat at center
-    cat_pos%x = field_size / 2.0
-    cat_pos%y = field_size / 2.0
+    ! Initialize incoming direction tracker
+    allocate(incoming_direction(rows, cols, 2))
+    incoming_direction = 0  ! No incoming direction initially
     
-    ! Initialize mouse at random position
-    call initialize_mouse(mouse_pos, field_size)
+    ! Seed random number generator with user-provided seed or system time
+    ! This ensures different brain structures across trials
+    call random_seed(size=seed_size)
+    allocate(seed(seed_size))
+    seed = user_seed + 37 * (/ (i, i=1,seed_size) /)  ! Mix seed with varied values
+    call random_seed(put=seed)
+    deallocate(seed)
+    
+    ! Initialize mouse at center (stationary target)
+    mouse_pos%x = field_size / 2.0
+    mouse_pos%y = field_size / 2.0
+    
+    ! Initialize cat at random position far from center (distance > 30)
+    call random_number(dx)
+    call random_number(dy)
+    ! Generate position with distance 30-45 from center
+    dx = (dx - 0.5) * 2.0  ! Range: -1 to 1
+    dy = (dy - 0.5) * 2.0
+    ! Normalize and scale
+    previous_distance = sqrt(dx*dx + dy*dy)
+    if (previous_distance > 0.0) then
+        dx = dx / previous_distance
+        dy = dy / previous_distance
+    end if
+    call random_number(previous_distance)
+    previous_distance = 30.0 + previous_distance * 15.0  ! Distance 30-45
+    cat_pos%x = mouse_pos%x + dx * previous_distance
+    cat_pos%y = mouse_pos%y + dy * previous_distance
+    ! Clamp to field
+    if (cat_pos%x < 0.0) cat_pos%x = 0.0
+    if (cat_pos%x > field_size) cat_pos%x = field_size
+    if (cat_pos%y < 0.0) cat_pos%y = 0.0
+    if (cat_pos%y > field_size) cat_pos%y = field_size
+    
+    ! Calculate initial distance
+    dx = mouse_pos%x - cat_pos%x
+    dy = mouse_pos%y - cat_pos%y
+    if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+    if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+    previous_distance = sqrt(dx*dx + dy*dy)
     
     ! Open CSV file for logging
     csv_filename = 'simulation_log.csv'
     open(newunit=csv_unit, file=csv_filename, status='replace', action='write')
-    write(csv_unit, '(A)') 'step,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist'
+    write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist'
     
     print *, "=== CAT & MOUSE LEARNING SIMULATION ==="
-    print *, "Max steps:", max_steps
+    print *, "Max Bars (real-world steps):", max_bars
+    print *, "Brain steps per Bar:", steps_per_bar
+    print *, "Reinforcement: distance-based (global)"
     print *, "Logging to:", trim(csv_filename)
     print *, "Snapshot interval:", snapshot_interval
     print *
     
-    ! Simulation loop
-    do step = 1, max_steps
-        ! Move mouse
-        call move_mouse(mouse_pos, field_size, step_size)
+    ! Simulation loop - each Bar is one real-world time step
+    do bar = 1, max_bars
+        ! Record distance at start of Bar (before any actions)
+        dx = mouse_pos%x - cat_pos%x
+        dy = mouse_pos%y - cat_pos%y
+        if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+        if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+        previous_distance = sqrt(dx*dx + dy*dy)
+        
+        ! Reset synapse usage tracker for this Bar
+        call reset_synapse_usage(synapse_usage, rows, cols)
+        
+        ! Mouse is stationary at center - no movement
         
         ! Update vision input
         call update_vision_input(inputter, cat_pos, mouse_pos, num_vision_slices)
@@ -97,16 +173,21 @@ program cat_mouse_learning
             end if
         end do
         
-        ! Apply input to brain
-        call copy_non_low_to_brain_top_row(inputter, brain, input_offset, cols)
+        ! Apply input to brain ONCE at start of Bar
+        call copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, input_offset, cols)
         
-        ! Update brain
+        ! Reset outputter for this Bar
         call save_and_reset_outputter(outputter)
-        call update_brain_state_based_on_synapses(brain, synapses, outputter, &
-                                                   rows, cols, input_offset, &
-                                                   output_offset, output_length)
         
-        ! Apply decay to synapses
+        ! Run multiple brain steps within this Bar
+        do brain_step = 1, steps_per_bar
+            ! Update brain state (tracks which synapses are used)
+            call update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, &
+                                                       incoming_direction, rows, cols, input_offset, &
+                                                       output_offset, output_length)
+        end do
+        
+        ! Apply decay ONCE per Bar (after all brain steps)
         call apply_decay(synapses, rows, cols)
         
         ! Calculate brain energy
@@ -131,8 +212,16 @@ program cat_mouse_learning
         
         ! Move cat based on output (if any)
         if (move_distance > 0 .and. output_action > 0) then
-            new_x = cat_pos%x + move_directions(output_action, 2) * move_distance * 5.0
-            new_y = cat_pos%y + move_directions(output_action, 1) * move_distance * 5.0
+            ! Store old position for path intersection check
+            old_cat_x = cat_pos%x
+            old_cat_y = cat_pos%y
+            
+            ! Calculate movement vector
+            cat_move_x = move_directions(output_action, 2) * move_distance * 5.0
+            cat_move_y = move_directions(output_action, 1) * move_distance * 5.0
+            
+            new_x = cat_pos%x + cat_move_x
+            new_y = cat_pos%y + cat_move_y
             
             ! Clamp to field boundaries
             if (new_x < 0.0) new_x = 0.0
@@ -140,21 +229,87 @@ program cat_mouse_learning
             if (new_y < 0.0) new_y = 0.0
             if (new_y > field_size) new_y = field_size
             
+            ! Check if movement path crosses mouse (line segment to point distance)
+            path_dx = new_x - old_cat_x
+            path_dy = new_y - old_cat_y
+            path_length = sqrt(path_dx*path_dx + path_dy*path_dy)
+            
+            if (path_length > 0.0) then
+                ! Project mouse onto cat's movement line segment
+                t = ((mouse_pos%x - old_cat_x) * path_dx + (mouse_pos%y - old_cat_y) * path_dy) / &
+                    (path_length * path_length)
+                t = max(0.0, min(1.0, t))  ! Clamp to segment
+                
+                ! Find closest point on path to mouse
+                closest_x = old_cat_x + t * path_dx
+                closest_y = old_cat_y + t * path_dy
+                closest_dist = sqrt((mouse_pos%x - closest_x)**2 + (mouse_pos%y - closest_y)**2)
+                
+                ! Check if path passed within success threshold
+                if (closest_dist < 2.0) then
+                    print *, "SUCCESS! Cat path crossed mouse at Bar", bar, "of", max_bars
+                    print *, "Closest approach distance:", closest_dist
+                    cat_pos%x = mouse_pos%x  ! Snap to mouse position
+                    cat_pos%y = mouse_pos%y
+                    
+                    ! Log final state
+                    write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
+                                                    ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
+                                                    ',', output_action, ',', brain_energy, &
+                                                    ',', output_energy, ',', output_action, &
+                                                    ',', move_distance
+                    exit  ! End test early on success
+                end if
+            end if
+            
             cat_pos%x = new_x
             cat_pos%y = new_y
+            
+            ! Direction-based reward: did cat move TOWARDS mouse?
+            ! Calculate unit vector from cat → mouse
+            desired_dx = mouse_pos%x - old_cat_x
+            desired_dy = mouse_pos%y - old_cat_y
+            desired_length = sqrt(desired_dx*desired_dx + desired_dy*desired_dy)
+            
+            if (desired_length > 0.001) then
+                ! Normalize to unit vector
+                desired_dx = desired_dx / desired_length
+                desired_dy = desired_dy / desired_length
+                
+                ! Dot product with movement vector gives component in desired direction
+                ! This is the magnitude of movement towards the mouse
+                dot_product = cat_move_x * desired_dx + cat_move_y * desired_dy
+                
+                ! Apply selective reinforcement based on movement direction
+                if (dot_product > 0.0) then
+                    ! Moved towards mouse - REWARD
+                    call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                else if (dot_product < 0.0) then
+                    ! Moved away from mouse - PUNISH
+                    call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                end if
+                ! If dot_product == 0, movement was perpendicular - no reinforcement
+            end if
         end if
         
+        ! Update distance for logging only (not used for reward anymore)
+        dx = mouse_pos%x - cat_pos%x
+        dy = mouse_pos%y - cat_pos%y
+        if (abs(dx) > field_size / 2.0) dx = dx - sign(field_size, dx)
+        if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
+        current_distance = sqrt(dx*dx + dy*dy)
+        
         ! Log to CSV
-        write(csv_unit, '(I0,9(A,I0))') step, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
+        write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
                                         ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
                                         ',', output_action, ',', brain_energy, &
                                         ',', output_energy, ',', output_action, &
                                         ',', move_distance
         
         ! Periodic snapshots
-        if (mod(step, snapshot_interval) == 0) then
+        if (mod(bar, snapshot_interval) == 0) then
             print *, "========================================"
-            print *, "SNAPSHOT AT STEP", step
+            print *, "SNAPSHOT AT BAR", bar
             print *, "========================================"
             
             call print_field(cat_pos, mouse_pos, field_size, 20)
@@ -193,15 +348,74 @@ program cat_mouse_learning
             print *
         end if
         
-        ! Progress indicator every 1000 steps
-        if (mod(step, 1000) == 0) then
-            print *, "Progress:", step, "/", max_steps
+        ! Progress indicator every 1000 Bars
+        if (mod(bar, 1000) == 0) then
+            print *, "Progress:", bar, "/", max_bars
         end if
     end do
     
     close(csv_unit)
     
+    ! Save final brain state for visualization
+    open(newunit=csv_unit, file='brain_state.csv', status='replace', action='write')
+    write(csv_unit, '(A)') 'row,col,state'
+    do i = 1, rows
+        do j = 1, cols
+            write(csv_unit, '(I0,A,I0,A,I0)') i, ',', j, ',', brain(i, j)%get()
+        end do
+    end do
+    close(csv_unit)
+    
+    ! Save final inputter state for visualization
+    open(newunit=csv_unit, file='inputter_state.csv', status='replace', action='write')
+    write(csv_unit, '(A)') 'col,state'
+    do j = 1, input_length
+        write(csv_unit, '(I0,A,I0)') input_offset + j - 1, ',', inputter(j)%get()
+    end do
+    close(csv_unit)
+    
+    ! Save final outputter state for visualization
+    open(newunit=csv_unit, file='outputter_state.csv', status='replace', action='write')
+    write(csv_unit, '(A)') 'col,state'
+    do j = 1, output_length
+        write(csv_unit, '(I0,A,I0)') output_offset + j - 1, ',', outputter(j)%get()
+    end do
+    close(csv_unit)
+    
+    ! Save final synapse strengths for visualization
+    ! Note: Now 4D (incoming_dir, outgoing_dir), so we'll aggregate for visualization
+    ! Save maximum strength across all incoming directions for each connection
+    open(newunit=csv_unit, file='synapse_state.csv', status='replace', action='write')
+    write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength,dominant_incoming_dir'
+    do i = 1, rows
+        do j = 1, cols
+            do k = 1, 8
+                ! Calculate target position for this direction
+                ni = i + move_directions(k, 1)
+                nj = j + move_directions(k, 2)
+                ! Only record valid synapses (within brain bounds or to output)
+                if ((ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) .or. &
+                    (i == rows .and. ni == rows + 1)) then
+                    ! Find maximum strength across all incoming directions for this outgoing direction
+                    output_energy = 0  ! Reuse variable for max strength
+                    move_distance = 0  ! Reuse variable for dominant incoming direction
+                    do brain_step = 1, 8  ! Loop through incoming directions
+                        if (synapses(i, j, brain_step, k) > output_energy) then
+                            output_energy = synapses(i, j, brain_step, k)
+                            move_distance = brain_step  ! Track which incoming direction is dominant
+                        end if
+                    end do
+                    write(csv_unit, '(I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+                        i, ',', j, ',', ni, ',', nj, ',', output_energy, ',', move_distance
+                end if
+            end do
+        end do
+    end do
+    close(csv_unit)
+    
     print *, "=== SIMULATION COMPLETE ==="
     print *, "Results saved to:", trim(csv_filename)
+    print *, "Brain state saved to: brain_state.csv"
+    print *, "Synapse state saved to: synapse_state.csv"
     
 end program cat_mouse_learning
