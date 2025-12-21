@@ -44,8 +44,8 @@ program cat_mouse_learning
     input_length = 6       ! 6 vision slices
     output_offset = 1
     output_length = 8      ! 8 movement directions
-    max_bars = 20000       ! Real-world time steps (extended for better learning)
-    steps_per_bar = 20     ! Brain steps per Bar (increased for better signal propagation)
+    max_bars = 20000       ! Real-world time steps (balanced for learning)
+    steps_per_bar = 12     ! Brain steps per Bar (reduced for better temporal precision)
     snapshot_interval = 1000  ! Print full state every N Bars
     
     ! Vision parameters
@@ -137,8 +137,10 @@ program cat_mouse_learning
                                                        rows, cols, input_offset, &
                                                        output_offset, output_length)
             
-            ! Apply decay to synapses after each brain step
-            call apply_decay(synapses, rows, cols)
+            ! Apply decay every 2 brain steps - optimal balance between persistence and learning
+            if (mod(brain_step, 2) == 0) then
+                call apply_decay(synapses, rows, cols)
+            end if
         end do
         
         ! Calculate brain energy
@@ -183,17 +185,17 @@ program cat_mouse_learning
         if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
         current_distance = sqrt(dx*dx + dy*dy)
         
-        ! Apply selective reinforcement ONLY if cat actually moved
+        ! Apply selective reinforcement ONLY if cat actually moved AND distance change is significant
         if (move_distance > 0) then
-            if (current_distance < previous_distance) then
+            if (current_distance < previous_distance - 1.0) then
                 ! Distance decreased - reward proportional to steps_per_bar
                 call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
-            else if (current_distance > previous_distance) then
+            else if (current_distance > previous_distance + 1.0) then
                 ! Distance increased - punish proportional to steps_per_bar
                 call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
             end if
         end if
-        ! No reinforcement if cat didn't move or if distance unchanged
+        ! No reinforcement if cat didn't move or distance change < 1.0 units
         
         ! Log to CSV
         write(csv_unit, '(I0,9(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &

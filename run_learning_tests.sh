@@ -10,13 +10,28 @@ echo "==================================="
 echo "Running $NUM_TRIALS trials..."
 echo ""
 
+# Detect available Fortran compiler
+if command -v nvfortran >/dev/null 2>&1; then
+    FC="nvfortran"
+    LEARNING_EXEC="cat_mouse_learning"
+    GUI_EXEC="cat_mouse_gui_demo"
+else
+    FC="gfortran"
+    LEARNING_EXEC="cat_mouse_learning"
+    GUI_EXEC="cat_mouse_gui_demo"
+fi
+
+echo "Using compiler: $FC"
+echo "Learning executable: $LEARNING_EXEC"
+echo ""
+
 # Create results directory
 mkdir -p "$RESULTS_DIR"
 
 # Run multiple trials
 for trial in $(seq 1 $NUM_TRIALS); do
     echo "--- Trial $trial/$NUM_TRIALS ---"
-    ./cat_mouse_learning > "$RESULTS_DIR/trial_${trial}.log" 2>&1
+    ./$LEARNING_EXEC > "$RESULTS_DIR/trial_${trial}.log" 2>&1
     mv simulation_log.csv "$RESULTS_DIR/trial_${trial}.csv"
     echo "Trial $trial complete"
 done
@@ -129,8 +144,8 @@ echo "Press ESC or Q to quit early"
 echo ""
 
 # Compile and run GUI
-nvfortran trinary_module.f90 synapses_module.f90 outputter_module.f90 inputter_module.f90 brain_module.f90 vision_simulation_module.f90 cat_mouse_gui_demo.f90 -o cat_mouse_gui_demo 2>/dev/null
-./run_gui.sh
+$FC trinary_module.f90 synapses_module.f90 outputter_module.f90 inputter_module.f90 brain_module.f90 vision_simulation_module.f90 cat_mouse_gui_demo.f90 -o $GUI_EXEC 2>/dev/null
+./$GUI_EXEC | python3 cat_mouse_gui.py
 
 echo ""
 echo "==================================="

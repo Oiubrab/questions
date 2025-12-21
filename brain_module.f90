@@ -10,6 +10,7 @@ module brain_module
         integer, intent(in) :: rows, cols
         integer :: i, j
 
+        if (allocated(brain)) deallocate(brain)
         allocate(brain(rows, cols))
 
         ! Initialize the 2D brain with all lows (0's)

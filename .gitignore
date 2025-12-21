@@ -3,9 +3,23 @@
 
 # Ignore compiled executables
 forWhoseAdvantage
+cat_mouse_learning
+cat_mouse_gui_demo
+cat_mouse_vision
+evolutionary_learning
+evolved_brain_gui_demo
+targeted_evolution
+create_hunting_brain
 modify_array
 test_*
 analyze_*
+
+# Ignore executables with compiler suffixes
+*_gfortran
+*_nvfortran
+
+# Brain data files (generated binary files)
+*.dat
 
 # Ignore other temporary or build files (optional)
 *.o
@@ -24,3 +38,9 @@ analyze_*
 # Ignore directories (optional)
 build/
 bin/
+
+# Ignore learning results and logs
+learning_results/
+*.log
+*.csv
+simulation_log.csv

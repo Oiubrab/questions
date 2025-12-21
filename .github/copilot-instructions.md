@@ -58,7 +58,7 @@ The learning system uses adaptive reinforcement that scales with `steps_per_bar`
 - **Movement-conditional**: Only applies when cat actually moved (prevents rewarding random mouse movement)
 
 **Key Properties:**
-1. **Global decay maintains equilibrium**: All unused synapses decay toward floor (1), ensuring new patterns can always form
+1. **Global decay maintains equilibrium**: ALL synapses decay toward floor (25), including used ones - usage combats decay through reinforcement but pathways must be active regularly to maintain bias, otherwise they tend toward floor ensuring new patterns can always form
 2. **Selective reinforcement for credit assignment**: Only synapses used in current Bar are rewarded/punished based on outcome
 3. **Pathway tracking**: Boolean `synapse_usage(rows, cols, 8)` marks which synapses fire, reset each Bar
 4. **Non-linear ratio-based selection**: Probabilities determined by synapse strength ratios, not absolute values
@@ -85,9 +85,10 @@ In `update_brain_state_based_on_synapses()`:
 
 ### Bar Structure (Temporal Organization)
 A **Bar** represents one real-world time step, containing multiple brain processing steps:
-- Current default: `steps_per_bar = 20` (20 brain updates per real-world step)
+- Current default: `steps_per_bar = 12` (12 brain updates per real-world step)
 - Enables signal propagation from input (top row) to output (bottom row) within single timestep
-- Critical for credit assignment: all synapses that fired during Bar are selectively reinforced/punished based on outcome
+- **Critical for learning**: Decay happens once per Bar, not per brain step - this allows vision→movement patterns to persist across brain processing cycles
+- **Pattern persistence**: Multiple directional pathways can coexist as mouse moves between vision sectors
 - See `BAR_STRUCTURE.md` for detailed explanation
 
 ### Learning Loop (cat_mouse_learning.f90)
@@ -118,14 +119,29 @@ Critical design decision: reinforcement only applies when `move_distance > 0`
 
 ## Build & Run
 
-**Compilation order matters** due to module dependencies:
+**Use the Makefile for all builds** - it auto-detects available compiler (nvfortran preferred, gfortran fallback):
+```bash
+make clean          # Clean build artifacts
+make learning       # Build cat-mouse learning system
+make                # Build main forWhoseAdvantage executable  
+make all-programs   # Build all executables
+```
+
+**Manual compilation order** (if needed) due to module dependencies:
 ```bash
 nvfortran trinary_module.f90 brain_module.f90 inputter_module.f90 outputter_module.f90 synapses_module.f90 forWhoseAdvantage.f90 -o forWhoseAdvantage
 ```
 
 Alternative compiler: replace `nvfortran` with `gfortran`
 
-**Execution requires 7 command-line arguments:**
+**Cat-Mouse Learning System Testing:**
+```bash
+./run_learning_tests.sh    # Multi-trial learning experiment with statistics
+./run_gui.sh              # Real-time GUI visualization  
+make learning && ./cat_mouse_learning  # Single learning trial
+```
+
+**Original simulation execution** requires 7 command-line arguments:
 ```bash
 ./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses_flag>
 ```
@@ -133,6 +149,15 @@ Alternative compiler: replace `nvfortran` with `gfortran`
 Example: `./forWhoseAdvantage 6 12 6 6 1 6 false`
 
 **Validation**: `input_offset + input_length - 1 ≤ cols` and `output_offset + output_length - 1 ≤ cols`
+
+## Testing Tools
+
+- **`run_learning_tests.sh`**: Comprehensive 5-trial learning experiment with statistical analysis (mean ± std dev, learning detection)
+- **`run_gui.sh`**: Real-time pygame visualization of cat-mouse learning behavior 
+- **`cat_mouse_learning`**: Single trial learning simulation with CSV logging
+- **`cat_mouse_gui_demo`**: GUI-compatible learning demo outputting real-time state data
+
+All testing tools use intelligent compiler detection and work with both nvfortran and gfortran.
 
 ## File Artifacts
 

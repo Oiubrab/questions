@@ -19,7 +19,7 @@ module synapses_module
             do j = 1, cols
                 do k = 1, 8
                     call random_number(rand_val)
-                    synapses(i, j, k) = 1 + int(999 * rand_val)
+                    synapses(i, j, k) = 25 + int(975 * rand_val)
                 end do
             end do
         end do
@@ -31,9 +31,9 @@ module synapses_module
         real :: rand_decay
 
         call random_number(rand_decay)
-        rand_decay = 0.9 + 0.1 * rand_decay
+        rand_decay = 0.92 + 0.06 * rand_decay  ! Reduced variance: 0.92-0.98 instead of 0.9-1.0
 
-        decay_value = max(1, int(value * rand_decay))
+        decay_value = max(25, int(value * rand_decay))
     end function decay_value
 
     ! Inverse decay (reinforcement) function to multiply by a random number between 1.5 and 2.0
@@ -141,9 +141,9 @@ module synapses_module
         real :: target_multiplier, rand_factor
         integer, parameter :: max_synapse_strength = 200000
         
-        ! Calculate reinforcement needed: 1.05 / (0.95^num_steps)
-        ! This counteracts decay and adds ~5% growth
-        target_multiplier = 1.05 / (0.95 ** num_steps)
+        ! Calculate reinforcement needed: 1.2 / (0.95^num_steps)
+        ! This counteracts decay and adds ~20% growth for balanced learning
+        target_multiplier = 1.2 / (0.95 ** num_steps)
         
         ! Apply reinforcement with some randomness (±10%)
         do i = 1, rows
@@ -169,9 +169,9 @@ module synapses_module
         integer :: i, j, k
         real :: target_multiplier, rand_factor
         
-        ! Calculate punishment: 0.95 / (0.95^num_steps) = 0.95^(1-num_steps)
-        ! This makes decay stronger for failed pathways
-        target_multiplier = 0.95 / (0.95 ** num_steps)
+        ! Calculate punishment: 0.8 / (0.95^num_steps) = stronger punishment for failed pathways
+        ! This makes decay much stronger for failed pathways
+        target_multiplier = 0.8 / (0.95 ** num_steps)
         
         ! Apply punishment with some randomness
         do i = 1, rows
@@ -180,7 +180,7 @@ module synapses_module
                     if (synapse_usage(i, j, k)) then
                         call random_number(rand_factor)
                         rand_factor = 0.9 + 0.2 * rand_factor
-                        synapses(i, j, k) = max(1, int(synapses(i, j, k) * target_multiplier * rand_factor))
+                        synapses(i, j, k) = max(25, int(synapses(i, j, k) * target_multiplier * rand_factor))
                     end if
                 end do
             end do

@@ -42,7 +42,7 @@ program cat_mouse_gui_demo
     output_offset = 1
     output_length = 8      ! 8 movement directions
     max_bars = 1000        ! Real-world time steps
-    steps_per_bar = 10     ! Brain steps per real-world step
+    steps_per_bar = 12     ! Brain steps per real-world step (aligned with learning version)
     
     ! Vision parameters
     field_size = 100.0
@@ -63,7 +63,7 @@ program cat_mouse_gui_demo
     call initialize_brain(brain, rows, cols)
     call initialize_inputter(inputter, input_length)
     call initialize_outputter(outputter, output_length)
-    call initialize_synapses(synapses, rows, cols)
+    call load_evolved_synapses(synapses, rows, cols)  ! Load evolved brain instead of random
     call reset_synapse_usage(synapse_usage, rows, cols)
     
     ! Initialize cat at center of field
@@ -125,8 +125,8 @@ program cat_mouse_gui_demo
                                                        rows, cols, input_offset, &
                                                        output_offset, output_length)
             
-            ! Apply decay to synapses after each brain step
-            call apply_decay(synapses, rows, cols)
+        ! Apply single decay per Bar - allows patterns to persist across brain steps
+        call apply_decay(synapses, rows, cols)
         end do
         
         ! After all brain steps in this Bar, calculate brain energy
@@ -170,15 +170,17 @@ program cat_mouse_gui_demo
         if (abs(dy) > field_size / 2.0) dy = dy - sign(field_size, dy)
         current_distance = sqrt(dx*dx + dy*dy)
         
-        ! Apply selective reinforcement based on whether cat's action improved distance
-        if (current_distance < previous_distance) then
-            ! Distance decreased - reward only synapses that were used
-            call apply_selective_reinforcement(synapses, synapse_usage, rows, cols)
-        else if (current_distance > previous_distance) then
-            ! Distance increased - punish only synapses that were used
-            call apply_selective_decay(synapses, synapse_usage, rows, cols)
+        ! Apply selective reinforcement based on whether cat's action significantly improved distance
+        if (move_distance > 0) then
+            if (current_distance < previous_distance - 1.0) then
+                ! Distance decreased - reward proportional to steps_per_bar
+                call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+            else if (current_distance > previous_distance + 1.0) then
+                ! Distance increased - punish proportional to steps_per_bar
+                call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+            end if
         end if
-        ! If distance unchanged, no selective reinforcement applied
+        ! No reinforcement if cat didn't move or distance change < 1.0 units
         
         ! Output state for GUI: bar,mouse_x,mouse_y,cat_x,cat_y,slice,brain_energy,output_energy
         write(*, '(I0,",",F0.1,",",F0.1,",",F0.1,",",F0.1,",",I0,",",I0,",",I0)') &
@@ -190,5 +192,70 @@ program cat_mouse_gui_demo
     end do
     
     write(0, '(A)') "# Simulation complete"
+    
+contains
+
+    subroutine load_evolved_synapses(synapses, rows, cols)
+        integer, allocatable :: synapses(:,:,:)
+        integer, intent(in) :: rows, cols
+        integer :: i, j, k, unit_num
+        integer :: file_rows, file_cols
+        character(len=50) :: filename
+        logical :: file_exists
+        
+        ! Try to load the hand-crafted hunting brain first
+        filename = "hunting_brain.dat"
+        inquire(file=filename, exist=file_exists)
+        
+        if (file_exists) then
+            open(newunit=unit_num, file=filename, form='unformatted', access='stream', status='old')
+            read(unit_num) file_rows, file_cols
+            if (file_rows == rows .and. file_cols == cols) then
+                ! Allocate synapses array
+                allocate(synapses(rows, cols, 8))
+                do i = 1, rows
+                    do j = 1, cols
+                        do k = 1, 8
+                            read(unit_num) synapses(i, j, k)
+                        end do
+                    end do
+                end do
+                close(unit_num)
+                write(0, '(A)') "# Loaded hand-crafted hunting brain from " // trim(filename)
+                return
+            else
+                close(unit_num)
+            end if
+        end if
+        
+        ! Fallback: try evolved brain
+        filename = "best_brain_gen_15.dat"
+        inquire(file=filename, exist=file_exists)
+        
+        if (file_exists) then
+            open(newunit=unit_num, file=filename, form='unformatted', access='stream', status='old')
+            read(unit_num) file_rows, file_cols
+            if (file_rows == rows .and. file_cols == cols) then
+                ! Allocate synapses array
+                allocate(synapses(rows, cols, 8))
+                do i = 1, rows
+                    do j = 1, cols
+                        do k = 1, 8
+                            read(unit_num) synapses(i, j, k)
+                        end do
+                    end do
+                end do
+                close(unit_num)
+                write(0, '(A)') "# Loaded evolved brain from " // trim(filename)
+            else
+                close(unit_num)
+                write(0, '(A)') "# Brain file dimensions mismatch, using random initialization"
+                call initialize_synapses(synapses, rows, cols)
+            end if
+        else
+            write(0, '(A)') "# Evolved brain file not found, using random initialization"
+            call initialize_synapses(synapses, rows, cols)
+        end if
+    end subroutine load_evolved_synapses
     
 end program cat_mouse_gui_demo
