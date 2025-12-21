@@ -19,14 +19,11 @@ MODULES = trinary_module.f90 \
           outputter_module.f90 \
           inputter_module.f90 \
           brain_module.f90 \
-          vision_simulation_module.f90 \
-          evolutionary_helpers.f90
+          vision_simulation_module.f90
 
 # Main programs
 MAIN_PROGRAMS = forWhoseAdvantage \
                 cat_mouse_learning \
-                cat_mouse_gui_demo \
-                evolutionary_learning \
                 modify_array \
                 analyze_decay_math \
                 test_conservation \
@@ -106,7 +103,7 @@ clean:
 rebuild: clean forWhoseAdvantage
 
 # Build learning system
-learning: cat_mouse_learning cat_mouse_gui_demo
+learning: cat_mouse_learning
 	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
 
 # Help target
