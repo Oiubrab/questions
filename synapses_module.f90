@@ -27,13 +27,14 @@ module synapses_module
         end do
     end subroutine initialize_synapses
 
-    ! Decay function to multiply the synapse value by a random number between 0.92 and 0.98
+    ! Decay function to multiply the synapse value by a random number between 0.98 and 0.995
+    ! Much gentler decay to preserve learned pathways when mouse moves to different sectors
     integer function decay_value(value)
         integer, intent(in) :: value
         real :: rand_decay
 
         call random_number(rand_decay)
-        rand_decay = 0.92 + 0.06 * rand_decay
+        rand_decay = 0.98 + 0.015 * rand_decay  ! Range: 0.98 to 0.995 (0.5-2% loss per decay)
 
         decay_value = max(25, int(value * rand_decay))
     end function decay_value
