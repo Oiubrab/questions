@@ -12,7 +12,7 @@ targeted_evolution
 create_hunting_brain
 modify_array
 test_*
-analyze_*
+analyze_decay_math
 
 # Ignore executables with compiler suffixes
 *_gfortran

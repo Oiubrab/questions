@@ -496,26 +496,17 @@ program cat_mouse_learning
                 
                 ! Apply selective reinforcement with strict threshold
                 if (dot_product > adaptive_threshold) then
-                    ! Moved DIRECTLY towards mouse (narrow cone only) - but check for repetition
-                    if (repeated_count <= 4) then
-                        ! Not too repetitive (≤40% of history) - REWARD
-                        ! Apply graduated reward based on directional accuracy
-                        do k = 1, nint(direction_multiplier * 2.0)  ! 1-4 reinforcements based on accuracy
-                            call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
-                        end do
-                        last_rewarded_direction = output_action  ! Track for momentum
-                        
-                        ! Exponential momentum bonus: 1-3 extra reinforcements based on streak
-                        do k = 1, momentum_bonus - 1
-                            call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
-                        end do
-                    else
-                        ! Too repetitive (>40% of last 10 moves) - PUNISH to break oscillation
-                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
-                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)  ! Double punishment
-                        last_rewarded_direction = 0  ! Break momentum
-                        momentum_streak = 0  ! Reset streak
-                    end if
+                    ! Moved DIRECTLY towards mouse - ALWAYS REWARD (removed repetition check)
+                    ! Apply graduated reward based on directional accuracy
+                    do k = 1, nint(direction_multiplier * 2.0)  ! 1-4 reinforcements based on accuracy
+                        call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                    end do
+                    last_rewarded_direction = output_action  ! Track for momentum
+                    
+                    ! Exponential momentum bonus: 1-3 extra reinforcements based on streak
+                    do k = 1, momentum_bonus - 1
+                        call apply_adaptive_reinforcement(synapses, synapse_usage, rows, cols, steps_per_bar)
+                    end do
                 else if (dot_product < -0.01) then
                     ! Moved away from mouse - PROGRESSIVE PUNISH (stronger in later epochs)
                     do k = 1, nint(1.0 + epoch_progress * 2.0)  ! 1-3 punishments based on epoch
