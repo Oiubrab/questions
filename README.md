@@ -224,6 +224,27 @@ The system learns sensorimotor mappings through environmental interaction rather
 **Specialization:** Develops extreme pathway preferences (some connections 1000× stronger than others)
 **Reliability:** 100% learning success rate across different random seeds
 
+## 🛠️ Troubleshooting
+
+**"Permission denied" when running scripts:**
+```bash
+chmod +x *.sh    # Make all scripts executable
+```
+
+**"Command not found" errors:**
+- Ensure you have `nvfortran` or `gfortran` installed
+- For Python tools: `pip install matplotlib numpy pygame`
+
+**Build failures:**
+```bash
+make clean       # Clear build artifacts
+make learning    # Rebuild from scratch
+```
+
+**GUI won't start:**
+- Ensure you have display/X11 forwarding if using SSH
+- Install pygame: `pip install pygame`
+
 ## 🤝 Contributing
 
 We welcome contributions! Whether you want to:
