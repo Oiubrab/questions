@@ -26,6 +26,7 @@ MODULES = $(MODULE_DIR)/trinary_module.f90 \
           $(MODULE_DIR)/outputter_module.f90 \
           $(MODULE_DIR)/inputter_module.f90 \
           $(MODULE_DIR)/brain_module.f90 \
+          $(MODULE_DIR)/brain_engine_module.f90 \
           $(MODULE_DIR)/vision_simulation_module.f90
 
 # Main programs
