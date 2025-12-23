@@ -2,11 +2,22 @@
 
 This is a Fortran 90 simulation modeling brain-like behavior using trinary state cells, synaptic connections, and probabilistic state transitions. The system now includes a complete sensorimotor learning loop with vision-based reinforcement learning.
 
+## Project Structure
+
+The project uses an organized directory structure:
+- **`src/modules/`**: Core Fortran modules (trinary, brain, synapses, vision, etc.)
+- **`src/programs/`**: Main program entry points
+- **`src/tests/`**: Test programs
+- **`bin/`**: Compiled executables and .mod files
+- **`scripts/`**: Shell scripts for experiments
+- **`visualization/`**: Python GUI and analysis tools
+- **`results/`**: Output data, logs, and visualizations
+
 ## Architecture Overview
 
 The system uses a modular architecture with core modules supporting both the original simulation and a new cat-mouse learning system:
 
-### Core Modules
+### Core Modules (in src/modules/)
 - **`trinary_module.f90`**: Custom type with 3 states (low=0, medium=1, high=2). Encapsulates state via `set()`, `get()`, and `shift(up/down)` methods.
 - **`brain_module.f90`**: 2D grid (brain matrix) representing neural cells. Contains complex probabilistic state propagation logic based on synaptic weights. Includes synapse usage tracking for selective reinforcement.
 - **`inputter_module.f90`**: 1D array feeding stimuli into brain top row. Only non-low states are copied.
@@ -14,16 +25,16 @@ The system uses a modular architecture with core modules supporting both the ori
 - **`synapses_module.f90`**: 4D array (rows × cols × 8 incoming × 8 outgoing) storing connection strengths for context-dependent routing. Includes decay, reinforcement, and adaptive reinforcement/punishment mechanisms that scale with number of brain steps.
 - **`vision_simulation_module.f90`**: Field simulation with angular vision system (6 slices × 60°), mouse/cat positioning, and movement logic with toroidal boundaries.
 
-### Main Programs
+### Main Programs (in src/programs/)
 - **`forWhoseAdvantage.f90`**: Original simulation with command-line parameter parsing.
-- **`cat_mouse_learning.f90`**: Sensorimotor learning simulation - cat learns to chase mouse using vision input and motor output with direction-based reinforcement (reward for moving towards mouse).
+- **`cat_mouse_learning.f90`**: Sensorimotor learning simulation - cat learns to chase mouse using vision input and motor output with direction-based reinforcement (reward for moving towards mouse). Achieves 70% directional learning.
 - **`cat_mouse_gui_demo.f90`**: GUI-compatible version outputting CSV for real-time Pygame visualization.
 
 ### Supporting Files
-- **`cat_mouse_gui.py`**: Pygame visualization showing cat (blue triangle), mouse (red circle), vision rays, and info panel.
-- **`run_learning_tests.sh`**: Multi-trial testing framework with statistical analysis (mean ± std dev).
-- **`test_4d_mechanics.f90`**: Comprehensive test suite validating signal propagation, directional routing, and reward system with 4D synapses.
-- **`visualize_brain.py`**: Matplotlib brain visualization with color-coded arrows showing dominant incoming direction for each connection.
+- **`visualization/cat_mouse_gui.py`**: Pygame visualization showing cat (detailed sprite with whiskers/tail), mouse (detailed sprite with big ears), vision rays, and info panel.
+- **`scripts/run_learning_tests.sh`**: Multi-trial testing framework (30 trials default) with statistical analysis and per-epoch directionality tracking.
+- **`src/tests/test_4d_mechanics.f90`**: Comprehensive test suite validating signal propagation, directional routing, and reward system with 4D synapses.
+- **`visualization/visualize_brain.py`**: Matplotlib brain visualization with color-coded arrows showing dominant incoming direction for each connection.
 - **`BAR_STRUCTURE.md`**: Documentation of temporal organization (multiple brain steps per real-world step).
 
 ## Critical Patterns
@@ -145,41 +156,38 @@ make                # Build main forWhoseAdvantage executable
 make all-programs   # Build all executables
 ```
 
-**Manual compilation order** (if needed) due to module dependencies:
-```bash
-nvfortran trinary_module.f90 brain_module.f90 inputter_module.f90 outputter_module.f90 synapses_module.f90 forWhoseAdvantage.f90 -o forWhoseAdvantage
-```
-
-Alternative compiler: replace `nvfortran` with `gfortran`
+Executables are created in the `bin/` directory.
 
 **Cat-Mouse Learning System Testing:**
 ```bash
-./run_learning_tests.sh    # Multi-trial learning experiment with statistics
-./run_gui.sh              # Real-time GUI visualization  
-make learning && ./cat_mouse_learning  # Single learning trial
+./scripts/run_learning_tests.sh              # 30-trial learning experiment with statistics
+./scripts/run_learning_tests.sh --no-gui     # Fast mode without visualization
+./scripts/single_trial_gui.sh                # Single trial with GUI replay
+./scripts/run_gui.sh                         # Real-time GUI visualization  
+./bin/cat_mouse_learning                     # Single learning trial (direct execution)
 ```
 
 **Original simulation execution** requires 7 command-line arguments:
 ```bash
-./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses_flag>
+./bin/forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses_flag>
 ```
 
-Example: `./forWhoseAdvantage 6 12 6 6 1 6 false`
+Example: `./bin/forWhoseAdvantage 6 12 6 6 1 6 false`
 
 **Validation**: `input_offset + input_length - 1 ≤ cols` and `output_offset + output_length - 1 ≤ cols`
 
 ## Testing Tools
 
-- **`run_learning_tests.sh`**: Comprehensive 5-trial learning experiment with statistical analysis (mean ± std dev, learning detection)
-- **`run_gui.sh`**: Real-time pygame visualization of cat-mouse learning behavior 
-- **`cat_mouse_learning`**: Single trial learning simulation with CSV logging
-- **`cat_mouse_gui_demo`**: GUI-compatible learning demo outputting real-time state data
+- **`scripts/run_learning_tests.sh`**: Comprehensive 30-trial learning experiment with statistical analysis (mean ± std dev, learning detection)
+- **`scripts/single_trial_gui.sh`**: Single trial with immediate GUI replay of cat-mouse behavior
+- **`scripts/run_gui.sh`**: Real-time pygame visualization of cat-mouse learning 
+- **`bin/cat_mouse_learning`**: Single trial learning simulation with CSV logging
 
 All testing tools use intelligent compiler detection and work with both nvfortran and gfortran.
 
 ## File Artifacts
 
-`.mod` files and compiled binaries (`forWhoseAdvantage`, `modify_array`) are build artifacts. Source files are `.f90` only.
+`.mod` files and compiled binaries are in `bin/`. Source files are `.f90` only in `src/`.
 
 ## Utility Files
 

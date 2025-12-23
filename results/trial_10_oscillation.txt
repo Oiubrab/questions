@@ -1,0 +1,27 @@
+
+============================================================
+OSCILLATION ANALYSIS: learning_results/trial_10.csv
+============================================================
+Total Bars: 20000
+
+Movement Efficiency:
+  Net displacement: 69.38 units
+  Total path length: 97563.63 units
+  Efficiency: 0.001 (0=stuck, 1=straight line)
+  ⚠️  WARNING: Very inefficient movement - likely oscillating!
+
+Position Cycling (last 100 Bars):
+  Unique positions visited: 35/100
+  Most visited positions:
+    (0, 100): 14 times (14%)
+    (0, 95): 10 times (10%)
+    (25, 100): 7 times (7%)
+    (20, 100): 4 times (4%)
+    (15, 100): 4 times (4%)
+
+Spatial Confinement (last 50 Bars):
+  X range: 35 units
+  Y range: 25 units
+  Area covered: 875 square units
+============================================================
+

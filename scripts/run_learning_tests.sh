@@ -2,7 +2,7 @@
 # Run multiple learning trials and analyze results
 
 NUM_TRIALS=30
-RESULTS_DIR="learning_results"
+RESULTS_DIR="results"
 SHOW_GUI=true
 
 # Parse command line arguments
@@ -22,12 +22,12 @@ echo ""
 # Detect available Fortran compiler
 if command -v nvfortran >/dev/null 2>&1; then
     FC="nvfortran"
-    LEARNING_EXEC="cat_mouse_learning"
-    GUI_EXEC="cat_mouse_gui_demo"
+    LEARNING_EXEC="bin/cat_mouse_learning"
+    GUI_EXEC="bin/cat_mouse_gui_demo"
 else
     FC="gfortran"
-    LEARNING_EXEC="cat_mouse_learning"
-    GUI_EXEC="cat_mouse_gui_demo"
+    LEARNING_EXEC="bin/cat_mouse_learning"
+    GUI_EXEC="bin/cat_mouse_gui_demo"
 fi
 
 echo "Using compiler: $FC"
@@ -46,7 +46,7 @@ for trial in $(seq 1 $NUM_TRIALS); do
     
     # Run oscillation detection immediately after each trial
     echo "Analyzing for oscillation patterns..."
-    python3 detect_oscillation.py "$RESULTS_DIR/trial_${trial}.csv" > "$RESULTS_DIR/trial_${trial}_oscillation.txt"
+    python3 visualization/detect_oscillation.py "$RESULTS_DIR/trial_${trial}.csv" > "$RESULTS_DIR/trial_${trial}_oscillation.txt"
     
     echo "Trial $trial complete"
 done
@@ -62,7 +62,7 @@ import os
 import csv
 import math
 
-results_dir = "learning_results"
+results_dir = "results"
 num_trials = 30
 
 print("\n" + "="*60)

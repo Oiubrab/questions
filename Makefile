@@ -13,13 +13,20 @@ endif
 FFLAGS = 
 LDFLAGS =
 
+# Directory structure
+SRC_DIR = src
+MODULE_DIR = $(SRC_DIR)/modules
+PROGRAM_DIR = $(SRC_DIR)/programs
+TEST_DIR = $(SRC_DIR)/tests
+BIN_DIR = bin
+
 # Module dependencies
-MODULES = trinary_module.f90 \
-          synapses_module.f90 \
-          outputter_module.f90 \
-          inputter_module.f90 \
-          brain_module.f90 \
-          vision_simulation_module.f90
+MODULES = $(MODULE_DIR)/trinary_module.f90 \
+          $(MODULE_DIR)/synapses_module.f90 \
+          $(MODULE_DIR)/outputter_module.f90 \
+          $(MODULE_DIR)/inputter_module.f90 \
+          $(MODULE_DIR)/brain_module.f90 \
+          $(MODULE_DIR)/vision_simulation_module.f90
 
 # Main programs
 MAIN_PROGRAMS = forWhoseAdvantage \
@@ -38,73 +45,74 @@ MAIN_PROGRAMS = forWhoseAdvantage \
 all: forWhoseAdvantage
 
 # Main simulation executable
-forWhoseAdvantage: $(MODULES) forWhoseAdvantage.f90
+forWhoseAdvantage: $(MODULES) $(PROGRAM_DIR)/forWhoseAdvantage.f90
 	@echo "Building forWhoseAdvantage with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) forWhoseAdvantage.f90 -o forWhoseAdvantage $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/forWhoseAdvantage.f90 -o $(BIN_DIR)/forWhoseAdvantage $(LDFLAGS)
+	@echo "Executable created in $(BIN_DIR)/"
 
 # Cat-mouse learning programs
-cat_mouse_learning: $(MODULES) cat_mouse_learning.f90
+cat_mouse_learning: $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90
 	@echo "Building cat_mouse_learning with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) cat_mouse_learning.f90 -o cat_mouse_learning $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90 -o $(BIN_DIR)/cat_mouse_learning $(LDFLAGS)
+	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
 
-cat_mouse_gui_demo: $(MODULES) cat_mouse_gui_demo.f90
+cat_mouse_gui_demo: $(MODULES) $(PROGRAM_DIR)/cat_mouse_gui_demo.f90
 	@echo "Building cat_mouse_gui_demo with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) cat_mouse_gui_demo.f90 -o cat_mouse_gui_demo $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/cat_mouse_gui_demo.f90 -o $(BIN_DIR)/cat_mouse_gui_demo $(LDFLAGS)
 
-evolutionary_learning: $(MODULES) evolutionary_learning.f90
+evolutionary_learning: $(MODULES) $(PROGRAM_DIR)/evolutionary_learning.f90
 	@echo "Building evolutionary_learning with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) evolutionary_learning.f90 -o evolutionary_learning $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/evolutionary_learning.f90 -o $(BIN_DIR)/evolutionary_learning $(LDFLAGS)
 
-evolved_brain_gui_demo: $(MODULES) evolved_brain_gui_demo.f90
+evolved_brain_gui_demo: $(MODULES) $(PROGRAM_DIR)/evolved_brain_gui_demo.f90
 	@echo "Building evolved_brain_gui_demo with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) evolved_brain_gui_demo.f90 -o evolved_brain_gui_demo $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/evolved_brain_gui_demo.f90 -o $(BIN_DIR)/evolved_brain_gui_demo $(LDFLAGS)
 
-targeted_evolution: $(MODULES) targeted_evolution.f90
+targeted_evolution: $(MODULES) $(PROGRAM_DIR)/targeted_evolution.f90
 	@echo "Building targeted_evolution with $(FC_NAME)"
-	$(FC) $(FFLAGS) $(MODULES) targeted_evolution.f90 -o targeted_evolution $(LDFLAGS)
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/targeted_evolution.f90 -o $(BIN_DIR)/targeted_evolution $(LDFLAGS)
 
 # Utility programs
-modify_array: trinary_module.f90 modify_array.f90
-	$(FC) $(FFLAGS) trinary_module.f90 modify_array.f90 -o modify_array $(LDFLAGS)
+modify_array: $(MODULE_DIR)/trinary_module.f90 $(TEST_DIR)/modify_array.f90
+	$(FC) $(FFLAGS) $(MODULE_DIR)/trinary_module.f90 $(TEST_DIR)/modify_array.f90 -o $(BIN_DIR)/modify_array $(LDFLAGS)
 
-analyze_decay_math: analyze_decay_math.f90
-	$(FC) $(FFLAGS) analyze_decay_math.f90 -o analyze_decay_math $(LDFLAGS)
+analyze_decay_math: $(TEST_DIR)/analyze_decay_math.f90
+	$(FC) $(FFLAGS) $(TEST_DIR)/analyze_decay_math.f90 -o $(BIN_DIR)/analyze_decay_math $(LDFLAGS)
 
 # Test programs
-test_conservation: $(MODULES) test_conservation.f90
-	$(FC) $(FFLAGS) $(MODULES) test_conservation.f90 -o test_conservation $(LDFLAGS)
+test_conservation: $(MODULES) $(TEST_DIR)/test_conservation.f90
+	$(FC) $(FFLAGS) $(MODULES) $(TEST_DIR)/test_conservation.f90 -o $(BIN_DIR)/test_conservation $(LDFLAGS)
 
-test_energy_detailed: $(MODULES) test_energy_detailed.f90
-	$(FC) $(FFLAGS) $(MODULES) test_energy_detailed.f90 -o test_energy_detailed $(LDFLAGS)
+test_energy_detailed: $(MODULES) $(TEST_DIR)/test_energy_detailed.f90
+	$(FC) $(FFLAGS) $(MODULES) $(TEST_DIR)/test_energy_detailed.f90 -o $(BIN_DIR)/test_energy_detailed $(LDFLAGS)
 
-test_single_state: $(MODULES) test_single_state.f90
-	$(FC) $(FFLAGS) $(MODULES) test_single_state.f90 -o test_single_state $(LDFLAGS)
+test_single_state: $(MODULES) $(TEST_DIR)/test_single_state.f90
+	$(FC) $(FFLAGS) $(MODULES) $(TEST_DIR)/test_single_state.f90 -o $(BIN_DIR)/test_single_state $(LDFLAGS)
 
-test_synapse_decay: synapses_module.f90 test_synapse_decay.f90
-	$(FC) $(FFLAGS) synapses_module.f90 test_synapse_decay.f90 -o test_synapse_decay $(LDFLAGS)
+test_synapse_decay: $(MODULE_DIR)/synapses_module.f90 $(TEST_DIR)/test_synapse_decay.f90
+	$(FC) $(FFLAGS) $(MODULE_DIR)/synapses_module.f90 $(TEST_DIR)/test_synapse_decay.f90 -o $(BIN_DIR)/test_synapse_decay $(LDFLAGS)
 
-test_transitions: $(MODULES) test_transitions.f90
-	$(FC) $(FFLAGS) $(MODULES) test_transitions.f90 -o test_transitions $(LDFLAGS)
+test_transitions: $(MODULES) $(TEST_DIR)/test_transitions.f90
+	$(FC) $(FFLAGS) $(MODULES) $(TEST_DIR)/test_transitions.f90 -o $(BIN_DIR)/test_transitions $(LDFLAGS)
 
-test_trinary: trinary_module.f90 test_trinary.f90
-	$(FC) $(FFLAGS) trinary_module.f90 test_trinary.f90 -o test_trinary $(LDFLAGS)
+test_trinary: $(MODULE_DIR)/trinary_module.f90 $(TEST_DIR)/test_trinary.f90
+	$(FC) $(FFLAGS) $(MODULE_DIR)/trinary_module.f90 $(TEST_DIR)/test_trinary.f90 -o $(BIN_DIR)/test_trinary $(LDFLAGS)
 
-test_visual_diff: $(MODULES) test_visual_diff.f90
-	$(FC) $(FFLAGS) $(MODULES) test_visual_diff.f90 -o test_visual_diff $(LDFLAGS)
+test_visual_diff: $(MODULES) $(TEST_DIR)/test_visual_diff.f90
+	$(FC) $(FFLAGS) $(MODULES) $(TEST_DIR)/test_visual_diff.f90 -o $(BIN_DIR)/test_visual_diff $(LDFLAGS)
 
 # Build all executables
 all-programs: $(MAIN_PROGRAMS)
 
 # Clean build artifacts
 clean:
-	rm -f *.mod *.o $(MAIN_PROGRAMS) cat_mouse_learning_gfortran cat_mouse_gui_demo_gfortran
+	rm -f *.mod *.o $(BIN_DIR)/* 
 
 # Clean and rebuild
 rebuild: clean forWhoseAdvantage
 
 # Build learning system
 learning: cat_mouse_learning
-	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
 
 # Help target
 help:

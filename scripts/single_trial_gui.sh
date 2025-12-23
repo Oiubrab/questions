@@ -8,15 +8,15 @@ echo "Running 1 trial with immediate GUI visualization..."
 echo ""
 
 # Ensure results directory exists
-mkdir -p learning_results
+mkdir -p results
 
 # Run single learning simulation
 echo "Running learning simulation..."
-./cat_mouse_learning 1234 > learning_results/trial_gui.log 2>&1
+./bin/cat_mouse_learning 1234 > results/trial_gui.log 2>&1
 
 # Move the CSV file
 if [ -f "simulation_log.csv" ]; then
-    mv "simulation_log.csv" "learning_results/trial_gui.csv"
+    mv "simulation_log.csv" "results/trial_gui.csv"
     echo "Trial complete. Launching GUI visualization..."
     echo ""
     echo "==================================="
@@ -27,7 +27,7 @@ if [ -f "simulation_log.csv" ]; then
     echo ""
     
     # Launch GUI visualization
-    python3 cat_mouse_gui.py < learning_results/trial_gui.csv
+    python3 visualization/cat_mouse_gui.py < results/trial_gui.csv
 else
     echo "ERROR: simulation_log.csv not found"
     exit 1
@@ -42,7 +42,7 @@ echo "==================================="
 python3 << 'PYTHON_SCRIPT'
 import csv
 
-with open('learning_results/trial_gui.csv', 'r') as f:
+with open('results/trial_gui.csv', 'r') as f:
     reader = csv.reader(f)
     next(reader)  # Skip header
     

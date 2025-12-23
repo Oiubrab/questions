@@ -1,0 +1,25 @@
+
+============================================================
+OSCILLATION ANALYSIS: learning_results/trial_24.csv
+============================================================
+Total Bars: 20000
+
+Movement Efficiency:
+  Net displacement: 39.60 units
+  Total path length: 81024.19 units
+  Efficiency: 0.000 (0=stuck, 1=straight line)
+  ⚠️  WARNING: Very inefficient movement - likely oscillating!
+
+Position Cycling (last 100 Bars):
+  Unique positions visited: 1/100
+  ⚠️  WARNING: Cat visiting very few positions - likely stuck!
+  Most visited positions:
+    (0, 0): 100 times (100%)
+
+Spatial Confinement (last 50 Bars):
+  X range: 0 units
+  Y range: 0 units
+  Area covered: 0 square units
+  ⚠️  WARNING: Cat confined to small area - likely stuck!
+============================================================
+

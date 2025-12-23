@@ -36,15 +36,26 @@ make learning    # Auto-detects nvfortran or gfortran
 
 **2. Run Your First Learning Trial**:
 ```bash
-./single_trial_gui.sh    # Watch the cat learn to hunt in real-time!
+./scripts/single_trial_gui.sh    # Watch the cat learn to hunt in real-time!
 ```
 
 **3. Full Performance Analysis**:
 ```bash
-./run_learning_tests.sh  # 30-trial comprehensive analysis
+./scripts/run_learning_tests.sh  # 30-trial comprehensive analysis
 ```
 
 That's it! You'll see the cat develop from random movement to expert hunting behavior.
+
+## 📁 Project Structure
+
+The project uses a clean, organized structure:
+- **`src/`**: All Fortran source code (modules, programs, tests)
+- **`bin/`**: Compiled executables and build artifacts
+- **`scripts/`**: Shell scripts for running experiments
+- **`visualization/`**: Python GUI and analysis tools
+- **`results/`**: Generated output data and visualizations
+
+See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage patterns.
 
 ## 📋 Prerequisites
 
@@ -60,52 +71,52 @@ That's it! You'll see the cat develop from random movement to expert hunting beh
 
 **🔬 Full Scientific Analysis** (Recommended for research):
 ```bash
-./run_learning_tests.sh       # 30 trials + statistical analysis + GUI replay
-./run_learning_tests.sh --no-gui  # Analysis only, no visualization
+./scripts/run_learning_tests.sh       # 30 trials + statistical analysis + GUI replay
+./scripts/run_learning_tests.sh --no-gui  # Analysis only, no visualization
 ```
 *Generates comprehensive statistics, temporal learning analysis, and oscillation detection*
 
 **⚡ Quick Development Testing**:
 ```bash
-./quick_test.sh              # Fast 5-trial evaluation  
-./single_trial_gui.sh        # Single trial with immediate visualization
+./scripts/quick_test.sh              # Fast 5-trial evaluation  
+./scripts/single_trial_gui.sh        # Single trial with immediate visualization
 ```
 
 **🎯 Single Custom Trial**:
 ```bash
-./cat_mouse_learning <seed>  # e.g., ./cat_mouse_learning 1000
+./bin/cat_mouse_learning <seed>  # e.g., ./bin/cat_mouse_learning 1000
 ```
 
 ### Visualization & Analysis
 
 **🧠 Brain Pathway Analysis** (Run after learning experiments):
 ```bash
-python3 analyze_brain_pathways.py  # Detailed neural pathway strengths
-python3 brain_summary.py          # High-level specialization insights
+python3 visualization/analyze_brain_pathways.py  # Detailed neural pathway strengths
+python3 visualization/brain_summary.py          # High-level specialization insights
 ```
 *Reveals which vision inputs became dominant, which movements are preferred, and how the brain specialized*
 
 **📊 Visual Brain State**:
 ```bash
-python3 visualize_brain.py    # Creates brain_visualization.png
+python3 visualization/visualize_brain.py    # Creates brain_visualization.png
 ```
 *Color-coded brain diagram showing learned neural connections*
 
 **🎬 Real-Time GUI Observation**:
 ```bash
-./run_gui.sh                  # Quick single trial with live visualization
+./scripts/run_gui.sh                  # Quick single trial with live visualization
 # OR run the full test suite (includes GUI replay at the end)
-./run_learning_tests.sh
+./scripts/run_learning_tests.sh
 ```
-*Watch the blue triangle (cat) learn to chase the red circle (mouse)*
+*Watch the detailed cat sprite learn to chase the mouse with big ears*
 
 ### Advanced Usage
 
 **🔧 Original Simulation** (for researchers):
 ```bash
 make                          # Build the original program
-./forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses>
-# Example: ./forWhoseAdvantage 6 12 3 8 3 8 false
+./bin/forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses>
+# Example: ./bin/forWhoseAdvantage 6 12 3 8 3 8 false
 ```
 
 **🧪 Core Mechanics Testing**:
