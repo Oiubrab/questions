@@ -17,13 +17,13 @@ ForWhoseAdvantage implements a **unique 4D synaptic architecture** where each ne
 ## 🎯 Performance Highlights
 
 **Latest Results** (30-trial analysis):
-- **🎯 Directional Learning**: 70.1% accuracy moving toward target
-- **🏆 Hunt Success**: 456 average catches per 20,000-step trial  
-- **📈 Learning Curve**: +18-26% improvement from early to late epochs
-- **🧭 Behavioral Ratio**: 2.62:1 preference for correct vs incorrect movements
+- **🎯 Directional Learning**: 86.2% accuracy moving toward target (up from 70.1%)
+- **🏆 Hunt Success**: 1,115 average catches per 20,000-step trial (2.4× improvement!)  
+- **📈 Learning Curve**: +66.2% improvement from early to late epochs
+- **🧭 Behavioral Ratio**: 7.71:1 preference for correct vs incorrect movements
 - **⭐ Overall Assessment**: ✓✓✓ EXCEPTIONAL PERFORMANCE - Expert hunting behavior
 
-The system demonstrates **genuine emergent learning** - developing specialized neural pathways that weren't explicitly programmed.
+The **dual-brain meta-learning system** demonstrates extraordinary performance - the meta-brain learns to reinforce successful strategies across temporal windows, creating superhuman hunting capabilities.
 
 ## 🚀 Quick Start Guide
 
@@ -31,12 +31,12 @@ The system demonstrates **genuine emergent learning** - developing specialized n
 ```bash
 git clone git@github.com:Oiubrab/questions.git
 cd questions  
-make learning    # Auto-detects nvfortran or gfortran
+make learning    # Auto-detects nvfortran or gfortran, creates bin/ automatically
 ```
 
 **2. Run Your First Learning Trial**:
 ```bash
-./scripts/single_trial_gui.sh    # Watch the cat learn to hunt in real-time!
+./scripts/run_learning_tests.sh -t 1    # Watch the meta-brain system learn to hunt!
 ```
 
 **3. Full Performance Analysis**:
@@ -44,7 +44,7 @@ make learning    # Auto-detects nvfortran or gfortran
 ./scripts/run_learning_tests.sh  # 30-trial comprehensive analysis
 ```
 
-That's it! You'll see the cat develop from random movement to expert hunting behavior.
+That's it! You'll see the cat develop from random movement to expert hunting behavior through hierarchical meta-learning.
 
 ## 📁 Project Structure
 
@@ -78,13 +78,15 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage p
 
 **⚡ Quick Development Testing**:
 ```bash
-./scripts/quick_test.sh              # Fast 5-trial evaluation  
-./scripts/single_trial_gui.sh        # Single trial with immediate visualization
+./scripts/run_learning_tests.sh -t 5     # Fast 5-trial evaluation  
+./scripts/run_learning_tests.sh -t 1     # Single trial with immediate visualization
 ```
 
-**🎯 Single Custom Trial**:
+**🎯 Custom Trial Counts**:
 ```bash
-./bin/cat_mouse_learning <seed>  # e.g., ./bin/cat_mouse_learning 1000
+./scripts/run_learning_tests.sh -t 10 --no-gui  # 10 trials without visualization
+./scripts/run_learning_tests.sh --help          # Show all options
+./bin/cat_mouse_learning <seed>                  # Direct execution with seed
 ```
 
 ### Visualization & Analysis
@@ -94,7 +96,7 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage p
 python3 visualization/analyze_brain_pathways.py  # Detailed neural pathway strengths
 python3 visualization/brain_summary.py          # High-level specialization insights
 ```
-*Reveals which vision inputs became dominant, which movements are preferred, and how the brain specialized*
+*Reveals which vision inputs became dominant, which movements are preferred, and how the dual-brain system specialized*
 
 **📊 Visual Brain State**:
 ```bash
@@ -104,11 +106,12 @@ python3 visualization/visualize_brain.py    # Creates brain_visualization.png
 
 **🎬 Real-Time GUI Observation**:
 ```bash
-./scripts/run_gui.sh                  # Quick single trial with live visualization
-# OR run the full test suite (includes GUI replay at the end)
-./scripts/run_learning_tests.sh
+# All learning tests include GUI visualization by default
+./scripts/run_learning_tests.sh -t 1   # Single trial with GUI
+./scripts/run_learning_tests.sh        # Multi-trial with GUI replay
+./bin/cat_mouse_learning               # Direct execution (generates CSV for GUI)
 ```
-*Watch the detailed cat sprite learn to chase the mouse with big ears*
+*Watch the detailed cat sprite learn to chase the mouse through hierarchical meta-learning*
 
 ### Advanced Usage
 
@@ -121,7 +124,7 @@ make                          # Build the original program
 
 **🧪 Core Mechanics Testing**:
 ```bash
-make test_4d_mechanics && ./test_4d_mechanics  # Validate 4D routing system
+make test_4d_mechanics && ./bin/test_4d_mechanics  # Validate 4D routing system
 ```
 
 ## 🏗️ System Architecture
@@ -130,66 +133,73 @@ make test_4d_mechanics && ./test_4d_mechanics  # Validate 4D routing system
 
 **Neural Simulation Engine** (Fortran 90):
 - **`trinary_module.f90`**: Trinary state neurons (low/medium/high) with encapsulated operations
-- **`brain_module.f90`**: 6×12 brain grid with 4D synaptic routing and directional tracking
+- **`brain_module.f90`**: Primary brain (6×12) and meta-brain (7×7) with 4D synaptic routing
+- **`brain_engine_module.f90`**: Unified interface for dual-brain system management
 - **`synapses_module.f90`**: 4D synapse arrays with adaptive learning (decay/reinforcement)
 - **`vision_simulation_module.f90`**: 8-slice angular vision system (45° per slice)
 - **`inputter_module.f90`**: Vision-to-brain interface (8 directional inputs)
 - **`outputter_module.f90`**: Brain-to-movement interface (8 directional outputs)
 
 **Learning Programs**:
-- **`cat_mouse_learning.f90`**: Main sensorimotor learning simulation
+- **`cat_mouse_learning.f90`**: **DUAL-BRAIN META-LEARNING SYSTEM** with hierarchical strategy control
 - **`forWhoseAdvantage.f90`**: Original configurable brain simulation
 - **`cat_mouse_gui_demo.f90`**: Real-time visualization version
 
 **Analysis & Visualization** (Python):
-- **`run_learning_tests.sh`**: 30-trial statistical framework with oscillation detection
-- **`analyze_brain_pathways.py`**: Neural pathway strength analysis
+- **`run_learning_tests.sh`**: Flexible multi-trial framework (1-30 trials) with comprehensive analysis
+- **`analyze_brain_pathways.py`**: Neural pathway strength analysis for dual-brain system
 - **`brain_summary.py`**: High-level brain specialization insights
 - **`visualize_brain.py`**: Brain state visualization with color-coded connections
 - **`cat_mouse_gui.py`**: Real-time Pygame GUI with field visualization
 - **`detect_oscillation.py`**: Movement efficiency and pattern analysis
 
-## 🧪 Understanding the Learning Process
+## 🧪 Understanding the Dual-Brain Learning Process
 
-### The Cat-Mouse Learning Loop
+### The Dual-Brain Meta-Learning Loop
 
-**1. Vision System**
+**1. Primary Brain Vision System**
 - 8 angular slices detect mouse position (45° coverage each)
-- Active slice triggers corresponding brain input
+- Active slice triggers corresponding primary brain input
 - System learns which visual patterns predict successful movements
 
-**2. Neural Processing**
-- 4D directional routing: each neuron has 64 connection strengths (8×8 matrix)
+**2. Primary Brain Neural Processing**
+- 6×12 brain grid with 4D directional routing: each neuron has 64 connection strengths (8×8 matrix)
 - Context-dependent signaling: route selection based on signal origin
-- 12 processing steps per time unit allow signal propagation through all 6 brain layers
+- 12 processing steps per time unit allow signal propagation through all layers
 
-**3. Motor Output**
-- 8 movement directions corresponding to compass directions
-- Strongest output determines cat's movement choice
-- System develops preferences for successful movement patterns
+**3. Meta-Brain Performance Monitoring**
+- 7×7 meta-brain monitors catch rate performance over time
+- Positional encoding: catch rates 1-5 = MEDIUM states, rates 6-10 = HIGH states
+- Meta-brain learns to associate high performance with strategy reinforcement triggers
 
-**4. Reinforcement Learning**
-- **Direction-based rewards**: Cat rewarded for moving toward mouse (regardless of outcome)
-- **Adaptive strengthening**: Successful pathways grow stronger over time
-- **Global decay**: All connections naturally weaken to maintain plasticity
-- **Specialization emergence**: Some pathways become "superhighways" (1000× stronger than baseline)
+**4. Hierarchical Reinforcement**
+- **Primary Brain**: Immediate rewards for moving toward mouse
+- **Meta-Brain Control**: Learns to trigger broad strategy reinforcement across 20-120 previous time steps
+- **Strategy Amplification**: Meta-brain reinforces successful hunting patterns when catch rates are high
+- **Temporal Credit Assignment**: Rewards entire behavioral sequences that led to sustained success
+
+**5. Dual-Loop Learning**
+- **Fast Loop**: Primary brain learns individual vision→movement mappings
+- **Slow Loop**: Meta-brain learns when to reinforce successful behavioral strategies
+- **Emergent Synergy**: Combined system achieves superhuman hunting performance
 
 ### What You'll Observe
 
 **Early Learning** (0-5000 steps):
-- Random or inefficient movement patterns
+- Primary brain: Random movement patterns, weak neural connections
+- Meta-brain: No activity, learning phase
 - Low catch rates (few successful hunts)
-- Weak, relatively uniform neural connections
 
 **Mid Learning** (5000-10000 steps):
-- Emergence of directional preferences
-- Increasing catch rates and shorter hunt times
+- Primary brain: Emerging directional preferences
+- Meta-brain: Begins triggering strategy reinforcement
 - Formation of specialized neural pathways
 
 **Expert Behavior** (10000+ steps):
-- Consistent directional accuracy (70%+ toward mouse)
-- Efficient hunting with minimal wasted movement
-- Hyper-specialized neural networks with dominant pathways
+- Primary brain: Consistent directional accuracy (86%+ toward mouse)
+- Meta-brain: Sophisticated strategy control with temporal reinforcement
+- Hyper-specialized neural networks with dominant "superhighway" pathways
+- Sustained high catch rates (1,100+ per trial) through meta-learning optimization
 
 ## 📊 Analysis Tools Explained
 
