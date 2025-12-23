@@ -46,13 +46,13 @@ MAIN_PROGRAMS = forWhoseAdvantage \
 all: forWhoseAdvantage
 
 # Main simulation executable
-forWhoseAdvantage: $(MODULES) $(PROGRAM_DIR)/forWhoseAdvantage.f90
+forWhoseAdvantage: $(MODULES) $(PROGRAM_DIR)/forWhoseAdvantage.f90 | $(BIN_DIR)
 	@echo "Building forWhoseAdvantage with $(FC_NAME)"
 	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/forWhoseAdvantage.f90 -o $(BIN_DIR)/forWhoseAdvantage $(LDFLAGS)
 	@echo "Executable created in $(BIN_DIR)/"
 
 # Cat-mouse learning programs
-cat_mouse_learning: $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90
+cat_mouse_learning: $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90 | $(BIN_DIR)
 	@echo "Building cat_mouse_learning with $(FC_NAME)"
 	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90 -o $(BIN_DIR)/cat_mouse_learning $(LDFLAGS)
 	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
@@ -104,6 +104,11 @@ test_visual_diff: $(MODULES) $(TEST_DIR)/test_visual_diff.f90
 
 # Build all executables
 all-programs: $(MAIN_PROGRAMS)
+
+# Directory creation rule  
+$(BIN_DIR):
+	@echo "Creating $(BIN_DIR) directory..."
+	@mkdir -p $(BIN_DIR)
 
 # Clean build artifacts
 clean:

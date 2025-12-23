@@ -383,6 +383,64 @@ program cat_mouse_learning
             call meta_outputter(i)%set(accumulated_meta_output(i)%get())
         end do
         
+        ! META-BRAIN STRATEGY REINFORCEMENT SYSTEM
+        ! Meta-brain learns to trigger broad strategy reinforcement based on catch rate performance
+        ! Output 1: Temporal scope (how many bars back to reinforce)
+        ! Output 2: Reinforcement magnitude multiplier
+        ! Output 3: Strategy selectivity (which types of pathways to boost)
+        
+        ! Calculate current strategy reinforcement parameters from meta-brain output
+        brain_step = max(20, meta_outputter(1)%get() * 40)  ! 20-120 bars scope
+        ni = max(1, meta_outputter(2)%get())               ! 1-2x magnitude multiplier
+        nj = max(1, meta_outputter(3)%get())               ! Selectivity (not used yet, for future)
+        
+        ! Apply meta-brain controlled strategy reinforcement if catch rate is high
+        if (rate_counter >= 3) then  ! Only when cat has caught multiple mice recently
+            ! Reinforce primary brain strategies across the specified temporal scope
+            do k = max(1, bar - brain_step), bar - 1  ! Look back 'brain_step' bars
+                ! Apply broad reinforcement to all synapses that were active in this historical period
+                ! This reinforces the general strategy that led to high catch rates
+                if (k > 0 .and. k <= success_history_size) then
+                    ! Calculate circular buffer index for this historical bar
+                    i = history_write_index - (bar - k)
+                    if (i <= 0) i = i + success_history_size
+                    if (i > success_history_size) i = i - success_history_size
+                    
+                    ! Apply meta-controlled reinforcement to all synapses active in this bar
+                    do output_energy = 1, rows
+                        do move_distance = 1, cols
+                            do output_action = 1, 8  ! incoming directions
+                                do total_moves = 1, 8  ! outgoing directions
+                                    if (synapse_history(i, output_energy, move_distance, output_action, total_moves)) then
+                                        ! Apply reinforcement scaled by meta-brain magnitude control
+                                        do brain_energy = 1, ni  ! Repeat based on meta-output magnitude
+                                            synapses(output_energy, move_distance, output_action, total_moves) = &
+                                                int(synapses(output_energy, move_distance, output_action, total_moves) * 1.1)
+                                            ! Cap at max strength
+                                            if (synapses(output_energy, move_distance, output_action, total_moves) > 2000000) &
+                                                synapses(output_energy, move_distance, output_action, total_moves) = 2000000
+                                        end do
+                                    end if
+                                end do
+                            end do
+                        end do
+                    end do
+                end if
+            end do
+            
+            ! REWARD META-BRAIN for triggering successful strategy reinforcement
+            ! Meta-brain gets rewarded proportional to current catch rate
+            do k = 1, rate_counter  ! More catches = more meta-brain reinforcement
+                call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+            end do
+        end if
+        
+        ! PUNISH META-BRAIN if catch rate is low despite high activity
+        if (rate_counter <= 1 .and. (meta_outputter(1)%get() > 0 .or. meta_outputter(2)%get() > 0)) then
+            ! Meta-brain is trying to apply reinforcement but catch rate is low - discourage this
+            call apply_adaptive_punishment(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+        end if
+        
         ! Apply decay only every 5 Bars (much less aggressive) to preserve learned pathways
         if (mod(bar, 5) == 0) then
             call apply_decay(synapses, rows, cols)
@@ -465,15 +523,15 @@ program cat_mouse_learning
                     
                     print *, "CATCH #", catches_count, "at Bar", bar, "(distance:", closest_dist, ")"
                     
-                    ! SUCCESS-BASED PATHWAY BOOSTING: Massively reinforce all synapses used in last 100 Bars
-                    ! This creates temporal credit assignment - recent pathways led to success
-                    do brain_step = 1, success_history_size
+                    ! SUCCESS-BASED PATHWAY BOOSTING: Now integrated with meta-brain strategy system
+                    ! Primary reinforcement still happens immediately for recent pathways
+                    do brain_step = max(1, success_history_size - 20), success_history_size  ! Last 20 bars get immediate boost
                         do i = 1, rows
                             do j = 1, cols
                                 do ni = 1, 8  ! incoming directions
                                     do nj = 1, 8  ! outgoing directions
                                         if (synapse_history(brain_step, i, j, ni, nj)) then
-                                            ! Apply massive 10× boost directly to successful pathway synapses
+                                            ! Apply immediate success boost to recent pathways
                                             synapses(i, j, ni, nj) = int(synapses(i, j, ni, nj) * 1.5)
                                             ! Cap at max strength
                                             if (synapses(i, j, ni, nj) > 2000000) synapses(i, j, ni, nj) = 2000000
@@ -483,6 +541,14 @@ program cat_mouse_learning
                             end do
                         end do
                     end do
+                    
+                    ! ADDITIONAL META-BRAIN LEARNING: Extra reward for high catch rate
+                    if (rate_counter >= 5) then
+                        ! Cat is on a hunting streak - massively reward meta-brain strategy control
+                        do k = 1, 3  ! Triple reinforcement for sustained success
+                            call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+                        end do
+                    end if
                     
                     ! Respawn mouse at random location (distance 30-45 from cat)
                     call random_number(dx)
@@ -706,6 +772,15 @@ program cat_mouse_learning
                 write(*, '(I3)', advance='no') meta_outputter(i)%get()
             end do
             print *
+            print *, "Meta strategy control:"
+            print *, "  Temporal scope:", max(20, meta_outputter(1)%get() * 40), "bars"
+            print *, "  Magnitude multiplier:", max(1, meta_outputter(2)%get()), "x"
+            print *, "  Selectivity:", max(1, meta_outputter(3)%get())
+            if (rate_counter >= 3) then
+                print *, "  STATUS: Meta-brain applying strategy reinforcement"
+            else
+                print *, "  STATUS: Meta-brain learning (catch rate too low for reinforcement)"
+            end if
         end if
         
         ! Progress indicator every 1000 Bars
