@@ -41,6 +41,9 @@ bin/
 
 # Ignore learning results and logs
 learning_results/
+results/
 *.log
 *.csv
+*.txt
+*.png
 simulation_log.csv
