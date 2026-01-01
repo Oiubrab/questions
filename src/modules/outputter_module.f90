@@ -11,12 +11,18 @@ module outputter_module
         integer :: j
 
         allocate(outputter(output_length))
-        allocate(backup_outputter(output_length))
+        
+        ! Only allocate backup_outputter if it hasn't been allocated yet
+        if (.not. allocated(backup_outputter)) then
+            allocate(backup_outputter(output_length))
+        end if
 
         ! Initialize the outputter array and backup array with all lows (0's)
         do j = 1, output_length
             call outputter(j)%set(low)
-            call backup_outputter(j)%set(low)
+            if (j <= size(backup_outputter)) then
+                call backup_outputter(j)%set(low)
+            end if
         end do
     end subroutine initialize_outputter
 

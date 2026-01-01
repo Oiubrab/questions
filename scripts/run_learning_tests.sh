@@ -6,14 +6,52 @@ RESULTS_DIR="results"
 SHOW_GUI=true
 
 # Parse command line arguments
-if [[ "$1" == "--no-gui" ]] || [[ "$1" == "-n" ]]; then
-    SHOW_GUI=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-gui|-n)
+            SHOW_GUI=false
+            shift
+            ;;
+        --trials|-t)
+            NUM_TRIALS="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --trials, -t NUM    Number of trials to run (default: 30)"
+            echo "  --no-gui, -n        Disable GUI visualization"
+            echo "  --help, -h          Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                  # Run 30 trials with GUI"
+            echo "  $0 -t 1            # Run single trial with GUI"
+            echo "  $0 -t 5 --no-gui   # Run 5 trials without GUI"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate number of trials
+if ! [[ "$NUM_TRIALS" =~ ^[0-9]+$ ]] || [ "$NUM_TRIALS" -lt 1 ]; then
+    echo "Error: Number of trials must be a positive integer"
+    exit 1
 fi
 
 echo "==================================="
-echo "MULTI-TRIAL LEARNING EXPERIMENT"
+if [ "$NUM_TRIALS" -eq 1 ]; then
+    echo "SINGLE TRIAL LEARNING EXPERIMENT"
+else
+    echo "MULTI-TRIAL LEARNING EXPERIMENT"
+fi
 echo "==================================="
-echo "Running $NUM_TRIALS trials..."
+echo "Running $NUM_TRIALS trial(s)..."
 if [ "$SHOW_GUI" = false ]; then
     echo "(GUI visualization disabled)"
 fi
@@ -57,13 +95,17 @@ echo "ANALYZING RESULTS"
 echo "==================================="
 
 # Analyze all trials
+echo "$NUM_TRIALS" > "$RESULTS_DIR/num_trials.txt"
 python3 << 'PYTHON_SCRIPT'
 import os
 import csv
 import math
+import os
 
 results_dir = "results"
-num_trials = 30
+# Read the number of trials from file
+with open(f"{results_dir}/num_trials.txt", "r") as f:
+    num_trials = int(f.read().strip())
 
 print("\n" + "="*60)
 print("INDIVIDUAL TRIAL RESULTS (CONTINUOUS HUNTING)")
@@ -76,6 +118,9 @@ trial_away_pct = []
 for trial in range(1, num_trials + 1):
     filepath = f"{results_dir}/trial_{trial}.csv"
     
+    if not os.path.exists(filepath):
+        break  # Stop if file doesn't exist (fewer trials than expected)
+        
     with open(filepath, 'r') as f:
         reader = csv.reader(f)
         next(reader)  # Skip header
@@ -90,15 +135,18 @@ for trial in range(1, num_trials + 1):
             
             catch_rate = catches / num_bars
             
-            # Only print every 5th trial to keep output manageable
-            if trial % 5 == 0 or trial <= 3:
+            # Print all trials for single trial, every 5th for multiple trials
+            if num_trials == 1 or trial % 5 == 0 or trial <= 3:
                 print(f"Trial {trial:2d}: {catches:3d} catches in {num_bars} Bars (rate: {catch_rate:.4f} per Bar)")
         else:
             print(f"Trial {trial}: ERROR - No data")
             trial_catches.append(0)
 
+# Adjust num_trials to actual number of files processed
+num_trials = len(trial_catches)
+
 # Now read log files for directionality data
-epoch_data = []  # Store (trial, epoch_num, catches) tuples
+epoch_data = []  # Store (trial, epoch_num, catches) tuples  
 epoch_directionality = []  # Store (trial, epoch_num, towards_pct, away_pct, perp_pct)
 for trial in range(1, num_trials + 1):
     logfile = f"{results_dir}/trial_{trial}.log"
@@ -323,12 +371,16 @@ if [ "$SHOW_GUI" = true ]; then
     echo "==================================="
     echo "RUNNING GUI VISUALIZATION"
     echo "==================================="
-    echo "Replaying Trial 1 with GUI visualization..."
+    if [ "$NUM_TRIALS" -eq 1 ]; then
+        echo "Replaying the trial with GUI visualization..."
+    else
+        echo "Replaying Trial 1 with GUI visualization..."
+    fi
     echo "Press ESC or Q to quit early"
     echo ""
 
     # Replay trial 1 CSV through GUI (using existing logged data)
-    python3 cat_mouse_gui.py < "$RESULTS_DIR/trial_1.csv"
+    python3 visualization/cat_mouse_gui.py < "$RESULTS_DIR/trial_1.csv"
 
     echo ""
     echo "==================================="
@@ -345,7 +397,7 @@ if [ "$SHOW_GUI" = true ]; then
         mv outputter_state.csv "$RESULTS_DIR/outputter_state.csv"
         
         # Create visualization
-        python3 visualize_brain.py "$RESULTS_DIR/final_brain_state.csv" \
+        python3 visualization/visualize_brain.py "$RESULTS_DIR/final_brain_state.csv" \
                                   "$RESULTS_DIR/final_synapse_state.csv" \
                                   "$RESULTS_DIR/brain_visualization.png"
         
@@ -359,7 +411,11 @@ echo ""
 echo "==================================="
 echo "EXPERIMENT COMPLETE"
 echo "==================================="
-echo "Results saved in: $RESULTS_DIR/"
+if [ "$NUM_TRIALS" -eq 1 ]; then
+    echo "Single trial results saved in: $RESULTS_DIR/"
+else
+    echo "$NUM_TRIALS trial results saved in: $RESULTS_DIR/"
+fi
 if [ "$SHOW_GUI" = false ]; then
     echo "(Use without --no-gui flag to see visualizations)"
 fi

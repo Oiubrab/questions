@@ -1,19 +1,29 @@
 program cat_mouse_learning
     use trinary_module
-    use brain_module, only: initialize_brain, update_brain_state_based_on_synapses, copy_non_low_to_brain_top_row
-    use inputter_module, only: initialize_inputter
-    use outputter_module
+    use brain_engine_module
     use synapses_module
     use vision_simulation_module
     implicit none
     
-    ! Brain system
+    ! Primary Brain system
     type(trinary), allocatable :: brain(:,:), inputter(:), outputter(:)
     integer, allocatable :: synapses(:,:,:,:)  ! Now 4D: (row, col, incoming_dir, outgoing_dir)
     logical, allocatable :: synapse_usage(:,:,:,:)  ! Now 4D: track which synapses fire during Bar
     integer, allocatable :: incoming_direction(:,:,:)  ! Track up to 2 incoming directions per neuron
     integer :: rows, cols, input_length, output_length
     integer :: input_offset, output_offset
+    
+    ! Secondary "Meta-Learning" Brain system
+    type(trinary), allocatable :: meta_brain(:,:), meta_inputter(:), meta_outputter(:)
+    integer, allocatable :: meta_synapses(:,:,:,:)
+    logical, allocatable :: meta_synapse_usage(:,:,:,:)
+    integer, allocatable :: meta_incoming_direction(:,:,:)
+    integer :: meta_rows, meta_cols, meta_input_length, meta_output_length
+    
+    ! Meta-brain catch rate tracking
+    integer :: rate_counter  ! d(catches)/dt counter
+    integer :: rate_decay_timer  ! Counts up to 60 bars for decay
+    integer, parameter :: rate_decay_interval = 60  ! Bars between decay events
     
     ! Vision system
     type(position) :: cat_pos, mouse_pos
@@ -24,7 +34,7 @@ program cat_mouse_learning
     integer, dimension(8, 2) :: move_directions
     
     ! Simulation
-    integer :: bar, max_bars, snapshot_interval
+    integer :: bar, max_bars, snapshot_interval, mouse_move_interval
     integer :: brain_step, steps_per_bar
     integer :: i, j, k, ni, nj, brain_energy, output_energy
     integer :: output_action, move_distance
@@ -68,6 +78,9 @@ program cat_mouse_learning
     
     ! Logging
     integer :: csv_unit
+    
+    ! Output accumulation across brain steps within a Bar
+    type(trinary), allocatable :: accumulated_output(:), accumulated_meta_output(:)
     character(len=100) :: csv_filename
     
     ! Random seed variables
@@ -76,12 +89,44 @@ program cat_mouse_learning
     integer :: user_seed
     character(len=32) :: arg
     
+    ! Weight save/load functionality
+    logical :: load_weights, disable_direct_rewards
+    character(len=256) :: weight_file
+    integer :: weight_unit
+    
     ! Get seed from command line if provided, otherwise use system clock
+    load_weights = .false.
+    disable_direct_rewards = .false.
+    weight_file = ''
+    
     if (command_argument_count() > 0) then
         call get_command_argument(1, arg)
         read(arg, *) user_seed
     else
         call system_clock(count=user_seed)
+    end if
+    
+    ! Check for --load-weights flag
+    if (command_argument_count() >= 3) then
+        call get_command_argument(2, arg)
+        if (trim(arg) == '--load-weights') then
+            load_weights = .true.
+            call get_command_argument(3, weight_file)
+        end if
+    end if
+    
+    ! Check for --no-direct-rewards flag
+    if (command_argument_count() >= 2) then
+        call get_command_argument(2, arg)
+        if (trim(arg) == '--no-direct-rewards') then
+            disable_direct_rewards = .true.
+        end if
+    end if
+    if (command_argument_count() >= 4) then
+        call get_command_argument(4, arg)
+        if (trim(arg) == '--no-direct-rewards') then
+            disable_direct_rewards = .true.
+        end if
     end if
     
     ! Parameters
@@ -94,6 +139,7 @@ program cat_mouse_learning
     max_bars = 20000       ! Real-world time steps (balanced for learning)
     steps_per_bar = 12     ! Brain steps per Bar (reduced for better temporal precision)
     snapshot_interval = 1000  ! Print full state every N Bars
+    mouse_move_interval = 10   ! Mouse moves every N Bars (was 25)
     
     ! Vision parameters
     field_size = 100.0
@@ -110,16 +156,34 @@ program cat_mouse_learning
     move_directions(7,1) =  1; move_directions(7,2) =  0  ! Down
     move_directions(8,1) =  1; move_directions(8,2) =  1  ! Down-Right
     
-    ! Initialize brain system
-    call initialize_brain(brain, rows, cols)
-    call initialize_inputter(inputter, input_length)
-    call initialize_outputter(outputter, output_length)
-    call initialize_synapses(synapses, rows, cols)
-    call reset_synapse_usage(synapse_usage, rows, cols)
+    ! Initialize primary brain system using brain engine
+    call initialize_brain_system(brain, inputter, outputter, synapses, synapse_usage, &
+                                 incoming_direction, rows, cols, input_length, output_length, &
+                                 input_offset, output_offset)
     
-    ! Initialize incoming direction tracker
-    allocate(incoming_direction(rows, cols, 2))
-    incoming_direction = 0  ! No incoming direction initially
+    ! Initialize meta-brain system (7x7 brain, 5-element input/output) using brain engine
+    meta_rows = 7
+    meta_cols = 7
+    meta_input_length = 5
+    meta_output_length = 5
+    call initialize_brain_system(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
+                                 meta_synapse_usage, meta_incoming_direction, &
+                                 meta_rows, meta_cols, meta_input_length, meta_output_length, &
+                                 1, 1)  ! Meta-brain uses offset 1 for both input and output
+    
+    ! Initialize rate counter and timer
+    rate_counter = 0
+    rate_decay_timer = 0
+    
+    ! Initialize output accumulators
+    allocate(accumulated_output(output_length))
+    allocate(accumulated_meta_output(meta_output_length))
+    do i = 1, output_length
+        call accumulated_output(i)%set(low)
+    end do
+    do i = 1, meta_output_length
+        call accumulated_meta_output(i)%set(low)
+    end do
     
     ! Initialize success history buffer (circular buffer for last 100 Bars)
     allocate(synapse_history(success_history_size, rows, cols, 8, 8))
@@ -133,6 +197,19 @@ program cat_mouse_learning
     seed = user_seed + 37 * (/ (i, i=1,seed_size) /)  ! Mix seed with varied values
     call random_seed(put=seed)
     deallocate(seed)
+    
+    ! Load weights from file if specified
+    if (load_weights) then
+        print *, "Loading weights from:", trim(weight_file)
+        open(newunit=weight_unit, file=weight_file, status='old', action='read', form='unformatted')
+        read(weight_unit) synapses
+        read(weight_unit) meta_synapses
+        close(weight_unit)
+        print *, "Weights loaded successfully"
+        if (disable_direct_rewards) then
+            print *, "Direct rewards DISABLED - using meta-brain only"
+        end if
+    end if
     
     ! Initialize mouse at center (stationary target)
     mouse_pos%x = field_size / 2.0
@@ -210,7 +287,7 @@ program cat_mouse_learning
     print *, "=== CAT & MOUSE CONTINUOUS HUNTING SIMULATION ==="
     print *, "Max Bars (real-world steps):", max_bars
     print *, "Brain steps per Bar:", steps_per_bar
-    print *, "Mouse movement: every 25 Bars, 2 units random direction"
+    print *, "Mouse movement: every", mouse_move_interval, "Bars, 2 units random direction"
     print *, "Epoch size:", epoch_size, "Bars (", num_epochs, "epochs total)"
     print *, "Logging to:", trim(csv_filename)
     print *, "Snapshot interval:", snapshot_interval
@@ -234,6 +311,33 @@ program cat_mouse_learning
             moves_perpendicular_this_epoch = 0
         end if
         
+        ! Update rate decay timer and decrement counter every 60 bars
+        rate_decay_timer = rate_decay_timer + 1
+        if (rate_decay_timer >= rate_decay_interval) then
+            rate_counter = max(0, rate_counter - 1)
+            rate_decay_timer = 0
+        end if
+        
+        ! Encode rate_counter into meta_inputter (positional encoding)
+        ! Rate 1-5: Single MEDIUM at positions 5,4,3,2,1 (right to left)
+        ! Rate 6-10: Single HIGH at positions 5,4,3,2,1 (right to left)
+        ! Rate >10: Saturates at position 1 with HIGH
+        ! First, reset all to LOW
+        do i = 1, meta_input_length
+            call meta_inputter(i)%set(low)
+        end do
+        ! Then set the single active position
+        if (rate_counter >= 1 .and. rate_counter <= 5) then
+            ! MEDIUM state at specific position (rate 1→pos 5, rate 2→pos 4, etc.)
+            call meta_inputter(meta_input_length - rate_counter + 1)%set(medium)
+        else if (rate_counter >= 6 .and. rate_counter <= 10) then
+            ! HIGH state at specific position (rate 6→pos 5, rate 7→pos 4, etc.)
+            call meta_inputter(meta_input_length - (rate_counter - 5) + 1)%set(high)
+        else if (rate_counter > 10) then
+            ! Saturate at position 1 (leftmost) with HIGH
+            call meta_inputter(1)%set(high)
+        end if
+        
         ! Record distance at start of Bar (before any actions)
         dx = mouse_pos%x - cat_pos%x
         dy = mouse_pos%y - cat_pos%y
@@ -243,9 +347,10 @@ program cat_mouse_learning
         
         ! Reset synapse usage tracker for this Bar
         call reset_synapse_usage(synapse_usage, rows, cols)
+        call reset_synapse_usage(meta_synapse_usage, meta_rows, meta_cols)
         
-        ! Mouse movement: every 25 Bars, move in random direction by small amount
-        if (mod(bar, 25) == 0) then
+        ! Mouse movement: every mouse_move_interval Bars, move in random direction by small amount
+        if (mod(bar, mouse_move_interval) == 0) then
             ! Generate random direction (0 to 2*PI radians)
             call random_number(dx)
             dx = dx * 2.0 * 3.14159265359
@@ -273,23 +378,119 @@ program cat_mouse_learning
             end if
         end do
         
-        ! Apply input to brain ONCE at start of Bar
-        call copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, input_offset, cols)
+        ! Reset synapse usage tracking for this Bar
+        call reset_synapse_usage(synapse_usage, rows, cols)
+        call reset_synapse_usage(meta_synapse_usage, meta_rows, meta_cols)
         
-        ! Reset outputter for this Bar
-        call save_and_reset_outputter(outputter)
-        
-        ! Run multiple brain steps within this Bar
-        do brain_step = 1, steps_per_bar
-            ! Update brain state (tracks which synapses are used)
-            call update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, &
-                                                       incoming_direction, rows, cols, input_offset, &
-                                                       output_offset, output_length)
+        ! Reset output accumulators for this Bar
+        do i = 1, output_length
+            call accumulated_output(i)%set(low)
         end do
+        do i = 1, meta_output_length
+            call accumulated_meta_output(i)%set(low)
+        end do
+        
+        ! Write vision input to inputter (will be copied to brain on first run_brain_cycle call)
+        ! Note: inputter already updated by update_vision_input above
+        ! Note: meta_inputter already updated by rate encoding above
+        
+        ! Run brain processing: steps_per_bar iterations
+        do brain_step = 1, steps_per_bar
+            ! Run ONE propagation step for primary brain (copies input, clears output, propagates, clears input)
+            call run_brain_cycle(brain, inputter, outputter, synapses, synapse_usage, &
+                                incoming_direction, rows, cols, input_offset, output_offset, &
+                                output_length)
+            
+            ! Accumulate primary brain output from this step
+            do i = 1, output_length
+                if (outputter(i)%get() > accumulated_output(i)%get()) then
+                    call accumulated_output(i)%set(outputter(i)%get())
+                end if
+            end do
+            
+            ! Run ONE propagation step for meta-brain (copies input, clears output, propagates, clears input)
+            call run_brain_cycle(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
+                                meta_synapse_usage, meta_incoming_direction, meta_rows, meta_cols, &
+                                1, 1, meta_output_length)
+            
+            ! Accumulate meta-brain output from this step
+            do i = 1, meta_output_length
+                if (meta_outputter(i)%get() > accumulated_meta_output(i)%get()) then
+                    call accumulated_meta_output(i)%set(meta_outputter(i)%get())
+                end if
+            end do
+        end do
+        
+        ! Copy accumulated outputs back to main output arrays for reading
+        do i = 1, output_length
+            call outputter(i)%set(accumulated_output(i)%get())
+        end do
+        do i = 1, meta_output_length
+            call meta_outputter(i)%set(accumulated_meta_output(i)%get())
+        end do
+        
+        ! META-BRAIN STRATEGY REINFORCEMENT SYSTEM
+        ! Meta-brain learns to trigger broad strategy reinforcement based on catch rate performance
+        ! Output 1: Temporal scope (how many bars back to reinforce)
+        ! Output 2: Reinforcement magnitude multiplier
+        ! Output 3: Strategy selectivity (which types of pathways to boost)
+        
+        ! Calculate current strategy reinforcement parameters from meta-brain output
+        brain_step = max(20, meta_outputter(1)%get() * 40)  ! 20-120 bars scope
+        ni = max(1, meta_outputter(2)%get())               ! 1-2x magnitude multiplier
+        nj = max(1, meta_outputter(3)%get())               ! Selectivity (not used yet, for future)
+        
+        ! Apply meta-brain controlled strategy reinforcement if catch rate is high
+        if (rate_counter >= 3) then  ! Only when cat has caught multiple mice recently
+            ! Reinforce primary brain strategies across the specified temporal scope
+            do k = max(1, bar - brain_step), bar - 1  ! Look back 'brain_step' bars
+                ! Apply broad reinforcement to all synapses that were active in this historical period
+                ! This reinforces the general strategy that led to high catch rates
+                if (k > 0 .and. k <= success_history_size) then
+                    ! Calculate circular buffer index for this historical bar
+                    i = history_write_index - (bar - k)
+                    if (i <= 0) i = i + success_history_size
+                    if (i > success_history_size) i = i - success_history_size
+                    
+                    ! Apply meta-controlled reinforcement to all synapses active in this bar
+                    do output_energy = 1, rows
+                        do move_distance = 1, cols
+                            do output_action = 1, 8  ! incoming directions
+                                do total_moves = 1, 8  ! outgoing directions
+                                    if (synapse_history(i, output_energy, move_distance, output_action, total_moves)) then
+                                        ! Apply reinforcement scaled by meta-brain magnitude control
+                                        do brain_energy = 1, ni  ! Repeat based on meta-output magnitude
+                                            synapses(output_energy, move_distance, output_action, total_moves) = &
+                                                int(synapses(output_energy, move_distance, output_action, total_moves) * 1.1)
+                                            ! Cap at max strength
+                                            if (synapses(output_energy, move_distance, output_action, total_moves) > 2000000) &
+                                                synapses(output_energy, move_distance, output_action, total_moves) = 2000000
+                                        end do
+                                    end if
+                                end do
+                            end do
+                        end do
+                    end do
+                end if
+            end do
+            
+            ! REWARD META-BRAIN for triggering successful strategy reinforcement
+            ! Meta-brain gets rewarded proportional to current catch rate
+            do k = 1, rate_counter  ! More catches = more meta-brain reinforcement
+                call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+            end do
+        end if
+        
+        ! PUNISH META-BRAIN if catch rate is low despite high activity
+        if (rate_counter <= 1 .and. (meta_outputter(1)%get() > 0 .or. meta_outputter(2)%get() > 0)) then
+            ! Meta-brain is trying to apply reinforcement but catch rate is low - discourage this
+            call apply_adaptive_punishment(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+        end if
         
         ! Apply decay only every 5 Bars (much less aggressive) to preserve learned pathways
         if (mod(bar, 5) == 0) then
             call apply_decay(synapses, rows, cols)
+            call apply_decay(meta_synapses, meta_rows, meta_cols)
         end if
         
         ! Store current Bar's synapse usage in circular history buffer
@@ -362,17 +563,21 @@ program cat_mouse_learning
                     ! Cat caught the mouse!
                     catches_count = catches_count + 1
                     catches_this_epoch = catches_this_epoch + 1
+                    
+                    ! Increment rate counter for meta-brain
+                    rate_counter = rate_counter + 1
+                    
                     print *, "CATCH #", catches_count, "at Bar", bar, "(distance:", closest_dist, ")"
                     
-                    ! SUCCESS-BASED PATHWAY BOOSTING: Massively reinforce all synapses used in last 100 Bars
-                    ! This creates temporal credit assignment - recent pathways led to success
-                    do brain_step = 1, success_history_size
+                    ! SUCCESS-BASED PATHWAY BOOSTING: Now integrated with meta-brain strategy system
+                    ! Primary reinforcement still happens immediately for recent pathways
+                    do brain_step = max(1, success_history_size - 20), success_history_size  ! Last 20 bars get immediate boost
                         do i = 1, rows
                             do j = 1, cols
                                 do ni = 1, 8  ! incoming directions
                                     do nj = 1, 8  ! outgoing directions
                                         if (synapse_history(brain_step, i, j, ni, nj)) then
-                                            ! Apply massive 10× boost directly to successful pathway synapses
+                                            ! Apply immediate success boost to recent pathways
                                             synapses(i, j, ni, nj) = int(synapses(i, j, ni, nj) * 1.5)
                                             ! Cap at max strength
                                             if (synapses(i, j, ni, nj) > 2000000) synapses(i, j, ni, nj) = 2000000
@@ -382,6 +587,14 @@ program cat_mouse_learning
                             end do
                         end do
                     end do
+                    
+                    ! ADDITIONAL META-BRAIN LEARNING: Extra reward for high catch rate
+                    if (rate_counter >= 5) then
+                        ! Cat is on a hunting streak - massively reward meta-brain strategy control
+                        do k = 1, 3  ! Triple reinforcement for sustained success
+                            call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+                        end do
+                    end if
                     
                     ! Respawn mouse at random location (distance 30-45 from cat)
                     call random_number(dx)
@@ -495,7 +708,8 @@ program cat_mouse_learning
                 epoch_progress = real(current_epoch) / real(num_epochs)  ! 0.0 to 1.0
                 
                 ! Apply selective reinforcement with strict threshold
-                if (dot_product > adaptive_threshold) then
+                if (.not. disable_direct_rewards) then
+                    if (dot_product > adaptive_threshold) then
                     ! Moved DIRECTLY towards mouse - ALWAYS REWARD (removed repetition check)
                     ! Apply graduated reward based on directional accuracy
                     do k = 1, nint(direction_multiplier * 2.0)  ! 1-4 reinforcements based on accuracy
@@ -514,15 +728,16 @@ program cat_mouse_learning
                     end do
                     last_rewarded_direction = 0  ! Break momentum
                     momentum_streak = 0  ! Reset streak
-                else
-                    ! Between -0.01 and adaptive_threshold: either perpendicular or weak towards
-                    ! PUNISH after epoch 1 - we want precision, not vague wandering
-                    if (current_epoch > 1) then
-                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
-                        last_rewarded_direction = 0  ! Break momentum
-                        momentum_streak = 0  ! Reset streak
+                    else
+                        ! Between -0.01 and adaptive_threshold: either perpendicular or weak towards
+                        ! PUNISH after epoch 1 - we want precision, not vague wandering
+                        if (current_epoch > 1) then
+                            call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                            last_rewarded_direction = 0  ! Break momentum
+                            momentum_streak = 0  ! Reset streak
+                        end if
                     end if
-                end if
+                end if  ! .not. disable_direct_rewards
             end if
         end if
         
@@ -581,7 +796,39 @@ program cat_mouse_learning
             if (move_distance > 0) then
                 print *, "Cat moved:", move_distance, "steps in direction", output_action
             end if
+            
+            ! Meta-brain state
+            print *, "--- META-BRAIN ---"
+            print *, "Rate counter:", rate_counter
+            print *, "Meta input:"
+            write(*, '(A)', advance='no') "  "
+            do i = 1, meta_input_length
+                write(*, '(I3)', advance='no') meta_inputter(i)%get()
+            end do
             print *
+            print *, "Meta brain state:"
+            do i = 1, meta_rows
+                write(*, '(A)', advance='no') "  "
+                do j = 1, meta_cols
+                    write(*, '(I3)', advance='no') meta_brain(i, j)%get()
+                end do
+                print *
+            end do
+            print *, "Meta output:"
+            write(*, '(A)', advance='no') "  "
+            do i = 1, meta_output_length
+                write(*, '(I3)', advance='no') meta_outputter(i)%get()
+            end do
+            print *
+            print *, "Meta strategy control:"
+            print *, "  Temporal scope:", max(20, meta_outputter(1)%get() * 40), "bars"
+            print *, "  Magnitude multiplier:", max(1, meta_outputter(2)%get()), "x"
+            print *, "  Selectivity:", max(1, meta_outputter(3)%get())
+            if (rate_counter >= 3) then
+                print *, "  STATUS: Meta-brain applying strategy reinforcement"
+            else
+                print *, "  STATUS: Meta-brain learning (catch rate too low for reinforcement)"
+            end if
         end if
         
         ! Progress indicator every 1000 Bars
@@ -715,5 +962,13 @@ program cat_mouse_learning
     print *, "Results saved to:", trim(csv_filename)
     print *, "Brain state saved to: brain_state.csv"
     print *, "Synapse state saved to: synapse_state.csv"
+    
+    ! Save binary weight file for potential loading
+    write(weight_file, '(A,I0,A)') 'weights_seed', user_seed, '.bin'
+    open(newunit=weight_unit, file=weight_file, status='replace', action='write', form='unformatted')
+    write(weight_unit) synapses
+    write(weight_unit) meta_synapses
+    close(weight_unit)
+    print *, "Binary weights saved to:", trim(weight_file)
     
 end program cat_mouse_learning

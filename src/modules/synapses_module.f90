@@ -57,7 +57,8 @@ module synapses_module
         integer, intent(in) :: rows, cols
         integer :: i, j, k, m
 
-        ! Apply decay factor to all elements
+        ! Apply decay factor to all elements - parallelized
+        !$omp parallel do collapse(4) private(i,j,k,m) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
@@ -67,6 +68,7 @@ module synapses_module
                 end do
             end do
         end do
+        !$omp end parallel do
     end subroutine apply_decay
 
     ! Reset synapse usage tracker
@@ -92,6 +94,7 @@ module synapses_module
         ! Calculate reinforcement: 1.2 / (0.95^num_steps)
         target_multiplier = 1.2 / (0.95 ** num_steps)
         
+        !$omp parallel do collapse(4) private(i,j,k,m,rand_factor) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
@@ -106,6 +109,7 @@ module synapses_module
                 end do
             end do
         end do
+        !$omp end parallel do
     end subroutine apply_adaptive_reinforcement
 
     ! Adaptive punishment that scales with number of decay steps
@@ -119,6 +123,7 @@ module synapses_module
         ! Calculate punishment: 0.8 * (0.95^num_steps) - amplifies decay effect
         target_multiplier = 0.8 * (0.95 ** num_steps)
         
+        !$omp parallel do collapse(4) private(i,j,k,m,rand_factor) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
@@ -132,6 +137,7 @@ module synapses_module
                 end do
             end do
         end do
+        !$omp end parallel do
     end subroutine apply_adaptive_punishment
 
 end module synapses_module

@@ -1,38 +1,39 @@
 # ForWhoseAdvantage - AI Coding Instructions
 
-This is a Fortran 90 simulation modeling brain-like behavior using trinary state cells, synaptic connections, and probabilistic state transitions. The system now includes a complete sensorimotor learning loop with vision-based reinforcement learning.
+This is a Fortran 90 simulation modeling brain-like behavior using trinary state cells, synaptic connections, and probabilistic state transitions. The system features a **dual-brain hierarchical architecture** with a primary sensorimotor brain and a meta-brain that controls strategy reinforcement.
 
 ## Project Structure
 
 The project uses an organized directory structure:
-- **`src/modules/`**: Core Fortran modules (trinary, brain, synapses, vision, etc.)
+- **`src/modules/`**: Core Fortran modules (trinary, brain, synapses, vision, brain_engine, etc.)
 - **`src/programs/`**: Main program entry points
 - **`src/tests/`**: Test programs
-- **`bin/`**: Compiled executables and .mod files
+- **`bin/`**: Compiled executables and .mod files (auto-created by Makefile)
 - **`scripts/`**: Shell scripts for experiments
 - **`visualization/`**: Python GUI and analysis tools
 - **`results/`**: Output data, logs, and visualizations
 
 ## Architecture Overview
 
-The system uses a modular architecture with core modules supporting both the original simulation and a new cat-mouse learning system:
+The system uses a modular dual-brain architecture supporting hierarchical meta-learning:
 
 ### Core Modules (in src/modules/)
 - **`trinary_module.f90`**: Custom type with 3 states (low=0, medium=1, high=2). Encapsulates state via `set()`, `get()`, and `shift(up/down)` methods.
 - **`brain_module.f90`**: 2D grid (brain matrix) representing neural cells. Contains complex probabilistic state propagation logic based on synaptic weights. Includes synapse usage tracking for selective reinforcement.
+- **`brain_engine_module.f90`**: Unified interface for initializing and running brain systems. Supports both primary and meta-brain instances.
 - **`inputter_module.f90`**: 1D array feeding stimuli into brain top row. Only non-low states are copied.
 - **`outputter_module.f90`**: 1D array capturing states that propagate beyond brain bottom row. Uses `backup_outputter` module variable to preserve previous state.
 - **`synapses_module.f90`**: 4D array (rows × cols × 8 incoming × 8 outgoing) storing connection strengths for context-dependent routing. Includes decay, reinforcement, and adaptive reinforcement/punishment mechanisms that scale with number of brain steps.
-- **`vision_simulation_module.f90`**: Field simulation with angular vision system (6 slices × 60°), mouse/cat positioning, and movement logic with toroidal boundaries.
+- **`vision_simulation_module.f90`**: Field simulation with angular vision system (8 slices × 45°), mouse/cat positioning, and movement logic with toroidal boundaries.
 
 ### Main Programs (in src/programs/)
 - **`forWhoseAdvantage.f90`**: Original simulation with command-line parameter parsing.
-- **`cat_mouse_learning.f90`**: Sensorimotor learning simulation - cat learns to chase mouse using vision input and motor output with direction-based reinforcement (reward for moving towards mouse). Achieves 70% directional learning.
+- **`cat_mouse_learning.f90`**: **DUAL-BRAIN HIERARCHICAL SYSTEM** - Primary brain (6×12) handles sensorimotor learning while meta-brain (7×7) controls strategy reinforcement based on catch rate performance. Achieves 1,100+ catches per trial with 86%+ directional accuracy.
 - **`cat_mouse_gui_demo.f90`**: GUI-compatible version outputting CSV for real-time Pygame visualization.
 
 ### Supporting Files
 - **`visualization/cat_mouse_gui.py`**: Pygame visualization showing cat (detailed sprite with whiskers/tail), mouse (detailed sprite with big ears), vision rays, and info panel.
-- **`scripts/run_learning_tests.sh`**: Multi-trial testing framework (30 trials default) with statistical analysis and per-epoch directionality tracking.
+- **`scripts/run_learning_tests.sh`**: **FLEXIBLE MULTI-TRIAL FRAMEWORK** with `--trials/-t` flag (1-N trials), `--no-gui/-n` flag, statistical analysis and per-epoch directionality tracking.
 - **`src/tests/test_4d_mechanics.f90`**: Comprehensive test suite validating signal propagation, directional routing, and reward system with 4D synapses.
 - **`visualization/visualize_brain.py`**: Matplotlib brain visualization with color-coded arrows showing dominant incoming direction for each connection.
 - **`BAR_STRUCTURE.md`**: Documentation of temporal organization (multiple brain steps per real-world step).
@@ -43,12 +44,13 @@ The system uses a modular architecture with core modules supporting both the ori
 All modules depend on `trinary_module`. The `brain_module` imports `synapses_module` and `outputter_module`. When modifying types, check reverse dependencies.
 
 ### Trinary State Management
-Never directly access `trinary%value` - always use methods:
+**General Rule**: Use encapsulated methods for high-level code:
 ```fortran
 call cell%set(medium)
 state = cell%get()
 call cell%shift(up)  ! Moves toward high, capped
 ```
+**Performance-Critical Exception**: `brain_module.f90` uses direct `%value` access in hot loops for 1.8x speedup. This is intentional and documented in OPTIMIZATION_NOTES.md.
 
 ### Direction System (Brain Module)
 8-direction array with **biased probabilities** - downward movement (indices 6-8) has higher bias (1.5-1.8×) than upward (0.5×) or lateral (1.0×). The `directions` array maps indices to (row_delta, col_delta) pairs.
@@ -61,6 +63,32 @@ call cell%shift(up)  ! Moves toward high, capped
 - **Signal propagation**: When neuron receives signal, records where it came from. When neuron fires, uses that incoming direction to select which outgoing synapses to activate.
 - **HIGH neurons**: Average synapse values from both incoming directions when selecting output
 - **Enables learning with moving targets**: Different input patterns can learn different routes through the brain
+
+### Dual-Brain Meta-Learning Architecture (NEW)
+The system now features a **hierarchical dual-brain architecture** with sophisticated meta-learning:
+
+**Primary Brain (6×12)**: Handles sensorimotor learning (vision → movement)
+- Processes 8-slice vision input (45° per slice) 
+- Outputs 8-directional movement commands
+- Uses 4D synaptic routing for context-dependent pathways
+- Receives immediate reinforcement for successful moves
+
+**Meta-Brain (7×7)**: Controls strategy reinforcement based on performance
+- **Input**: Catch rate counter (positionally encoded: rate 1-5 = MEDIUM states, rate 6-10 = HIGH states)
+- **Goal**: Learn to trigger broad strategy reinforcement when catch rates are high
+- **Output**: Controls temporal scope (20-120 bars) and magnitude of strategy reinforcement
+- **Meta-reinforcement**: Gets rewarded when primary brain achieves high catch rates
+
+**Meta-Learning Loop**:
+1. Primary brain catches mice → rate_counter increases
+2. Meta-brain learns to associate high catch rates with strategy reinforcement
+3. Meta-brain triggers broad reinforcement of successful pathways from past 20-120 bars
+4. Primary brain's hunting strategies get strengthened → better performance
+5. Higher catch rates → more meta-brain rewards → cycle continues
+
+**Performance Impact**: 
+- Original system: ~456 catches/trial, 70% directional accuracy
+- Meta-brain system: 1,100+ catches/trial, 86%+ directional accuracy
 
 ### Synapse Reinforcement and Decay Dynamics (CRITICAL DESIGN)
 This system implements a **self-regulating competitive learning mechanism** with sophisticated equilibrium properties:
@@ -148,7 +176,7 @@ Each Bar follows this sequence:
 
 ## Build & Run
 
-**Use the Makefile for all builds** - it auto-detects available compiler (nvfortran preferred, gfortran fallback):
+**Use the Makefile for all builds** - it auto-detects available compiler (nvfortran preferred, gfortran fallback) and creates `bin/` directory automatically:
 ```bash
 make clean          # Clean build artifacts
 make learning       # Build cat-mouse learning system
@@ -161,10 +189,10 @@ Executables are created in the `bin/` directory.
 **Cat-Mouse Learning System Testing:**
 ```bash
 ./scripts/run_learning_tests.sh              # 30-trial learning experiment with statistics
-./scripts/run_learning_tests.sh --no-gui     # Fast mode without visualization
-./scripts/single_trial_gui.sh                # Single trial with GUI replay
-./scripts/run_gui.sh                         # Real-time GUI visualization  
-./bin/cat_mouse_learning                     # Single learning trial (direct execution)
+./scripts/run_learning_tests.sh -t 1         # Single trial with GUI (replaces single_trial_gui.sh)
+./scripts/run_learning_tests.sh -t 5 --no-gui # 5 trials without visualization
+./scripts/run_learning_tests.sh --help       # Show all options
+./bin/cat_mouse_learning                      # Single learning trial (direct execution)
 ```
 
 **Original simulation execution** requires 7 command-line arguments:
@@ -178,10 +206,10 @@ Example: `./bin/forWhoseAdvantage 6 12 6 6 1 6 false`
 
 ## Testing Tools
 
-- **`scripts/run_learning_tests.sh`**: Comprehensive 30-trial learning experiment with statistical analysis (mean ± std dev, learning detection)
-- **`scripts/single_trial_gui.sh`**: Single trial with immediate GUI replay of cat-mouse behavior
-- **`scripts/run_gui.sh`**: Real-time pygame visualization of cat-mouse learning 
-- **`bin/cat_mouse_learning`**: Single trial learning simulation with CSV logging
+- **`scripts/run_learning_tests.sh`**: Comprehensive learning experiment framework with flexible trial counts (1-N trials), GUI control, statistical analysis, and learning detection
+- **`visualization/analyze_brain_pathways.py`**: Deep analysis of learned neural architecture and pathway specializations
+- **`visualization/brain_summary.py`**: High-level insights about brain specialization and performance patterns  
+- **`bin/cat_mouse_learning`**: Single trial learning simulation with comprehensive CSV logging
 
 All testing tools use intelligent compiler detection and work with both nvfortran and gfortran.
 
