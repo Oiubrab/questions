@@ -89,12 +89,44 @@ program cat_mouse_learning
     integer :: user_seed
     character(len=32) :: arg
     
+    ! Weight save/load functionality
+    logical :: load_weights, disable_direct_rewards
+    character(len=256) :: weight_file
+    integer :: weight_unit
+    
     ! Get seed from command line if provided, otherwise use system clock
+    load_weights = .false.
+    disable_direct_rewards = .false.
+    weight_file = ''
+    
     if (command_argument_count() > 0) then
         call get_command_argument(1, arg)
         read(arg, *) user_seed
     else
         call system_clock(count=user_seed)
+    end if
+    
+    ! Check for --load-weights flag
+    if (command_argument_count() >= 3) then
+        call get_command_argument(2, arg)
+        if (trim(arg) == '--load-weights') then
+            load_weights = .true.
+            call get_command_argument(3, weight_file)
+        end if
+    end if
+    
+    ! Check for --no-direct-rewards flag
+    if (command_argument_count() >= 2) then
+        call get_command_argument(2, arg)
+        if (trim(arg) == '--no-direct-rewards') then
+            disable_direct_rewards = .true.
+        end if
+    end if
+    if (command_argument_count() >= 4) then
+        call get_command_argument(4, arg)
+        if (trim(arg) == '--no-direct-rewards') then
+            disable_direct_rewards = .true.
+        end if
     end if
     
     ! Parameters
@@ -165,6 +197,19 @@ program cat_mouse_learning
     seed = user_seed + 37 * (/ (i, i=1,seed_size) /)  ! Mix seed with varied values
     call random_seed(put=seed)
     deallocate(seed)
+    
+    ! Load weights from file if specified
+    if (load_weights) then
+        print *, "Loading weights from:", trim(weight_file)
+        open(newunit=weight_unit, file=weight_file, status='old', action='read', form='unformatted')
+        read(weight_unit) synapses
+        read(weight_unit) meta_synapses
+        close(weight_unit)
+        print *, "Weights loaded successfully"
+        if (disable_direct_rewards) then
+            print *, "Direct rewards DISABLED - using meta-brain only"
+        end if
+    end if
     
     ! Initialize mouse at center (stationary target)
     mouse_pos%x = field_size / 2.0
@@ -663,7 +708,8 @@ program cat_mouse_learning
                 epoch_progress = real(current_epoch) / real(num_epochs)  ! 0.0 to 1.0
                 
                 ! Apply selective reinforcement with strict threshold
-                if (dot_product > adaptive_threshold) then
+                if (.not. disable_direct_rewards) then
+                    if (dot_product > adaptive_threshold) then
                     ! Moved DIRECTLY towards mouse - ALWAYS REWARD (removed repetition check)
                     ! Apply graduated reward based on directional accuracy
                     do k = 1, nint(direction_multiplier * 2.0)  ! 1-4 reinforcements based on accuracy
@@ -682,15 +728,16 @@ program cat_mouse_learning
                     end do
                     last_rewarded_direction = 0  ! Break momentum
                     momentum_streak = 0  ! Reset streak
-                else
-                    ! Between -0.01 and adaptive_threshold: either perpendicular or weak towards
-                    ! PUNISH after epoch 1 - we want precision, not vague wandering
-                    if (current_epoch > 1) then
-                        call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
-                        last_rewarded_direction = 0  ! Break momentum
-                        momentum_streak = 0  ! Reset streak
+                    else
+                        ! Between -0.01 and adaptive_threshold: either perpendicular or weak towards
+                        ! PUNISH after epoch 1 - we want precision, not vague wandering
+                        if (current_epoch > 1) then
+                            call apply_adaptive_punishment(synapses, synapse_usage, rows, cols, steps_per_bar)
+                            last_rewarded_direction = 0  ! Break momentum
+                            momentum_streak = 0  ! Reset streak
+                        end if
                     end if
-                end if
+                end if  ! .not. disable_direct_rewards
             end if
         end if
         
@@ -915,5 +962,13 @@ program cat_mouse_learning
     print *, "Results saved to:", trim(csv_filename)
     print *, "Brain state saved to: brain_state.csv"
     print *, "Synapse state saved to: synapse_state.csv"
+    
+    ! Save binary weight file for potential loading
+    write(weight_file, '(A,I0,A)') 'weights_seed', user_seed, '.bin'
+    open(newunit=weight_unit, file=weight_file, status='replace', action='write', form='unformatted')
+    write(weight_unit) synapses
+    write(weight_unit) meta_synapses
+    close(weight_unit)
+    print *, "Binary weights saved to:", trim(weight_file)
     
 end program cat_mouse_learning

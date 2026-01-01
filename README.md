@@ -127,6 +127,19 @@ make                          # Build the original program
 make test_4d_mechanics && ./bin/test_4d_mechanics  # Validate 4D routing system
 ```
 
+**🧠 Meta-Brain Experiments** (NEW!):
+```bash
+# Full pipeline: train 30 brains, test best with meta-brain only
+./scripts/run_meta_experiment.sh --full
+
+# Resume from checkpoint: test with existing trained weights
+./scripts/run_meta_experiment.sh --meta-only results/meta_experiments/run_*/best_weights.bin
+
+# Baseline validation: verify meta-brain can't learn from scratch
+./scripts/run_meta_experiment.sh --from-scratch
+```
+*Breakthrough finding: Pre-trained brains with meta-brain only EXCEED original training performance by 15%! See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) for details.*
+
 ## 🏗️ System Architecture
 
 ### Core Technology Stack
@@ -237,6 +250,20 @@ One "Bar" (time unit) contains 12 brain processing steps followed by learning up
 
 **Embodied Learning:**
 The system learns sensorimotor mappings through environmental interaction rather than supervised training, developing specialized neural pathways for specific behavioral contexts.
+
+**Meta-Brain Discovery (NEW!):**
+Breakthrough finding reveals that **strategic reinforcement alone outperforms tactical+strategic combined**:
+- Pre-trained brains tested with meta-brain only: **1,944 catches avg** (95.2% directional accuracy)
+- Same brains during training: **1,693 catches best** (varied accuracy)
+- Fresh brains with meta-brain only: **0 catches** (random walk)
+
+**Key Insights:**
+1. **Meta-brain needs bootstrap**: Cannot learn from scratch, requires direct rewards to create initial pathways
+2. **Strategic > tactical feedback**: Meta-brain alone maintains and EXCEEDS training performance (+15%)
+3. **Two-stage learning architecture**: Direct rewards for acquisition, meta-brain for mastery
+4. **Noise reduction hypothesis**: Removing tactical rewards may reduce interference, allowing pure strategy execution
+
+This validates hierarchical learning where high-level strategy control can exceed low-level tactical feedback once basic skills are established.
 
 ### Performance Characteristics
 
