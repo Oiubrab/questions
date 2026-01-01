@@ -4,7 +4,6 @@ module trinary_module
     public :: trinary, low, medium, high, up, down
 
     type :: trinary
-        private
         integer :: value
     contains
         procedure :: set => set_trinary

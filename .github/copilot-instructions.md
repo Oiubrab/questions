@@ -44,12 +44,13 @@ The system uses a modular dual-brain architecture supporting hierarchical meta-l
 All modules depend on `trinary_module`. The `brain_module` imports `synapses_module` and `outputter_module`. When modifying types, check reverse dependencies.
 
 ### Trinary State Management
-Never directly access `trinary%value` - always use methods:
+**General Rule**: Use encapsulated methods for high-level code:
 ```fortran
 call cell%set(medium)
 state = cell%get()
 call cell%shift(up)  ! Moves toward high, capped
 ```
+**Performance-Critical Exception**: `brain_module.f90` uses direct `%value` access in hot loops for 1.8x speedup. This is intentional and documented in OPTIMIZATION_NOTES.md.
 
 ### Direction System (Brain Module)
 8-direction array with **biased probabilities** - downward movement (indices 6-8) has higher bias (1.5-1.8×) than upward (0.5×) or lateral (1.0×). The `directions` array maps indices to (row_delta, col_delta) pairs.

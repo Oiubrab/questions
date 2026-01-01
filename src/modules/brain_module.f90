@@ -3,6 +3,17 @@ module brain_module
     use synapses_module
     use outputter_module
     implicit none
+    ! Precomputed direction metadata to avoid per-call initialization
+    integer, parameter :: directions(8, 2) = reshape([ &
+        -1, -1, -1, 0, 0, 1, 1, 1, & ! row deltas
+        -1,  0,  1, -1, 1, -1, 0, 1  & ! col deltas
+    ], [8, 2])
+    integer, parameter :: direction_opposites(8) = [8, 7, 6, 5, 4, 3, 2, 1]
+    real,    parameter :: direction_bias(8) = [0.5, 0.5, 0.5, 1.0, 1.0, 1.5, 1.8, 1.5]
+
+    ! Reusable buffers to avoid per-call allocation churn
+    type(trinary), allocatable, save, target :: brain_next_cache(:,:)
+    integer,    allocatable, save, target :: incoming_direction_next_cache(:,:,:)
     contains
 
     subroutine initialize_brain(brain, rows, cols)
@@ -14,11 +25,13 @@ module brain_module
         allocate(brain(rows, cols))
 
         ! Initialize the 2D brain with all lows (0's)
+        !$omp parallel do collapse(2) if(rows*cols > 100)
         do i = 1, rows
             do j = 1, cols
-                call brain(i, j)%set(low)
+                brain(i, j)%value = low
             end do
         end do
+        !$omp end parallel do
     end subroutine initialize_brain
 
 subroutine copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, input_offset, cols)
@@ -27,11 +40,12 @@ subroutine copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, in
     integer, intent(in) :: input_offset, cols
     integer :: i, brain_col
     
+    ! Note: Don't parallelize this loop - it's very short (8 elements) and has conditionals
     do i = 1, size(inputter)
         brain_col = input_offset + i - 1
         if (brain_col >= 1 .and. brain_col <= cols) then
-            if (inputter(i)%get() /= low) then
-                call brain(1, brain_col)%set(inputter(i)%get())
+            if (inputter(i)%value /= low) then
+                brain(1, brain_col)%value = inputter(i)%value
                 ! Set incoming direction to 7 (Down) - signal came from "above" (inputter)
                 incoming_direction(1, brain_col, 1) = 7
             end if
@@ -51,70 +65,51 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     logical, allocatable :: synapse_usage(:,:,:,:)  ! Now 4D: track which synapses were used
     integer, allocatable :: incoming_direction(:,:,:)  ! (rows, cols, 2) - track up to 2 incoming directions
     integer, intent(in) :: rows, cols, input_offset, output_offset, output_length
-    type(trinary), allocatable :: brain_next(:,:)
-    integer, allocatable :: incoming_direction_next(:,:,:)
+    type(trinary), pointer :: brain_next(:,:)
+    integer, pointer :: incoming_direction_next(:,:,:)
     integer :: i, j, k, index, incoming_dir, incoming_dir2
-    real :: total_value, random_num
-    real, allocatable :: synapse_values(:)
-    integer, dimension(8, 2) :: directions
-    integer, dimension(8) :: direction_opposites
+    real :: total_value, random_num, threshold
+    real :: synapse_values(8)
     integer :: ni, nj
     logical :: valid_move
-    real, dimension(8) :: direction_bias
     integer :: num_valid_directions
-    integer, allocatable :: valid_indices(:)
-    real, allocatable :: valid_synapse_values(:), cumulative_prob(:)
+    integer :: valid_indices(8)
+    real :: valid_synapse_values(8)
+    real :: cumulative_prob
     integer, parameter :: max_synapse_strength = 2000000, reinforcement_amount=1000
     integer :: current_state, target_state
+    integer :: buf_rows, buf_cols
 
-    ! Initialize directions array explicitly
-    directions(1,1) = -1   ! Up-Left
-    directions(1,2) = -1
-    directions(2,1) = -1   ! Up
-    directions(2,2) =  0
-    directions(3,1) = -1   ! Up-Right
-    directions(3,2) =  1
-    directions(4,1) =  0   ! Left
-    directions(4,2) = -1
-    directions(5,1) =  0   ! Right
-    directions(5,2) =  1
-    directions(6,1) =  1   ! Down-Left
-    directions(6,2) = -1
-    directions(7,1) =  1   ! Down
-    directions(7,2) =  0
-    directions(8,1) =  1   ! Down-Right
-    directions(8,2) =  1
+    ! Ensure reusable buffers are allocated for current size
+    buf_rows = rows
+    buf_cols = cols
+    if (.not. allocated(brain_next_cache) .or. size(brain_next_cache,1) /= buf_rows .or. size(brain_next_cache,2) /= buf_cols) then
+        if (allocated(brain_next_cache)) deallocate(brain_next_cache)
+        allocate(brain_next_cache(buf_rows, buf_cols))
+    end if
+    if (.not. allocated(incoming_direction_next_cache) .or. size(incoming_direction_next_cache,1) /= buf_rows .or. &
+        size(incoming_direction_next_cache,2) /= buf_cols) then
+        if (allocated(incoming_direction_next_cache)) deallocate(incoming_direction_next_cache)
+        allocate(incoming_direction_next_cache(buf_rows, buf_cols, 2))
+    end if
 
-    ! Initialize direction opposites (for tracking incoming direction)
-    direction_opposites(1) = 8  ! Up-Left ↔ Down-Right
-    direction_opposites(2) = 7  ! Up ↔ Down
-    direction_opposites(3) = 6  ! Up-Right ↔ Down-Left
-    direction_opposites(4) = 5  ! Left ↔ Right
-    direction_opposites(5) = 4  ! Right ↔ Left
-    direction_opposites(6) = 3  ! Down-Left ↔ Up-Right
-    direction_opposites(7) = 2  ! Down ↔ Up
-    direction_opposites(8) = 1  ! Down-Right ↔ Up-Left
+    brain_next => brain_next_cache
+    incoming_direction_next => incoming_direction_next_cache
 
-    ! Initialize bias factors for each direction explicitly
-    direction_bias(1) = 0.5  ! Up-Left
-    direction_bias(2) = 0.5  ! Up
-    direction_bias(3) = 0.5  ! Up-Right
-    direction_bias(4) = 1.0  ! Left
-    direction_bias(5) = 1.0  ! Right
-    direction_bias(6) = 1.5  ! Down-Left
-    direction_bias(7) = 1.8  ! Down
-    direction_bias(8) = 1.5  ! Down-Right
-
-    ! Allocate and initialize brain_next and incoming_direction_next
-    allocate(brain_next(rows, cols))
-    allocate(incoming_direction_next(rows, cols, 2))
     brain_next = brain  ! Copy current brain state
     incoming_direction_next = incoming_direction  ! Copy incoming directions
 
-    ! Process each neuron
+    ! Process each neuron - parallelized with atomic updates for write conflicts
+    !$omp parallel do collapse(2) private(j, k, index, incoming_dir, incoming_dir2, &
+    !$omp& synapse_values, ni, nj, valid_move, num_valid_directions, valid_indices, &
+    !$omp& valid_synapse_values, total_value, random_num, threshold, cumulative_prob, &
+    !$omp& current_state, target_state) &
+    !$omp& shared(brain, brain_next, synapses, synapse_usage, incoming_direction, &
+    !$omp& incoming_direction_next, outputter, rows, cols, output_offset, output_length) &
+    !$omp& if(rows*cols > 20)
     do i = 1, rows
         do j = 1, cols
-            current_state = brain(i, j)%get()
+            current_state = brain(i, j)%value
             if (current_state /= low) then
                 ! Get incoming direction(s)
                 incoming_dir = incoming_direction(i, j, 1)
@@ -122,10 +117,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                 
                 ! Skip if no incoming direction set (shouldn't happen for active neurons)
                 if (incoming_dir == 0) cycle
-                
-                ! Allocate synapse values array
-                allocate(synapse_values(8))
-                
+
                 ! For MEDIUM neurons: use single incoming direction
                 ! For HIGH neurons: average the two incoming direction groups
                 if (current_state == medium .or. incoming_dir2 == 0) then
@@ -151,12 +143,12 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
                     ! Validity checks
                     if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
-                        if (brain_next(ni, nj)%get() /= high) then
+                        if (brain_next(ni, nj)%value /= high) then
                             valid_move = .true.
                         end if
                     ! Check if the move is from the last row into the outputter array
                     else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
-                        if (outputter(nj - output_offset + 1)%get() /= high) then
+                        if (outputter(nj - output_offset + 1)%value /= high) then
                             valid_move = .true.
                         end if
                     end if
@@ -174,41 +166,27 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                     end if
                 end do
 
-                ! Check for valid directions
-                if (num_valid_directions == 0) then
-                    deallocate(synapse_values)
-                    cycle
-                end if
-
-                ! Allocate arrays for valid directions
-                allocate(valid_indices(num_valid_directions))
-                allocate(valid_synapse_values(num_valid_directions))
+                if (num_valid_directions == 0) cycle
 
                 num_valid_directions = 0
+                total_value = 0.0
                 do k = 1, 8
                     if (synapse_values(k) > 0.0) then
                         num_valid_directions = num_valid_directions + 1
                         valid_indices(num_valid_directions) = k
                         valid_synapse_values(num_valid_directions) = synapse_values(k)
+                        total_value = total_value + synapse_values(k)
                     end if
                 end do
 
-                ! Calculate total value
-                total_value = sum(valid_synapse_values)
-
-                ! Calculate cumulative probabilities
-                allocate(cumulative_prob(num_valid_directions))
-                cumulative_prob(1) = valid_synapse_values(1) / total_value
-                do k = 2, num_valid_directions
-                    cumulative_prob(k) = cumulative_prob(k - 1) + valid_synapse_values(k) / total_value
-                end do
-
-                ! Generate random number
+                ! Draw a direction using cumulative sum without heap allocations
                 call random_number(random_num)
-
-                ! Select direction
+                threshold = random_num * total_value
+                cumulative_prob = 0.0
+                index = valid_indices(1)
                 do k = 1, num_valid_directions
-                    if (random_num <= cumulative_prob(k)) then
+                    cumulative_prob = cumulative_prob + valid_synapse_values(k)
+                    if (threshold <= cumulative_prob) then
                         index = valid_indices(k)
                         exit
                     end if
@@ -220,9 +198,12 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
                 ! Perform the move
                 if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
-                    target_state = brain_next(ni, nj)%get()
-                    call brain_next(ni, nj)%shift(up)
-                    call brain_next(i, j)%shift(down)
+                    target_state = brain_next(ni, nj)%value
+                    ! Critical section to prevent race conditions from parallel threads
+                    !$omp critical
+                    if (brain_next(ni, nj)%value < high) brain_next(ni, nj)%value = brain_next(ni, nj)%value + 1
+                    !$omp end critical
+                    if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
                     
                     ! Set incoming direction for target neuron
                     if (target_state == low) then
@@ -233,9 +214,13 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                         incoming_direction_next(ni, nj, 2) = direction_opposites(index)
                     end if
                     
-                    ! Clear incoming direction if source neuron becomes LOW
-                    if (brain_next(i, j)%get() == low) then
+                    ! Clear incoming directions appropriately based on state change
+                    if (brain_next(i, j)%value == low) then
+                        ! Going to LOW - clear all incoming directions
                         incoming_direction_next(i, j, 1) = 0
+                        incoming_direction_next(i, j, 2) = 0
+                    else if (current_state == high .and. brain_next(i, j)%value == medium) then
+                        ! Going from HIGH to MEDIUM - clear secondary incoming direction
                         incoming_direction_next(i, j, 2) = 0
                     end if
                     
@@ -256,12 +241,19 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                     end if
                 ! Perform the move into the outputter array if from the last row moving down
                 else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
-                    call outputter(nj - output_offset + 1)%shift(up)
-                    call brain_next(i, j)%shift(down)
+                    ! Critical section to prevent race conditions from parallel threads
+                    !$omp critical
+                    if (outputter(nj - output_offset + 1)%value < high) outputter(nj - output_offset + 1)%value = outputter(nj - output_offset + 1)%value + 1
+                    !$omp end critical
+                    if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
                     
-                    ! Clear incoming direction if source neuron becomes LOW
-                    if (brain_next(i, j)%get() == low) then
+                    ! Clear incoming directions appropriately based on state change
+                    if (brain_next(i, j)%value == low) then
+                        ! Going to LOW - clear all incoming directions
                         incoming_direction_next(i, j, 1) = 0
+                        incoming_direction_next(i, j, 2) = 0
+                    else if (current_state == high .and. brain_next(i, j)%value == medium) then
+                        ! Going from HIGH to MEDIUM - clear secondary incoming direction
                         incoming_direction_next(i, j, 2) = 0
                     end if
                     
@@ -281,22 +273,14 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                     end if
                 end if
 
-                ! Deallocate arrays
-                deallocate(synapse_values)
-                deallocate(valid_indices)
-                deallocate(valid_synapse_values)
-                deallocate(cumulative_prob)
             end if
         end do
     end do
+    !$omp end parallel do
 
     ! Replace the current brain state and incoming directions with the next state
     brain = brain_next
     incoming_direction = incoming_direction_next
-
-    ! Deallocate temporary arrays
-    deallocate(brain_next)
-    deallocate(incoming_direction_next)
 end subroutine update_brain_state_based_on_synapses
 
 

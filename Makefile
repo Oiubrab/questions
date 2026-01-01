@@ -10,8 +10,17 @@ else
     FC_NAME = nvfortran
 endif
 
-FFLAGS = 
+FFLAGS =
 LDFLAGS =
+
+# Enable optimization and OpenMP
+ifeq ($(FC_NAME),nvfortran)
+    FFLAGS += -O3 -mp -Minfo=mp,vect -fast  # OpenMP, vectorization info, fast math
+    LDFLAGS += -mp
+else ifeq ($(FC_NAME),gfortran)
+    FFLAGS += -O3 -fopenmp -ftree-vectorize -ffast-math -march=native
+    LDFLAGS += -fopenmp
+endif
 
 # Directory structure
 SRC_DIR = src

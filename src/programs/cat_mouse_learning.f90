@@ -34,7 +34,7 @@ program cat_mouse_learning
     integer, dimension(8, 2) :: move_directions
     
     ! Simulation
-    integer :: bar, max_bars, snapshot_interval
+    integer :: bar, max_bars, snapshot_interval, mouse_move_interval
     integer :: brain_step, steps_per_bar
     integer :: i, j, k, ni, nj, brain_energy, output_energy
     integer :: output_action, move_distance
@@ -107,6 +107,7 @@ program cat_mouse_learning
     max_bars = 20000       ! Real-world time steps (balanced for learning)
     steps_per_bar = 12     ! Brain steps per Bar (reduced for better temporal precision)
     snapshot_interval = 1000  ! Print full state every N Bars
+    mouse_move_interval = 10   ! Mouse moves every N Bars (was 25)
     
     ! Vision parameters
     field_size = 100.0
@@ -241,7 +242,7 @@ program cat_mouse_learning
     print *, "=== CAT & MOUSE CONTINUOUS HUNTING SIMULATION ==="
     print *, "Max Bars (real-world steps):", max_bars
     print *, "Brain steps per Bar:", steps_per_bar
-    print *, "Mouse movement: every 25 Bars, 2 units random direction"
+    print *, "Mouse movement: every", mouse_move_interval, "Bars, 2 units random direction"
     print *, "Epoch size:", epoch_size, "Bars (", num_epochs, "epochs total)"
     print *, "Logging to:", trim(csv_filename)
     print *, "Snapshot interval:", snapshot_interval
@@ -303,8 +304,8 @@ program cat_mouse_learning
         call reset_synapse_usage(synapse_usage, rows, cols)
         call reset_synapse_usage(meta_synapse_usage, meta_rows, meta_cols)
         
-        ! Mouse movement: every 25 Bars, move in random direction by small amount
-        if (mod(bar, 25) == 0) then
+        ! Mouse movement: every mouse_move_interval Bars, move in random direction by small amount
+        if (mod(bar, mouse_move_interval) == 0) then
             ! Generate random direction (0 to 2*PI radians)
             call random_number(dx)
             dx = dx * 2.0 * 3.14159265359
