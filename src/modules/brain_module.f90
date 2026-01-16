@@ -53,6 +53,37 @@ subroutine copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, in
     end do
 end subroutine copy_non_low_to_brain_top_row
 
+! Copy binocular vision (two input vectors) to brain top row
+subroutine copy_binocular_to_brain_top_row(left_inputter, right_inputter, brain, incoming_direction, &
+                                            left_offset, right_offset, cols)
+    type(trinary), allocatable :: left_inputter(:), right_inputter(:), brain(:,:)
+    integer, allocatable :: incoming_direction(:,:,:)
+    integer, intent(in) :: left_offset, right_offset, cols
+    integer :: i, brain_col
+    
+    ! Copy left eye input
+    do i = 1, size(left_inputter)
+        brain_col = left_offset + i - 1
+        if (brain_col >= 1 .and. brain_col <= cols) then
+            if (left_inputter(i)%value /= low) then
+                brain(1, brain_col)%value = left_inputter(i)%value
+                incoming_direction(1, brain_col, 1) = 7  ! Signal from above
+            end if
+        end if
+    end do
+    
+    ! Copy right eye input
+    do i = 1, size(right_inputter)
+        brain_col = right_offset + i - 1
+        if (brain_col >= 1 .and. brain_col <= cols) then
+            if (right_inputter(i)%value /= low) then
+                brain(1, brain_col)%value = right_inputter(i)%value
+                incoming_direction(1, brain_col, 1) = 7  ! Signal from above
+            end if
+        end if
+    end do
+end subroutine copy_binocular_to_brain_top_row
+
 subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, incoming_direction, &
                                                 rows, cols, input_offset, output_offset, output_length)
     use trinary_module
@@ -79,6 +110,7 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     integer, parameter :: max_synapse_strength = 2000000, reinforcement_amount=1000
     integer :: current_state, target_state
     integer :: buf_rows, buf_cols
+    real :: output_center, dist_to_center, lateral_bias
 
     ! Ensure reusable buffers are allocated for current size
     buf_rows = rows
@@ -135,6 +167,10 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
                 num_valid_directions = 0
 
+                ! Calculate output center and distance for lateral bias
+                output_center = output_offset + (output_length - 1) / 2.0
+                dist_to_center = abs(real(j) - output_center)
+
                 ! Check each direction for viability and apply bias
                 do k = 1, 8
                     ni = i + directions(k, 1)
@@ -155,7 +191,23 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
                     ! Apply bias if move is valid
                     if (valid_move) then
-                        synapse_values(k) = synapse_values(k) * direction_bias(k)
+                        ! Start with base directional bias (downward preference)
+                        lateral_bias = direction_bias(k)
+                        
+                        ! Add lateral bias toward output center
+                        ! If current column is LEFT of center and direction moves RIGHT: boost
+                        ! If current column is RIGHT of center and direction moves LEFT: boost
+                        if (dist_to_center > 0.5) then
+                            if (j < output_center .and. directions(k, 2) > 0) then
+                                ! Moving right toward center - boost
+                                lateral_bias = lateral_bias * 1.2
+                            else if (j > output_center .and. directions(k, 2) < 0) then
+                                ! Moving left toward center - boost
+                                lateral_bias = lateral_bias * 1.2
+                            end if
+                        end if
+                        
+                        synapse_values(k) = synapse_values(k) * lateral_bias
                         if (synapse_values(k) > 0.0) then
                             num_valid_directions = num_valid_directions + 1
                         else

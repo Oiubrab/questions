@@ -66,6 +66,15 @@ cat_mouse_learning: $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90 | $(BIN_DIR
 	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/cat_mouse_learning.f90 -o $(BIN_DIR)/cat_mouse_learning $(LDFLAGS)
 	@echo "Cat-mouse learning system built successfully with $(FC_NAME)"
 
+# Binocular vision learning program (two mice, depth perception)
+binocular: $(MODULES) $(PROGRAM_DIR)/binocular_cat_mouse.f90 | $(BIN_DIR)
+	@echo "Building binocular_cat_mouse with $(FC_NAME)"
+	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/binocular_cat_mouse.f90 -o $(BIN_DIR)/binocular_cat_mouse $(LDFLAGS)
+	@echo "Binocular cat-mouse system built successfully with $(FC_NAME)"
+
+# Shortcut for learning system (default for experiments)
+learning: cat_mouse_learning
+
 cat_mouse_gui_demo: $(MODULES) $(PROGRAM_DIR)/cat_mouse_gui_demo.f90
 	@echo "Building cat_mouse_gui_demo with $(FC_NAME)"
 	$(FC) $(FFLAGS) $(MODULES) $(PROGRAM_DIR)/cat_mouse_gui_demo.f90 -o $(BIN_DIR)/cat_mouse_gui_demo $(LDFLAGS)
