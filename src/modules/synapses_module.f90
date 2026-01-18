@@ -29,6 +29,18 @@ module synapses_module
 
     ! Decay function to multiply the synapse value by a random number between 0.98 and 0.995
     ! Much gentler decay to preserve learned pathways when mouse moves to different sectors
+    ! NOTE: rand_decay must be passed in for GPU compatibility (random_number not supported on GPU)
+    !$acc routine seq
+    pure integer function decay_value_gpu(value, rand_decay)
+        integer, intent(in) :: value
+        real, intent(in) :: rand_decay
+        real :: actual_decay
+
+        actual_decay = 0.98 + 0.015 * rand_decay  ! Range: 0.98 to 0.995 (0.5-2% loss per decay)
+        decay_value_gpu = max(25, int(value * actual_decay))
+    end function decay_value_gpu
+    
+    ! CPU version that generates its own random number
     integer function decay_value(value)
         integer, intent(in) :: value
         real :: rand_decay
@@ -56,19 +68,31 @@ module synapses_module
         integer, allocatable :: synapses(:,:,:,:)
         integer, intent(in) :: rows, cols
         integer :: i, j, k, m
+        real, allocatable :: rand_vals(:,:,:,:)
+        
+        ! Pre-generate random numbers on CPU for GPU compatibility
+        allocate(rand_vals(rows, cols, 8, 8))
+        call random_number(rand_vals)
 
         ! Apply decay factor to all elements - parallelized
+        ! OpenACC for GPU with data region, OpenMP for CPU fallback
+        !$acc data copyin(rand_vals) present(synapses)
+        !$acc parallel loop collapse(4) if(rows*cols > 10)
         !$omp parallel do collapse(4) private(i,j,k,m) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
                     do m = 1, 8  ! Outgoing direction
-                        synapses(i, j, k, m) = decay_value(synapses(i, j, k, m))
+                        synapses(i, j, k, m) = decay_value_gpu(synapses(i, j, k, m), rand_vals(i, j, k, m))
                     end do
                 end do
             end do
         end do
         !$omp end parallel do
+        !$acc end parallel loop
+        !$acc end data
+        
+        deallocate(rand_vals)
     end subroutine apply_decay
 
     ! Reset synapse usage tracker
@@ -88,28 +112,39 @@ module synapses_module
         logical, allocatable :: synapse_usage(:,:,:,:)
         integer, intent(in) :: rows, cols, num_steps
         integer :: i, j, k, m
-        real :: target_multiplier, rand_factor
+        real :: target_multiplier
+        real, allocatable :: rand_vals(:,:,:,:)
         integer, parameter :: max_synapse_strength = 200000
         
         ! Calculate reinforcement: 1.2 / (0.95^num_steps)
         target_multiplier = 1.2 / (0.95 ** num_steps)
         
-        !$omp parallel do collapse(4) private(i,j,k,m,rand_factor) if(rows*cols > 10)
+        ! Pre-generate random numbers on CPU for GPU compatibility
+        allocate(rand_vals(rows, cols, 8, 8))
+        call random_number(rand_vals)
+        ! Scale to 0.9-1.1 range
+        rand_vals = 0.9 + 0.2 * rand_vals
+        
+        !$acc data copyin(rand_vals) present(synapses, synapse_usage)
+        !$acc parallel loop collapse(4) if(rows*cols > 10)
+        !$omp parallel do collapse(4) private(i,j,k,m) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
                     do m = 1, 8  ! Outgoing direction
                         if (synapse_usage(i, j, k, m)) then
-                            call random_number(rand_factor)
-                            rand_factor = 0.9 + 0.2 * rand_factor
                             synapses(i, j, k, m) = min(max_synapse_strength, &
-                                                    int(synapses(i, j, k, m) * target_multiplier * rand_factor))
+                                                    int(synapses(i, j, k, m) * target_multiplier * rand_vals(i,j,k,m)))
                         end if
                     end do
                 end do
             end do
         end do
         !$omp end parallel do
+        !$acc end parallel loop
+        !$acc end data
+        
+        deallocate(rand_vals)
     end subroutine apply_adaptive_reinforcement
 
     ! Adaptive punishment that scales with number of decay steps
@@ -118,26 +153,37 @@ module synapses_module
         logical, allocatable :: synapse_usage(:,:,:,:)
         integer, intent(in) :: rows, cols, num_steps
         integer :: i, j, k, m
-        real :: target_multiplier, rand_factor
+        real :: target_multiplier
+        real, allocatable :: rand_vals(:,:,:,:)
         
         ! Calculate punishment: 0.8 * (0.95^num_steps) - amplifies decay effect
         target_multiplier = 0.8 * (0.95 ** num_steps)
         
-        !$omp parallel do collapse(4) private(i,j,k,m,rand_factor) if(rows*cols > 10)
+        ! Pre-generate random numbers on CPU for GPU compatibility
+        allocate(rand_vals(rows, cols, 8, 8))
+        call random_number(rand_vals)
+        ! Scale to 0.9-1.1 range
+        rand_vals = 0.9 + 0.2 * rand_vals
+        
+        !$acc data copyin(rand_vals) present(synapses, synapse_usage)
+        !$acc parallel loop collapse(4) if(rows*cols > 10)
+        !$omp parallel do collapse(4) private(i,j,k,m) if(rows*cols > 10)
         do i = 1, rows
             do j = 1, cols
                 do k = 1, 8  ! Incoming direction
                     do m = 1, 8  ! Outgoing direction
                         if (synapse_usage(i, j, k, m)) then
-                            call random_number(rand_factor)
-                            rand_factor = 0.9 + 0.2 * rand_factor
-                            synapses(i, j, k, m) = max(25, int(synapses(i, j, k, m) * target_multiplier * rand_factor))
+                            synapses(i, j, k, m) = max(25, int(synapses(i, j, k, m) * target_multiplier * rand_vals(i,j,k,m)))
                         end if
                     end do
                 end do
             end do
         end do
         !$omp end parallel do
+        !$acc end parallel loop
+        !$acc end data
+        
+        deallocate(rand_vals)
     end subroutine apply_adaptive_punishment
 
 end module synapses_module

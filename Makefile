@@ -1,5 +1,6 @@
 # Makefile for ForWhoseAdvantage Fortran simulation
 # Auto-detect best available Fortran compiler
+# Supports both CPU (OpenMP) and GPU (OpenACC) builds
 
 # Detect available compiler
 ifeq ($(shell command -v nvfortran 2>/dev/null),)
@@ -13,13 +14,30 @@ endif
 FFLAGS =
 LDFLAGS =
 
-# Enable optimization and OpenMP
+# GPU compute capability (RTX 4060 = cc89, adjust for your GPU)
+GPU_CC ?= cc89
+
+# Build mode: cpu (default) or gpu
+# Usage: make learning MODE=gpu
+MODE ?= cpu
+
+# Enable optimization based on compiler and mode
 ifeq ($(FC_NAME),nvfortran)
-    FFLAGS += -O3 -mp -Minfo=mp,vect -fast  # OpenMP, vectorization info, fast math
-    LDFLAGS += -mp
+    ifeq ($(MODE),gpu)
+        # GPU mode: OpenACC for GPU offloading
+        FFLAGS += -O3 -acc -gpu=$(GPU_CC),mem:managed -Minfo=accel,opt -fast
+        LDFLAGS += -acc -gpu=$(GPU_CC),mem:managed
+        $(info Building with GPU acceleration (OpenACC) for $(GPU_CC))
+    else
+        # CPU mode: OpenMP for multicore CPU
+        FFLAGS += -O3 -mp -Minfo=mp,vect -fast
+        LDFLAGS += -mp
+        $(info Building with CPU parallelism (OpenMP))
+    endif
 else ifeq ($(FC_NAME),gfortran)
     FFLAGS += -O3 -fopenmp -ftree-vectorize -ffast-math -march=native
     LDFLAGS += -fopenmp
+    $(info Building with gfortran (OpenMP only))
 endif
 
 # Directory structure
@@ -132,11 +150,18 @@ learning: cat_mouse_learning
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  make                  - Build main forWhoseAdvantage executable"
+	@echo "  make                  - Build main forWhoseAdvantage executable (CPU)"
 	@echo "  make all-programs     - Build all executables"
 	@echo "  make clean            - Remove all build artifacts"
 	@echo "  make rebuild          - Clean and rebuild main executable"
 	@echo "  make <program>        - Build specific program (e.g., make test_trinary)"
+	@echo ""
+	@echo "GPU Acceleration (requires nvfortran):"
+	@echo "  make learning MODE=gpu       - Build cat_mouse_learning for GPU"
+	@echo "  make forWhoseAdvantage MODE=gpu"
+	@echo "  GPU_CC=cc89                  - Set compute capability (RTX 4060=cc89, default)"
+	@echo ""
+	@echo "To verify GPU usage, run with: NVCOMPILER_ACC_TIME=1 ./bin/cat_mouse_learning"
 	@echo ""
 	@echo "Programs: $(MAIN_PROGRAMS)"
 
