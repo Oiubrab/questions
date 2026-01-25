@@ -90,6 +90,14 @@ The system now features a **hierarchical dual-brain architecture** with sophisti
 - Original system: ~456 catches/trial, 70% directional accuracy
 - Meta-brain system: 1,100+ catches/trial, 86%+ directional accuracy
 
+## CRITICAL CONSTRAINTS (DO NOT VIOLATE)
+
+1. **NEVER artificially remove/wipe energy from the brain**. Energy must flow through the system naturally via synaptic propagation. If energy accumulates, fix the drainage pathways (thresholds, cross-flow, output), not by deleting energy.
+
+2. **ALWAYS test changes on multiple trials** (minimum 2-3). Single-trial tests can give misleading results due to random seed variation. Performance must be consistent across trials.
+
+3. **Energy conservation is sacred**. Energy enters via inputter, flows through brain via synapses, exits via outputter or overflow. No creation or destruction of energy units is allowed.
+
 ### Synapse Reinforcement and Decay Dynamics (CRITICAL DESIGN)
 This system implements a **self-regulating competitive learning mechanism** with sophisticated equilibrium properties:
 
