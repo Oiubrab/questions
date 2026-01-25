@@ -9,7 +9,15 @@ module brain_module
         -1,  0,  1, -1, 1, -1, 0, 1  & ! col deltas
     ], [8, 2])
     integer, parameter :: direction_opposites(8) = [8, 7, 6, 5, 4, 3, 2, 1]
+    ! Vertical bias (for sensory signals from top): downward directions favored
     real,    parameter :: direction_bias(8) = [0.5, 0.5, 0.5, 1.0, 1.0, 1.5, 1.8, 1.5]
+    ! Horizontal bias (for meta signals from right): leftward directions favored
+    real,    parameter :: horizontal_bias(8) = [1.5, 1.0, 0.5, 0.5, 0.5, 1.0, 1.5, 1.8]
+
+    ! Side I/O arrays (module-level, like outputter_module)
+    type(trinary), allocatable, save :: side_meta_inputter(:)      ! Right side input
+    type(trinary), allocatable, save :: overflow_outputter(:) ! Left side output
+    type(trinary), allocatable, save :: backup_overflow(:)    ! Previous overflow state
 
     ! Reusable buffers to avoid per-call allocation churn
     type(trinary), allocatable, save, target :: brain_next_cache(:,:)
@@ -54,7 +62,7 @@ subroutine copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, in
 end subroutine copy_non_low_to_brain_top_row
 
 subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, synapse_usage, incoming_direction, &
-                                                rows, cols, input_offset, output_offset, output_length)
+                                                rows, cols, input_offset, output_offset, output_length, pressure)
     use trinary_module
     use outputter_module
     implicit none
@@ -65,11 +73,14 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     logical, allocatable :: synapse_usage(:,:,:,:)  ! Now 4D: track which synapses were used
     integer, allocatable :: incoming_direction(:,:,:)  ! (rows, cols, 2) - track up to 2 incoming directions
     integer, intent(in) :: rows, cols, input_offset, output_offset, output_length
+    real, intent(in), optional :: pressure  ! Brain pressure for valve control
     type(trinary), pointer :: brain_next(:,:)
     integer, pointer :: incoming_direction_next(:,:,:)
     integer :: i, j, k, index, incoming_dir, incoming_dir2
     real :: total_value, random_num, threshold
     real :: synapse_values(8)
+    real :: active_bias(8)  ! Context-dependent bias selection
+    real :: leftward_pull, vertical_mult, current_pressure
     integer :: ni, nj
     logical :: valid_move
     integer :: num_valid_directions
@@ -79,6 +90,18 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     integer, parameter :: max_synapse_strength = 2000000, reinforcement_amount=1000
     integer :: current_state, target_state
     integer :: buf_rows, buf_cols
+    logical :: move_succeeded  ! Track if move actually happened for energy conservation
+
+    ! Set pressure (default to 0.0 if not provided)
+    if (present(pressure)) then
+        current_pressure = pressure
+    else
+        current_pressure = 0.0
+    end if
+    
+    ! Calculate pressure-based multipliers (Valve 2 and 3)
+    leftward_pull = calculate_leftward_pull(current_pressure)
+    vertical_mult = 1.0 + current_pressure * 1.0  ! 1.0 → 2.0
 
     ! Ensure reusable buffers are allocated for current size
     buf_rows = rows
@@ -101,11 +124,12 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
     ! Process each neuron - parallelized with atomic updates for write conflicts
     !$omp parallel do collapse(2) private(j, k, index, incoming_dir, incoming_dir2, &
-    !$omp& synapse_values, ni, nj, valid_move, num_valid_directions, valid_indices, &
+    !$omp& synapse_values, active_bias, ni, nj, valid_move, num_valid_directions, valid_indices, &
     !$omp& valid_synapse_values, total_value, random_num, threshold, cumulative_prob, &
-    !$omp& current_state, target_state) &
+    !$omp& current_state, target_state, move_succeeded) &
     !$omp& shared(brain, brain_next, synapses, synapse_usage, incoming_direction, &
-    !$omp& incoming_direction_next, outputter, rows, cols, output_offset, output_length) &
+    !$omp& incoming_direction_next, outputter, rows, cols, output_offset, output_length, &
+    !$omp& leftward_pull, vertical_mult) &
     !$omp& if(rows*cols > 20)
     do i = 1, rows
         do j = 1, cols
@@ -117,6 +141,26 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                 
                 ! Skip if no incoming direction set (shouldn't happen for active neurons)
                 if (incoming_dir == 0) cycle
+                
+                ! ============================================================
+                ! CONTEXT-DEPENDENT BIAS SELECTION (Phase 2)
+                ! ============================================================
+                ! Select bias based on incoming direction to determine signal origin
+                if (incoming_dir == 6 .or. incoming_dir == 2 .or. incoming_dir == 7) then
+                    ! Vertical flow (from top): use vertical bias with pressure scaling
+                    active_bias = direction_bias * vertical_mult
+                else if (incoming_dir == 4 .or. incoming_dir == 8) then
+                    ! Horizontal flow (from right): use horizontal bias
+                    active_bias = horizontal_bias
+                else
+                    ! Diagonal incoming: default to vertical bias
+                    active_bias = direction_bias * vertical_mult
+                end if
+                
+                ! Apply leftward pull (Valve 2) - boosts leftward directions
+                active_bias(1) = active_bias(1) * leftward_pull  ! NW
+                active_bias(7) = active_bias(7) * leftward_pull  ! SW
+                active_bias(8) = active_bias(8) * leftward_pull  ! W
 
                 ! For MEDIUM neurons: use single incoming direction
                 ! For HIGH neurons: average the two incoming direction groups
@@ -153,9 +197,9 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                         end if
                     end if
 
-                    ! Apply bias if move is valid
+                    ! Apply context-dependent bias if move is valid
                     if (valid_move) then
-                        synapse_values(k) = synapse_values(k) * direction_bias(k)
+                        synapse_values(k) = synapse_values(k) * active_bias(k)
                         if (synapse_values(k) > 0.0) then
                             num_valid_directions = num_valid_directions + 1
                         else
@@ -199,77 +243,97 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                 ! Perform the move
                 if (ni >= 1 .and. ni <= rows .and. nj >= 1 .and. nj <= cols) then
                     target_state = brain_next(ni, nj)%value
-                    ! Critical section to prevent race conditions from parallel threads
+                    move_succeeded = .false.
+                    
+                    ! Critical section: ONLY increment target if < HIGH
+                    ! Track success so we only decrement source if move actually happened
                     !$omp critical
-                    if (brain_next(ni, nj)%value < high) brain_next(ni, nj)%value = brain_next(ni, nj)%value + 1
+                    if (brain_next(ni, nj)%value < high) then
+                        brain_next(ni, nj)%value = brain_next(ni, nj)%value + 1
+                        move_succeeded = .true.
+                    end if
                     !$omp end critical
-                    if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
                     
-                    ! Set incoming direction for target neuron
-                    if (target_state == low) then
-                        ! Target was LOW, now MEDIUM - set primary incoming direction
-                        incoming_direction_next(ni, nj, 1) = direction_opposites(index)
-                    else if (target_state == medium) then
-                        ! Target was MEDIUM, now HIGH - set secondary incoming direction
-                        incoming_direction_next(ni, nj, 2) = direction_opposites(index)
+                    ! ENERGY CONSERVATION: Only decrement source if target was incremented
+                    if (move_succeeded) then
+                        if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
+                        
+                        ! Set incoming direction for target neuron
+                        if (target_state == low) then
+                            ! Target was LOW, now MEDIUM - set primary incoming direction
+                            incoming_direction_next(ni, nj, 1) = direction_opposites(index)
+                        else if (target_state == medium) then
+                            ! Target was MEDIUM, now HIGH - set secondary incoming direction
+                            incoming_direction_next(ni, nj, 2) = direction_opposites(index)
+                        end if
+                        
+                        ! Clear incoming directions appropriately based on state change
+                        if (brain_next(i, j)%value == low) then
+                            ! Going to LOW - clear all incoming directions
+                            incoming_direction_next(i, j, 1) = 0
+                            incoming_direction_next(i, j, 2) = 0
+                        else if (current_state == high .and. brain_next(i, j)%value == medium) then
+                            ! Going from HIGH to MEDIUM - clear secondary incoming direction
+                            incoming_direction_next(i, j, 2) = 0
+                        end if
+                        
+                        ! Reinforce the synapse, but cap its strength
+                        ! Use the actual incoming direction(s) for reinforcement
+                        if (current_state == medium .or. incoming_dir2 == 0) then
+                            synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
+                                                                       reinforcement_amount, max_synapse_strength)
+                            synapse_usage(i, j, incoming_dir, index) = .true.
+                        else
+                            ! HIGH state - reinforce both incoming direction groups
+                            synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
+                                                                       reinforcement_amount, max_synapse_strength)
+                            synapses(i, j, incoming_dir2, index) = min(synapses(i, j, incoming_dir2, index) + &
+                                                                        reinforcement_amount, max_synapse_strength)
+                            synapse_usage(i, j, incoming_dir, index) = .true.
+                            synapse_usage(i, j, incoming_dir2, index) = .true.
+                        end if
                     end if
                     
-                    ! Clear incoming directions appropriately based on state change
-                    if (brain_next(i, j)%value == low) then
-                        ! Going to LOW - clear all incoming directions
-                        incoming_direction_next(i, j, 1) = 0
-                        incoming_direction_next(i, j, 2) = 0
-                    else if (current_state == high .and. brain_next(i, j)%value == medium) then
-                        ! Going from HIGH to MEDIUM - clear secondary incoming direction
-                        incoming_direction_next(i, j, 2) = 0
-                    end if
-                    
-                    ! Reinforce the synapse, but cap its strength
-                    ! Use the actual incoming direction(s) for reinforcement
-                    if (current_state == medium .or. incoming_dir2 == 0) then
-                        synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
-                                                                   reinforcement_amount, max_synapse_strength)
-                        synapse_usage(i, j, incoming_dir, index) = .true.
-                    else
-                        ! HIGH state - reinforce both incoming direction groups
-                        synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
-                                                                   reinforcement_amount, max_synapse_strength)
-                        synapses(i, j, incoming_dir2, index) = min(synapses(i, j, incoming_dir2, index) + &
-                                                                    reinforcement_amount, max_synapse_strength)
-                        synapse_usage(i, j, incoming_dir, index) = .true.
-                        synapse_usage(i, j, incoming_dir2, index) = .true.
-                    end if
                 ! Perform the move into the outputter array if from the last row moving down
                 else if (i == rows .and. ni == rows + 1 .and. (nj - output_offset + 1) >= 1 .and. (nj - output_offset + 1) <= output_length) then
-                    ! Critical section to prevent race conditions from parallel threads
+                    move_succeeded = .false.
+                    
+                    ! Critical section: ONLY increment outputter if < HIGH
                     !$omp critical
-                    if (outputter(nj - output_offset + 1)%value < high) outputter(nj - output_offset + 1)%value = outputter(nj - output_offset + 1)%value + 1
-                    !$omp end critical
-                    if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
-                    
-                    ! Clear incoming directions appropriately based on state change
-                    if (brain_next(i, j)%value == low) then
-                        ! Going to LOW - clear all incoming directions
-                        incoming_direction_next(i, j, 1) = 0
-                        incoming_direction_next(i, j, 2) = 0
-                    else if (current_state == high .and. brain_next(i, j)%value == medium) then
-                        ! Going from HIGH to MEDIUM - clear secondary incoming direction
-                        incoming_direction_next(i, j, 2) = 0
+                    if (outputter(nj - output_offset + 1)%value < high) then
+                        outputter(nj - output_offset + 1)%value = outputter(nj - output_offset + 1)%value + 1
+                        move_succeeded = .true.
                     end if
+                    !$omp end critical
                     
-                    ! Reinforce the synapse
-                    if (current_state == medium .or. incoming_dir2 == 0) then
-                        synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
-                                                                   reinforcement_amount, max_synapse_strength)
-                        synapse_usage(i, j, incoming_dir, index) = .true.
-                    else
-                        ! HIGH state - reinforce both incoming direction groups
-                        synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
-                                                                   reinforcement_amount, max_synapse_strength)
-                        synapses(i, j, incoming_dir2, index) = min(synapses(i, j, incoming_dir2, index) + &
-                                                                    reinforcement_amount, max_synapse_strength)
-                        synapse_usage(i, j, incoming_dir, index) = .true.
-                        synapse_usage(i, j, incoming_dir2, index) = .true.
+                    ! ENERGY CONSERVATION: Only decrement source if outputter was incremented
+                    if (move_succeeded) then
+                        if (brain_next(i, j)%value > low) brain_next(i, j)%value = brain_next(i, j)%value - 1
+                        
+                        ! Clear incoming directions appropriately based on state change
+                        if (brain_next(i, j)%value == low) then
+                            ! Going to LOW - clear all incoming directions
+                            incoming_direction_next(i, j, 1) = 0
+                            incoming_direction_next(i, j, 2) = 0
+                        else if (current_state == high .and. brain_next(i, j)%value == medium) then
+                            ! Going from HIGH to MEDIUM - clear secondary incoming direction
+                            incoming_direction_next(i, j, 2) = 0
+                        end if
+                        
+                        ! Reinforce the synapse
+                        if (current_state == medium .or. incoming_dir2 == 0) then
+                            synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
+                                                                       reinforcement_amount, max_synapse_strength)
+                            synapse_usage(i, j, incoming_dir, index) = .true.
+                        else
+                            ! HIGH state - reinforce both incoming direction groups
+                            synapses(i, j, incoming_dir, index) = min(synapses(i, j, incoming_dir, index) + &
+                                                                       reinforcement_amount, max_synapse_strength)
+                            synapses(i, j, incoming_dir2, index) = min(synapses(i, j, incoming_dir2, index) + &
+                                                                        reinforcement_amount, max_synapse_strength)
+                            synapse_usage(i, j, incoming_dir, index) = .true.
+                            synapse_usage(i, j, incoming_dir2, index) = .true.
+                        end if
                     end if
                 end if
 
@@ -283,6 +347,168 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     incoming_direction = incoming_direction_next
 end subroutine update_brain_state_based_on_synapses
 
+! ============================================================
+! SIDE I/O SUBROUTINES (Cross-Flow Architecture)
+! ============================================================
+
+subroutine initialize_side_io(rows, meta_input_length, overflow_length)
+    integer, intent(in) :: rows, meta_input_length, overflow_length
+    integer :: i
+    
+    ! Allocate side I/O arrays
+    if (allocated(side_meta_inputter)) deallocate(side_meta_inputter)
+    if (allocated(overflow_outputter)) deallocate(overflow_outputter)
+    if (allocated(backup_overflow)) deallocate(backup_overflow)
+    
+    allocate(side_meta_inputter(meta_input_length))
+    allocate(overflow_outputter(overflow_length))
+    allocate(backup_overflow(overflow_length))
+    
+    ! Initialize to low state
+    do i = 1, meta_input_length
+        side_meta_inputter(i)%value = low
+    end do
+    do i = 1, overflow_length
+        overflow_outputter(i)%value = low
+        backup_overflow(i)%value = low
+    end do
+end subroutine initialize_side_io
+
+subroutine apply_meta_input_to_brain(brain, incoming_direction, meta_input_offset, rows, cols)
+    ! Apply meta-brain output to rightmost column at variable position
+    type(trinary), allocatable :: brain(:,:)
+    integer, allocatable :: incoming_direction(:,:,:)
+    integer, intent(in) :: meta_input_offset, rows, cols
+    integer :: i, brain_row
+    
+    do i = 1, size(side_meta_inputter)
+        brain_row = meta_input_offset + i - 1
+        if (brain_row >= 1 .and. brain_row <= rows) then
+            if (side_meta_inputter(i)%value /= low) then
+                brain(brain_row, cols)%value = side_meta_inputter(i)%value
+                ! Direction 8 = West (going left)
+                incoming_direction(brain_row, cols, 1) = 8
+            end if
+        end if
+    end do
+end subroutine apply_meta_input_to_brain
+
+subroutine copy_overflow_from_brain_left_column(brain, overflow_offset, rows)
+    ! Capture overflow from leftmost column at variable position (like output vector)
+    type(trinary), allocatable :: brain(:,:)
+    integer, intent(in) :: overflow_offset, rows
+    integer :: i, brain_row
+    
+    ! Backup previous overflow state
+    backup_overflow = overflow_outputter
+    
+    do i = 1, size(overflow_outputter)
+        brain_row = overflow_offset + i - 1
+        if (brain_row >= 1 .and. brain_row <= rows) then
+            overflow_outputter(i)%value = brain(brain_row, 1)%value
+        end if
+    end do
+end subroutine copy_overflow_from_brain_left_column
+
+! ============================================================
+! PRESSURE CALCULATION (Phase 3)
+! ============================================================
+
+function calculate_brain_activity(brain, rows, cols) result(activity)
+    ! Sum all trinary cell values (0, 1, or 2)
+    type(trinary), allocatable :: brain(:,:)
+    integer, intent(in) :: rows, cols
+    integer :: activity, i, j
+    
+    activity = 0
+    do i = 1, rows
+        do j = 1, cols
+            activity = activity + brain(i, j)%value
+        end do
+    end do
+end function calculate_brain_activity
+
+function calculate_brain_pressure(brain, rows, cols) result(pressure)
+    ! Pressure = activity / max_activity (range: 0.0 to 1.0)
+    type(trinary), allocatable :: brain(:,:)
+    integer, intent(in) :: rows, cols
+    real :: pressure
+    integer :: activity, max_activity
+    
+    activity = calculate_brain_activity(brain, rows, cols)
+    max_activity = rows * cols * 2  ! All cells at HIGH = 2
+    pressure = real(activity) / real(max_activity)
+end function calculate_brain_pressure
+
+function calculate_leftward_pull(pressure) result(leftward_multiplier)
+    ! Valve 2: Leftward bias increases with pressure
+    real, intent(in) :: pressure
+    real :: leftward_multiplier
+    
+    if (pressure < 0.5) then
+        leftward_multiplier = 1.0  ! No pull - drain closed
+    else if (pressure < 0.7) then
+        ! Gradual increase: 1.0 → 2.0 as pressure goes 0.5 → 0.7
+        leftward_multiplier = 1.0 + (pressure - 0.5) / 0.2 * 1.0
+    else
+        leftward_multiplier = 2.0  ! Strong pull - drain wide open
+    end if
+end function calculate_leftward_pull
+
+function get_overflow_activity() result(activity)
+    ! Return total activity in overflow_outputter
+    integer :: activity, i
+    activity = 0
+    if (allocated(overflow_outputter)) then
+        do i = 1, size(overflow_outputter)
+            activity = activity + overflow_outputter(i)%value
+        end do
+    end if
+end function get_overflow_activity
+
+subroutine set_side_meta_input(values)
+    ! Copy values from external array into side_meta_inputter
+    type(trinary), intent(in) :: values(:)
+    integer :: i, n
+    n = min(size(values), size(side_meta_inputter))
+    do i = 1, n
+        side_meta_inputter(i)%value = values(i)%value
+    end do
+end subroutine set_side_meta_input
+
+subroutine apply_throttled_meta_input(brain, incoming_direction, pressure, &
+                                       meta_input_offset, rows, cols)
+    ! Valve 1: Throttle meta-brain input based on pressure
+    type(trinary), allocatable :: brain(:,:)
+    integer, allocatable :: incoming_direction(:,:,:)
+    real, intent(in) :: pressure
+    integer, intent(in) :: meta_input_offset, rows, cols
+    real :: flow_rate, rand_val
+    integer :: i, brain_row
+    
+    ! Calculate flow rate based on pressure
+    if (pressure < 0.3) then
+        flow_rate = 1.0  ! Full flow
+    else if (pressure < 0.6) then
+        flow_rate = 1.0 - (pressure - 0.3) / 0.3  ! Linear throttle
+    else
+        flow_rate = 0.0  ! Cut off
+    end if
+    
+    ! Apply meta_inputter with probability = flow_rate
+    do i = 1, size(side_meta_inputter)
+        brain_row = meta_input_offset + i - 1
+        if (brain_row >= 1 .and. brain_row <= rows) then
+            if (side_meta_inputter(i)%value /= low) then
+                call random_number(rand_val)
+                if (rand_val < flow_rate) then
+                    brain(brain_row, cols)%value = side_meta_inputter(i)%value
+                    incoming_direction(brain_row, cols, 1) = 8  ! From West
+                end if
+            end if
+        end if
+    end do
+end subroutine apply_throttled_meta_input
 
 
 end module brain_module

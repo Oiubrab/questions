@@ -1,5 +1,6 @@
 program cat_mouse_learning
     use trinary_module
+    use brain_module
     use brain_engine_module
     use synapses_module
     use vision_simulation_module
@@ -12,6 +13,11 @@ program cat_mouse_learning
     integer, allocatable :: incoming_direction(:,:,:)  ! Track up to 2 incoming directions per neuron
     integer :: rows, cols, input_length, output_length
     integer :: input_offset, output_offset
+    
+    ! Cross-flow architecture: side I/O parameters
+    integer :: meta_input_offset, meta_input_map_length  ! Right column meta-brain input
+    integer :: overflow_offset, overflow_map_length      ! Left column overflow output
+    real :: brain_pressure  ! Pressure regulation
     
     ! Secondary "Meta-Learning" Brain system
     type(trinary), allocatable :: meta_brain(:,:), meta_inputter(:), meta_outputter(:)
@@ -82,6 +88,12 @@ program cat_mouse_learning
     ! Output accumulation across brain steps within a Bar
     type(trinary), allocatable :: accumulated_output(:), accumulated_meta_output(:)
     character(len=100) :: csv_filename
+    
+    ! Cross-flow tracking
+    integer :: overflow_activity, cumulative_overflow
+    
+    ! Meta-brain energy diagnostic
+    integer :: meta_input_energy, meta_brain_energy, meta_output_energy
     
     ! Random seed variables
     integer :: seed_size, clock
@@ -161,9 +173,19 @@ program cat_mouse_learning
                                  incoming_direction, rows, cols, input_length, output_length, &
                                  input_offset, output_offset)
     
-    ! Initialize meta-brain system (7x7 brain, 5-element input/output) using brain engine
-    meta_rows = 7
-    meta_cols = 7
+    ! Initialize cross-flow side I/O (meta-brain feeds into right column)
+    ! Map meta-brain's 5-element output to rows 2-6 of the 6-row brain
+    meta_input_offset = 2
+    meta_input_map_length = 5
+    overflow_offset = 2
+    overflow_map_length = 4
+    call initialize_side_io(rows, meta_input_map_length, overflow_map_length)
+    cumulative_overflow = 0
+    
+    ! Initialize meta-brain system (3x5 brain - SMALLER for faster propagation)
+    ! With 12 steps/bar, energy can propagate 2 rows in 2 steps, reaching output easily
+    meta_rows = 3
+    meta_cols = 5
     meta_input_length = 5
     meta_output_length = 5
     call initialize_brain_system(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
@@ -282,7 +304,7 @@ program cat_mouse_learning
     ! Open CSV file for logging
     csv_filename = 'simulation_log.csv'
     open(newunit=csv_unit, file=csv_filename, status='replace', action='write')
-    write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist,catches'
+    write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist,catches,pressure,overflow'
     
     print *, "=== CAT & MOUSE CONTINUOUS HUNTING SIMULATION ==="
     print *, "Max Bars (real-world steps):", max_bars
@@ -382,6 +404,11 @@ program cat_mouse_learning
         call reset_synapse_usage(synapse_usage, rows, cols)
         call reset_synapse_usage(meta_synapse_usage, meta_rows, meta_cols)
         
+        ! Clear accumulated meta-output from previous bar
+        do i = 1, meta_output_length
+            call accumulated_meta_output(i)%set(low)
+        end do
+        
         ! Reset output accumulators for this Bar
         do i = 1, output_length
             call accumulated_output(i)%set(low)
@@ -393,6 +420,16 @@ program cat_mouse_learning
         ! Write vision input to inputter (will be copied to brain on first run_brain_cycle call)
         ! Note: inputter already updated by update_vision_input above
         ! Note: meta_inputter already updated by rate encoding above
+        
+        ! ============================================================
+        ! CROSS-FLOW ARCHITECTURE: Apply meta-brain output to right column
+        ! Copy accumulated meta_outputter from previous bar to side_meta_inputter module variable
+        ! Then apply with throttling based on pressure from PREVIOUS bar
+        ! ============================================================
+        call set_side_meta_input(accumulated_meta_output)
+        ! Apply throttled meta-input to primary brain's right column
+        call apply_throttled_meta_input(brain, incoming_direction, brain_pressure, &
+                                        meta_input_offset, rows, cols)
         
         ! Run brain processing: steps_per_bar iterations
         do brain_step = 1, steps_per_bar
@@ -408,10 +445,15 @@ program cat_mouse_learning
                 end if
             end do
             
-            ! Run ONE propagation step for meta-brain (copies input, clears output, propagates, clears input)
-            call run_brain_cycle(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
-                                meta_synapse_usage, meta_incoming_direction, meta_rows, meta_cols, &
-                                1, 1, meta_output_length)
+            ! Run ONE propagation step for meta-brain (SIMPLE - no pressure/cross-flow effects)
+            ! Meta-brain uses traditional pass-through architecture without pressure buildup
+            ! Run TWICE per primary brain step to ensure energy reaches output (14 rows distance)
+            call run_brain_cycle_simple(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
+                                        meta_synapse_usage, meta_incoming_direction, meta_rows, meta_cols, &
+                                        1, 1, meta_output_length)
+            call run_brain_cycle_simple(meta_brain, meta_inputter, meta_outputter, meta_synapses, &
+                                        meta_synapse_usage, meta_incoming_direction, meta_rows, meta_cols, &
+                                        1, 1, meta_output_length)
             
             ! Accumulate meta-brain output from this step
             do i = 1, meta_output_length
@@ -428,6 +470,40 @@ program cat_mouse_learning
         do i = 1, meta_output_length
             call meta_outputter(i)%set(accumulated_meta_output(i)%get())
         end do
+        
+        ! ============================================================
+        ! CROSS-FLOW ARCHITECTURE: Calculate pressure AFTER processing
+        ! ============================================================
+        brain_pressure = calculate_brain_pressure(brain, rows, cols)
+        
+        ! ============================================================
+        ! META-BRAIN ENERGY DIAGNOSTIC (every 1000 bars)
+        ! ============================================================
+        if (mod(bar, 1000) == 0) then
+            meta_input_energy = 0
+            do i = 1, meta_input_length
+                meta_input_energy = meta_input_energy + meta_inputter(i)%get()
+            end do
+            meta_brain_energy = 0
+            do i = 1, meta_rows
+                do j = 1, meta_cols
+                    meta_brain_energy = meta_brain_energy + meta_brain(i, j)%get()
+                end do
+            end do
+            meta_output_energy = 0
+            do i = 1, meta_output_length
+                meta_output_energy = meta_output_energy + meta_outputter(i)%get()
+            end do
+            print *, "BAR", bar, "META ENERGY: input=", meta_input_energy, " brain=", meta_brain_energy, &
+                     " output=", meta_output_energy, " rate_counter=", rate_counter
+        end if
+        
+        ! ============================================================
+        ! CROSS-FLOW ARCHITECTURE: Capture overflow from left column
+        ! ============================================================
+        call copy_overflow_from_brain_left_column(brain, overflow_offset, rows)
+        overflow_activity = get_overflow_activity()
+        cumulative_overflow = cumulative_overflow + overflow_activity
         
         ! META-BRAIN STRATEGY REINFORCEMENT SYSTEM
         ! Meta-brain learns to trigger broad strategy reinforcement based on catch rate performance
@@ -475,15 +551,29 @@ program cat_mouse_learning
             end do
             
             ! REWARD META-BRAIN for triggering successful strategy reinforcement
-            ! Meta-brain gets rewarded proportional to current catch rate
+            ! Extra reward when catch rate is high AND strategy reinforcement triggers
             do k = 1, rate_counter  ! More catches = more meta-brain reinforcement
                 call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
             end do
         end if
         
-        ! PUNISH META-BRAIN if catch rate is low despite high activity
-        if (rate_counter <= 1 .and. (meta_outputter(1)%get() > 0 .or. meta_outputter(2)%get() > 0)) then
-            ! Meta-brain is trying to apply reinforcement but catch rate is low - discourage this
+        ! ============================================================
+        ! META-BRAIN INPUT-BASED REWARD (EVERY BAR)
+        ! Reward meta-brain when catches are happening, punish when not
+        ! SCALED reward (not proportional) to prevent saturation
+        ! ============================================================
+        if (rate_counter >= 3) then
+            ! Good catch rate - reward meta-brain moderately
+            ! Fixed reward (not proportional) to avoid saturation
+            do k = 1, 2  ! 2 reinforcements regardless of exact rate_counter value
+                call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+            end do
+        else if (rate_counter >= 1) then
+            ! Some catches - small reward
+            call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
+        else
+            ! No catches recently - punish meta-brain pathways that are active
+            ! This prevents meta-brain from settling into ineffective states
             call apply_adaptive_punishment(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
         end if
         
@@ -751,11 +841,12 @@ program cat_mouse_learning
         end if
         
         ! Log to CSV
-        write(csv_unit, '(I0,10(A,I0))') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
+        write(csv_unit, '(I0,10(A,I0),A,F0.4,A,I0)') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
                                         ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
                                         ',', output_action, ',', brain_energy, &
                                         ',', output_energy, ',', output_action, &
-                                        ',', move_distance, ',', catches_count
+                                        ',', move_distance, ',', catches_count, &
+                                        ',', brain_pressure, ',', overflow_activity
         
         ! Periodic snapshots
         if (mod(bar, snapshot_interval) == 0) then
@@ -838,6 +929,13 @@ program cat_mouse_learning
     end do
     
     close(csv_unit)
+    
+    ! DEBUG: Print final pressure before saving brain state
+    print *, "=== FINAL PRESSURE DEBUG ==="
+    print *, "Activity:", calculate_brain_activity(brain, rows, cols)
+    print *, "Max activity:", rows * cols * 2
+    print *, "Pressure:", calculate_brain_pressure(brain, rows, cols)
+    print *, "=========================="
     
     ! Save final brain state for visualization
     open(newunit=csv_unit, file='brain_state.csv', status='replace', action='write')

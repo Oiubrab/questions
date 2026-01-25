@@ -86,4 +86,40 @@ contains
         
     end subroutine run_brain_cycle
     
+    ! Simple brain cycle without cross-flow/pressure effects (for meta-brain)
+    ! Same as run_brain_cycle but explicitly passes pressure=0.0 to disable
+    ! leftward pull, vertical multipliers, and valve effects
+    subroutine run_brain_cycle_simple(brain, inputter, outputter, synapses, synapse_usage, &
+                                      incoming_direction, rows, cols, input_offset, output_offset, &
+                                      output_length)
+        type(trinary), allocatable, intent(inout) :: brain(:,:)
+        type(trinary), allocatable, intent(inout) :: inputter(:)
+        type(trinary), allocatable, intent(inout) :: outputter(:)
+        integer, allocatable, intent(inout) :: synapses(:,:,:,:)
+        logical, allocatable, intent(inout) :: synapse_usage(:,:,:,:)
+        integer, allocatable, intent(inout) :: incoming_direction(:,:,:)
+        integer, intent(in) :: rows, cols, input_offset, output_offset, output_length
+        integer :: i
+        
+        ! Step 1: Copy input to brain top row
+        call copy_non_low_to_brain_top_row(inputter, brain, incoming_direction, input_offset, size(brain, 2))
+        
+        ! Step 2: Clear output - set all to LOW
+        do i = 1, size(outputter)
+            call outputter(i)%set(low)
+        end do
+        
+        ! Step 3: Run ONE propagation step WITHOUT pressure effects (pressure=0.0)
+        call update_brain_state_based_on_synapses(brain, synapses, outputter, &
+                                                   synapse_usage, incoming_direction, &
+                                                   rows, cols, output_offset, output_offset, &
+                                                   output_length, pressure=0.0)
+        
+        ! Step 4: Clear input - subsequent calls within Bar will have no new input
+        do i = 1, size(inputter)
+            call inputter(i)%set(low)
+        end do
+        
+    end subroutine run_brain_cycle_simple
+    
 end module brain_engine_module
