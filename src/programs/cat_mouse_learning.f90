@@ -106,10 +106,16 @@ program cat_mouse_learning
     character(len=256) :: weight_file
     integer :: weight_unit
     
+    ! Output directory functionality
+    character(len=512) :: output_dir
+    character(len=512) :: full_path
+    integer :: arg_idx
+    
     ! Get seed from command line if provided, otherwise use system clock
     load_weights = .false.
     disable_direct_rewards = .false.
     weight_file = ''
+    output_dir = ''  ! Default: save to current directory
     
     if (command_argument_count() > 0) then
         call get_command_argument(1, arg)
@@ -118,28 +124,30 @@ program cat_mouse_learning
         call system_clock(count=user_seed)
     end if
     
-    ! Check for --load-weights flag
-    if (command_argument_count() >= 3) then
-        call get_command_argument(2, arg)
+    ! Parse optional flags (can appear in any order after seed)
+    arg_idx = 2
+    do while (arg_idx <= command_argument_count())
+        call get_command_argument(arg_idx, arg)
+        
         if (trim(arg) == '--load-weights') then
             load_weights = .true.
-            call get_command_argument(3, weight_file)
-        end if
-    end if
-    
-    ! Check for --no-direct-rewards flag
-    if (command_argument_count() >= 2) then
-        call get_command_argument(2, arg)
-        if (trim(arg) == '--no-direct-rewards') then
+            arg_idx = arg_idx + 1
+            call get_command_argument(arg_idx, weight_file)
+        else if (trim(arg) == '--no-direct-rewards') then
             disable_direct_rewards = .true.
+        else if (trim(arg) == '--output-dir') then
+            arg_idx = arg_idx + 1
+            call get_command_argument(arg_idx, output_dir)
+            ! Ensure output_dir ends with /
+            if (len_trim(output_dir) > 0) then
+                if (output_dir(len_trim(output_dir):len_trim(output_dir)) /= '/') then
+                    output_dir = trim(output_dir) // '/'
+                end if
+            end if
         end if
-    end if
-    if (command_argument_count() >= 4) then
-        call get_command_argument(4, arg)
-        if (trim(arg) == '--no-direct-rewards') then
-            disable_direct_rewards = .true.
-        end if
-    end if
+        
+        arg_idx = arg_idx + 1
+    end do
     
     ! Parameters
     rows = 6
@@ -301,8 +309,8 @@ program cat_mouse_learning
     moves_away_this_epoch = 0
     moves_perpendicular_this_epoch = 0
     
-    ! Open CSV file for logging
-    csv_filename = 'simulation_log.csv'
+    ! Open CSV file for logging (use output_dir if specified)
+    csv_filename = trim(output_dir) // 'simulation_log.csv'
     open(newunit=csv_unit, file=csv_filename, status='replace', action='write')
     write(csv_unit, '(A)') 'bar,mouse_x,mouse_y,cat_x,cat_y,vision_slice,brain_energy,output_energy,output_action,move_dist,catches,pressure,overflow'
     
@@ -938,7 +946,8 @@ program cat_mouse_learning
     print *, "=========================="
     
     ! Save final brain state for visualization
-    open(newunit=csv_unit, file='brain_state.csv', status='replace', action='write')
+    full_path = trim(output_dir) // 'brain_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
     write(csv_unit, '(A)') 'row,col,state'
     do i = 1, rows
         do j = 1, cols
@@ -948,7 +957,8 @@ program cat_mouse_learning
     close(csv_unit)
     
     ! Save final inputter state for visualization
-    open(newunit=csv_unit, file='inputter_state.csv', status='replace', action='write')
+    full_path = trim(output_dir) // 'inputter_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
     write(csv_unit, '(A)') 'col,state'
     do j = 1, input_length
         write(csv_unit, '(I0,A,I0)') input_offset + j - 1, ',', inputter(j)%get()
@@ -956,7 +966,8 @@ program cat_mouse_learning
     close(csv_unit)
     
     ! Save final outputter state for visualization
-    open(newunit=csv_unit, file='outputter_state.csv', status='replace', action='write')
+    full_path = trim(output_dir) // 'outputter_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
     write(csv_unit, '(A)') 'col,state'
     do j = 1, output_length
         write(csv_unit, '(I0,A,I0)') output_offset + j - 1, ',', outputter(j)%get()
@@ -966,7 +977,8 @@ program cat_mouse_learning
     ! Save final synapse strengths for visualization
     ! Note: Now 4D (incoming_dir, outgoing_dir), so we'll aggregate for visualization
     ! Save maximum strength across all incoming directions for each connection
-    open(newunit=csv_unit, file='synapse_state.csv', status='replace', action='write')
+    full_path = trim(output_dir) // 'synapse_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
     write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength,dominant_incoming_dir'
     do i = 1, rows
         do j = 1, cols
@@ -1058,11 +1070,11 @@ program cat_mouse_learning
     end if
     print *
     print *, "Results saved to:", trim(csv_filename)
-    print *, "Brain state saved to: brain_state.csv"
-    print *, "Synapse state saved to: synapse_state.csv"
+    print *, "Brain state saved to:", trim(output_dir) // "brain_state.csv"
+    print *, "Synapse state saved to:", trim(output_dir) // "synapse_state.csv"
     
-    ! Save binary weight file for potential loading
-    write(weight_file, '(A,I0,A)') 'weights_seed', user_seed, '.bin'
+    ! Save binary weight file for potential loading (use output_dir if specified)
+    write(weight_file, '(A,A,I0,A)') trim(output_dir), 'weights_seed', user_seed, '.bin'
     open(newunit=weight_unit, file=weight_file, status='replace', action='write', form='unformatted')
     write(weight_unit) synapses
     write(weight_unit) meta_synapses
