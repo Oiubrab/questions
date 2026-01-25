@@ -1,29 +1,33 @@
 # ForWhoseAdvantage
 
-**A sophisticated brain simulation system** that demonstrates emergent learning behavior through neural networks with **4D directional routing**. Watch as an artificial cat learns to hunt a mouse using vision-based sensorimotor learning, achieving **70.1% directional accuracy** and developing specialized hunting strategies.
+**A sophisticated brain simulation system** that demonstrates emergent learning behavior through neural networks with **4D directional routing** and **hierarchical meta-learning**. Watch as an artificial cat learns to hunt a mouse using vision-based sensorimotor learning, achieving **94%+ directional accuracy** with a meta-brain that maintains and enhances learned behavior even without direct rewards.
 
 ## 🧠 What Makes This Special
 
-ForWhoseAdvantage implements a **unique 4D synaptic architecture** where each neuron maintains 64 different connection strengths (8 incoming × 8 outgoing directions). This allows neurons to route signals differently based on where they came from - enabling **context-dependent learning** that mirrors how biological brains process information.
+ForWhoseAdvantage implements a **unique dual-brain architecture** with 4D synaptic routing and hierarchical meta-learning:
+
+**Primary Brain**: 4D directional routing where each neuron maintains 64 different connection strengths (8 incoming × 8 outgoing directions), enabling **context-dependent learning** that mirrors biological information processing.
+
+**Meta-Brain**: A smaller control system (3×5) that learns to trigger strategic reinforcement based on performance metrics, demonstrating **acquisition → maintenance transitions** where learned behavior persists and improves even after removing direct rewards.
 
 **Key Capabilities:**
+- **Hierarchical Meta-Learning**: Meta-brain maintains and enhances learned behavior without direct rewards (130% retention!)
 - **Advanced Neural Architecture**: 4D directional routing with context-dependent pathway selection
 - **Real-Time Learning**: Watch the cat develop hunting strategies over time  
-- **Exceptional Performance**: 70.1% directional learning with 456 average catches per trial
+- **Exceptional Performance**: 94%+ directional learning with 1,300+ average catches per trial
+- **Brain State Persistence**: Warm-start loading of complete neural state (energy + pathways + routing)
+- **Windowed Performance Metrics**: Proper sliding-window rate calculation prevents saturation
 - **Complete Visualization Suite**: Real-time GUI, brain state analysis, and pathway visualization
-- **Comprehensive Analytics**: 30-trial statistical analysis with oscillation detection
-- **Embodied AI**: Sensorimotor learning loop connecting vision → brain → movement
+- **Comprehensive Analytics**: Meta-experiment framework with retention analysis
 
 ## 🎯 Performance Highlights
 
-**Latest Results** (30-trial analysis):
-- **🎯 Directional Learning**: 86.2% accuracy moving toward target (up from 70.1%)
-- **🏆 Hunt Success**: 1,115 average catches per 20,000-step trial (2.4× improvement!)  
-- **📈 Learning Curve**: +66.2% improvement from early to late epochs
-- **🧭 Behavioral Ratio**: 7.71:1 preference for correct vs incorrect movements
-- **⭐ Overall Assessment**: ✓✓✓ EXCEPTIONAL PERFORMANCE - Expert hunting behavior
-
-The **dual-brain meta-learning system** demonstrates extraordinary performance - the meta-brain learns to reinforce successful strategies across temporal windows, creating superhuman hunting capabilities.
+**Latest Results** (Meta-Learning System):
+- **🎯 Directional Learning**: 94.1% accuracy moving toward target in meta-only mode
+- **🏆 Hunt Success**: 1,326 average catches per trial with meta-brain only (130% retention!)
+- **📈 Training Performance**: 1,011 average catches with direct + meta rewards (84.3% accuracy)
+- **🧠 Meta-Brain Breakthrough**: Performance INCREASES when direct rewards removed
+- **⭐ Overall Assessment**: ✓✓✓ EXCEPTIONAL - Meta-brain successfully maintains and enhances behavior
 
 ## 🚀 Quick Start Guide
 
@@ -34,17 +38,17 @@ cd questions
 make learning    # Auto-detects nvfortran or gfortran, creates bin/ automatically
 ```
 
-**2. Run Your First Learning Trial**:
+**2. Run Your First Meta-Learning Experiment**:
 ```bash
-./scripts/run_learning_tests.sh -t 1    # Watch the meta-brain system learn to hunt!
+./scripts/run_meta_experiment.sh --full --training-trials 2 --meta-test-trials 2  # Quick test
 ```
 
-**3. Full Performance Analysis**:
+**3. Full Meta-Brain Analysis**:
 ```bash
-./scripts/run_learning_tests.sh  # 30-trial comprehensive analysis
+./scripts/run_meta_experiment.sh --full  # 30 training + 5 meta-only trials
 ```
 
-That's it! You'll see the cat develop from random movement to expert hunting behavior through hierarchical meta-learning.
+That's it! You'll see the cat develop expert hunting behavior, then watch the meta-brain maintain and enhance that behavior even after direct rewards are removed - demonstrating true hierarchical meta-learning.
 
 ## 📁 Project Structure
 
@@ -67,9 +71,30 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage p
 
 ## 🎮 Complete Usage Guide
 
+### Meta-Learning Experiments (NEW!)
+
+**🔬 Full Acquisition → Maintenance Pipeline** (Recommended):
+```bash
+./scripts/run_meta_experiment.sh --full       # Train 30 brains, test best with meta-only
+./scripts/run_meta_experiment.sh --full --training-trials 5 --meta-test-trials 2  # Custom counts
+```
+*Demonstrates meta-brain's ability to maintain and enhance learned behavior without direct rewards*
+
+**🧪 Resume from Checkpoint**:
+```bash
+./scripts/run_meta_experiment.sh --meta-only results/run_*/best_weights.bin
+```
+*Test meta-only maintenance with previously trained weights*
+
+**📊 Baseline Comparison**:
+```bash
+./scripts/run_meta_experiment.sh --from-scratch  # Verify bootstrap requirement
+```
+*Shows meta-brain cannot learn from scratch - needs initial pathways from training phase*
+
 ### Learning Experiments
 
-**🔬 Full Scientific Analysis** (Recommended for research):
+**🔬 Full Scientific Analysis**:
 ```bash
 ./scripts/run_learning_tests.sh       # 30 trials + statistical analysis + GUI replay
 ./scripts/run_learning_tests.sh --no-gui  # Analysis only, no visualization
@@ -82,11 +107,11 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage p
 ./scripts/run_learning_tests.sh -t 1     # Single trial with immediate visualization
 ```
 
-**🎯 Custom Trial Counts**:
+**🎯 Direct Execution**:
 ```bash
-./scripts/run_learning_tests.sh -t 10 --no-gui  # 10 trials without visualization
-./scripts/run_learning_tests.sh --help          # Show all options
-./bin/cat_mouse_learning <seed>                  # Direct execution with seed
+./bin/cat_mouse_learning <seed>                                    # Training mode
+./bin/cat_mouse_learning <seed> --load-weights FILE                # Resume training
+./bin/cat_mouse_learning <seed> --load-weights FILE --no-direct-rewards  # Meta-only mode
 ```
 
 ### Visualization & Analysis

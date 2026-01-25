@@ -26,10 +26,12 @@ program cat_mouse_learning
     integer, allocatable :: meta_incoming_direction(:,:,:)
     integer :: meta_rows, meta_cols, meta_input_length, meta_output_length
     
-    ! Meta-brain catch rate tracking
-    integer :: rate_counter  ! d(catches)/dt counter
-    integer :: rate_decay_timer  ! Counts up to 60 bars for decay
-    integer, parameter :: rate_decay_interval = 60  ! Bars between decay events
+    ! Meta-brain catch rate tracking (proper sliding window)
+    integer :: rate_counter  ! Number of catches in recent window
+    integer, parameter :: rate_window_size = 200  ! Bars to look back for rate calculation
+    integer, parameter :: max_catches_in_window = 200  ! Max catches we can track
+    integer :: catch_timestamps(200)  ! Circular buffer of bar numbers when catches occurred
+    integer :: catch_buffer_head, catch_buffer_count  ! Head index and count in buffer
     
     ! Vision system
     type(position) :: cat_pos, mouse_pos
@@ -43,7 +45,7 @@ program cat_mouse_learning
     integer :: bar, max_bars, snapshot_interval, mouse_move_interval
     integer :: brain_step, steps_per_bar
     integer :: i, j, k, ni, nj, brain_energy, output_energy
-    integer :: output_action, move_distance
+    integer :: output_action, move_distance, vision_slice
     real :: new_x, new_y
     
     ! Reinforcement tracking
@@ -201,9 +203,11 @@ program cat_mouse_learning
                                  meta_rows, meta_cols, meta_input_length, meta_output_length, &
                                  1, 1)  ! Meta-brain uses offset 1 for both input and output
     
-    ! Initialize rate counter and timer
+    ! Initialize rate counter and sliding window
     rate_counter = 0
-    rate_decay_timer = 0
+    catch_buffer_head = 1
+    catch_buffer_count = 0
+    catch_timestamps(:) = -rate_window_size  ! Initialize to ancient past
     
     ! Initialize output accumulators
     allocate(accumulated_output(output_length))
@@ -234,8 +238,17 @@ program cat_mouse_learning
         open(newunit=weight_unit, file=weight_file, status='old', action='read', form='unformatted')
         read(weight_unit) synapses
         read(weight_unit) meta_synapses
+        ! Load brain state (energy levels and incoming directions) for warm start
+        read(weight_unit) brain
+        read(weight_unit) incoming_direction
+        read(weight_unit) meta_brain
+        read(weight_unit) meta_incoming_direction
+        ! Load synapse history (for strategic reinforcement lookback)
+        read(weight_unit) synapse_history
+        read(weight_unit) history_write_index
         close(weight_unit)
-        print *, "Weights loaded successfully"
+        print *, "System state loaded (warm brain + history)"
+        print *, "  Initial brain energy:", sum(brain(:,:)%value)
         if (disable_direct_rewards) then
             print *, "Direct rewards DISABLED - using meta-brain only"
         end if
@@ -341,12 +354,14 @@ program cat_mouse_learning
             moves_perpendicular_this_epoch = 0
         end if
         
-        ! Update rate decay timer and decrement counter every 60 bars
-        rate_decay_timer = rate_decay_timer + 1
-        if (rate_decay_timer >= rate_decay_interval) then
-            rate_counter = max(0, rate_counter - 1)
-            rate_decay_timer = 0
-        end if
+        ! Calculate rate_counter as windowed catch count
+        ! Count how many catches happened in last rate_window_size bars
+        rate_counter = 0
+        do i = 1, catch_buffer_count
+            if (bar - catch_timestamps(i) <= rate_window_size) then
+                rate_counter = rate_counter + 1
+            end if
+        end do
         
         ! Encode rate_counter into meta_inputter (positional encoding)
         ! Rate 1-5: Single MEDIUM at positions 5,4,3,2,1 (right to left)
@@ -400,10 +415,10 @@ program cat_mouse_learning
         call update_vision_input(inputter, cat_pos, mouse_pos, num_vision_slices)
         
         ! Determine which vision slice is active
-        output_action = 0
+        vision_slice = 0
         do i = 1, input_length
             if (inputter(i)%get() > 0) then
-                output_action = i
+                vision_slice = i
                 exit
             end if
         end do
@@ -537,7 +552,9 @@ program cat_mouse_learning
         nj = max(1, meta_outputter(3)%get())               ! Selectivity (not used yet, for future)
         
         ! Apply meta-brain controlled strategy reinforcement if catch rate is high
-        if (rate_counter >= 3) then  ! Only when cat has caught multiple mice recently
+        ! In meta-only mode, use lower threshold (1+) to maintain pathways
+        ! In training mode, use higher threshold (3+) to require good performance
+        if ((disable_direct_rewards .and. rate_counter >= 1) .or. rate_counter >= 3) then
             ! Reinforce primary brain strategies across the specified temporal scope
             do k = max(1, bar - brain_step), bar - 1  ! Look back 'brain_step' bars
                 ! Apply broad reinforcement to all synapses that were active in this historical period
@@ -591,9 +608,10 @@ program cat_mouse_learning
         else if (rate_counter >= 1) then
             ! Some catches - small reward
             call apply_adaptive_reinforcement(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
-        else
+        else if (.not. disable_direct_rewards) then
             ! No catches recently - punish meta-brain pathways that are active
             ! This prevents meta-brain from settling into ineffective states
+            ! BUT: Skip punishment in meta-only mode to preserve pre-trained pathways
             call apply_adaptive_punishment(meta_synapses, meta_synapse_usage, meta_rows, meta_cols, steps_per_bar)
         end if
         
@@ -674,8 +692,11 @@ program cat_mouse_learning
                     catches_count = catches_count + 1
                     catches_this_epoch = catches_this_epoch + 1
                     
-                    ! Increment rate counter for meta-brain
-                    rate_counter = rate_counter + 1
+                    ! Record catch timestamp in circular buffer for windowed rate calculation
+                    catch_timestamps(catch_buffer_head) = bar
+                    catch_buffer_head = catch_buffer_head + 1
+                    if (catch_buffer_head > max_catches_in_window) catch_buffer_head = 1
+                    if (catch_buffer_count < max_catches_in_window) catch_buffer_count = catch_buffer_count + 1
                     
                     print *, "CATCH #", catches_count, "at Bar", bar, "(distance:", closest_dist, ")"
                     
@@ -863,7 +884,7 @@ program cat_mouse_learning
         ! Log to CSV
         write(csv_unit, '(I0,10(A,I0),A,F0.4,A,I0)') bar, ',', nint(mouse_pos%x), ',', nint(mouse_pos%y), &
                                         ',', nint(cat_pos%x), ',', nint(cat_pos%y), &
-                                        ',', output_action, ',', brain_energy, &
+                                        ',', vision_slice, ',', brain_energy, &
                                         ',', output_energy, ',', output_action, &
                                         ',', move_distance, ',', catches_count, &
                                         ',', brain_pressure, ',', overflow_activity
@@ -1151,7 +1172,15 @@ program cat_mouse_learning
     open(newunit=weight_unit, file=weight_file, status='replace', action='write', form='unformatted')
     write(weight_unit) synapses
     write(weight_unit) meta_synapses
+    ! Save brain state (energy levels and incoming directions) for warm start
+    write(weight_unit) brain
+    write(weight_unit) incoming_direction
+    write(weight_unit) meta_brain
+    write(weight_unit) meta_incoming_direction
+    ! Save synapse history (for strategic reinforcement lookback)
+    write(weight_unit) synapse_history
+    write(weight_unit) history_write_index
     close(weight_unit)
-    print *, "Binary weights saved to:", trim(weight_file)
+    print *, "Binary weights + system state saved to:", trim(weight_file)
     
 end program cat_mouse_learning

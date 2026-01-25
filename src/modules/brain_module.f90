@@ -79,8 +79,6 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     integer :: i, j, k, index, incoming_dir, incoming_dir2
     real :: total_value, random_num, threshold
     real :: synapse_values(8)
-    real :: active_bias(8)  ! Context-dependent bias selection
-    real :: leftward_pull, vertical_mult, current_pressure
     integer :: ni, nj
     logical :: valid_move
     integer :: num_valid_directions
@@ -91,17 +89,6 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
     integer :: current_state, target_state
     integer :: buf_rows, buf_cols
     logical :: move_succeeded  ! Track if move actually happened for energy conservation
-
-    ! Set pressure (default to 0.0 if not provided)
-    if (present(pressure)) then
-        current_pressure = pressure
-    else
-        current_pressure = 0.0
-    end if
-    
-    ! Calculate pressure-based multipliers (Valve 2 and 3)
-    leftward_pull = calculate_leftward_pull(current_pressure)
-    vertical_mult = 1.0 + current_pressure * 1.0  ! 1.0 → 2.0
 
     ! Ensure reusable buffers are allocated for current size
     buf_rows = rows
@@ -124,12 +111,11 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
 
     ! Process each neuron - parallelized with atomic updates for write conflicts
     !$omp parallel do collapse(2) private(j, k, index, incoming_dir, incoming_dir2, &
-    !$omp& synapse_values, active_bias, ni, nj, valid_move, num_valid_directions, valid_indices, &
+    !$omp& synapse_values, ni, nj, valid_move, num_valid_directions, valid_indices, &
     !$omp& valid_synapse_values, total_value, random_num, threshold, cumulative_prob, &
     !$omp& current_state, target_state, move_succeeded) &
     !$omp& shared(brain, brain_next, synapses, synapse_usage, incoming_direction, &
-    !$omp& incoming_direction_next, outputter, rows, cols, output_offset, output_length, &
-    !$omp& leftward_pull, vertical_mult) &
+    !$omp& incoming_direction_next, outputter, rows, cols, output_offset, output_length) &
     !$omp& if(rows*cols > 20)
     do i = 1, rows
         do j = 1, cols
@@ -141,26 +127,6 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                 
                 ! Skip if no incoming direction set (shouldn't happen for active neurons)
                 if (incoming_dir == 0) cycle
-                
-                ! ============================================================
-                ! CONTEXT-DEPENDENT BIAS SELECTION (Phase 2)
-                ! ============================================================
-                ! Select bias based on incoming direction to determine signal origin
-                if (incoming_dir == 6 .or. incoming_dir == 2 .or. incoming_dir == 7) then
-                    ! Vertical flow (from top): use vertical bias with pressure scaling
-                    active_bias = direction_bias * vertical_mult
-                else if (incoming_dir == 4 .or. incoming_dir == 8) then
-                    ! Horizontal flow (from right): use horizontal bias
-                    active_bias = horizontal_bias
-                else
-                    ! Diagonal incoming: default to vertical bias
-                    active_bias = direction_bias * vertical_mult
-                end if
-                
-                ! Apply leftward pull (Valve 2) - boosts leftward directions
-                active_bias(1) = active_bias(1) * leftward_pull  ! NW
-                active_bias(7) = active_bias(7) * leftward_pull  ! SW
-                active_bias(8) = active_bias(8) * leftward_pull  ! W
 
                 ! For MEDIUM neurons: use single incoming direction
                 ! For HIGH neurons: average the two incoming direction groups
@@ -197,9 +163,9 @@ subroutine update_brain_state_based_on_synapses(brain, synapses, outputter, syna
                         end if
                     end if
 
-                    ! Apply context-dependent bias if move is valid
+                    ! Apply bias if move is valid
                     if (valid_move) then
-                        synapse_values(k) = synapse_values(k) * active_bias(k)
+                        synapse_values(k) = synapse_values(k) * direction_bias(k)
                         if (synapse_values(k) > 0.0) then
                             num_valid_directions = num_valid_directions + 1
                         else

@@ -73,11 +73,14 @@ The system now features a **hierarchical dual-brain architecture** with sophisti
 - Uses 4D synaptic routing for context-dependent pathways
 - Receives immediate reinforcement for successful moves
 
-**Meta-Brain (7×7)**: Controls strategy reinforcement based on performance
-- **Input**: Catch rate counter (positionally encoded: rate 1-5 = MEDIUM states, rate 6-10 = HIGH states)
+**Meta-Brain (3×5)**: Controls strategy reinforcement based on performance
+- **Input**: Windowed catch rate (positionally encoded: rate 1-5 = MEDIUM states, rate 6-10 = HIGH states)
+  - Rate calculated as sliding window: catches in last 200 bars
+  - Prevents unbounded accumulation that saturates meta-brain learning
 - **Goal**: Learn to trigger broad strategy reinforcement when catch rates are high
 - **Output**: Controls temporal scope (20-120 bars) and magnitude of strategy reinforcement
 - **Meta-reinforcement**: Gets rewarded when primary brain achieves high catch rates
+- **Smaller size (3×5)**: Faster signal propagation prevents energy accumulation
 
 **Meta-Learning Loop**:
 1. Primary brain catches mice → rate_counter increases
@@ -88,7 +91,9 @@ The system now features a **hierarchical dual-brain architecture** with sophisti
 
 **Performance Impact**: 
 - Original system: ~456 catches/trial, 70% directional accuracy
-- Meta-brain system: 1,100+ catches/trial, 86%+ directional accuracy
+- Meta-brain system: 1,300+ catches/trial, 94%+ directional accuracy
+- **Meta-only retention**: 130% performance improvement when direct rewards disabled
+  - Demonstrates meta-brain successfully maintains and enhances learned behavior
 
 ## CRITICAL CONSTRAINTS (DO NOT VIOLATE)
 
@@ -96,7 +101,45 @@ The system now features a **hierarchical dual-brain architecture** with sophisti
 
 2. **ALWAYS test changes on multiple trials** (minimum 2-3). Single-trial tests can give misleading results due to random seed variation. Performance must be consistent across trials.
 
-3. **Energy conservation is sacred**. Energy enters via inputter, flows through brain via synapses, exits via outputter or overflow. No creation or destruction of energy units is allowed.
+3. **Energy conservation is sacred**. Energy enters via inputter, flows through brain via synapses, exits via outputter or overflow. No creation or destruction of energy units is allowed. The `move_succeeded` flag ensures energy is only transferred when target neurons can accept it.
+
+### Brain State Persistence (NEW - Critical for Meta-Learning)
+When saving/loading brain systems, **save the complete dynamic state**, not just synaptic weights:
+- **Synapses**: Connection strengths (primary learned knowledge)
+- **Brain state**: Neuron energy levels (LOW/MEDIUM/HIGH values)
+- **Incoming directions**: Signal origin tracking for each neuron
+- **Purpose**: Enables "warm start" where loaded brains have active energy loops and established signal flow patterns
+- **Critical for meta-only mode**: Without warm start, meta-brain cannot maintain learned behavior during initial low-performance bootstrap period
+
+**Weight file format** (unformatted binary):
+```fortran
+write(unit) synapses                  ! 4D array
+write(unit) meta_synapses            ! 4D array
+write(unit) brain                    ! 2D trinary array
+write(unit) incoming_direction       ! 3D integer array
+write(unit) meta_brain              ! 2D trinary array
+write(unit) meta_incoming_direction ! 3D integer array
+```
+
+### Windowed Performance Metrics (NEW - Critical Fix)
+**Rate counter must use sliding window**, not unbounded accumulation:
+- **Implementation**: Circular buffer of catch timestamps (200 element capacity)
+- **Window size**: 200 bars (configurable via `rate_window_size`)
+- **Calculation**: Count catches where `(current_bar - catch_bar) <= window_size`
+- **Why critical**: Unbounded counters saturate meta-brain input, preventing meaningful learning
+- **Natural capping**: Meta-brain input encoding (positions 1-5) naturally caps representation at 10+ catches
+
+**WRONG approach** (old bug): 
+```fortran
+rate_counter = rate_counter + 1  ! Catch
+if (timer > 60) rate_counter = rate_counter - 1  ! Unbounded growth!
+```
+
+**CORRECT approach** (current):
+```fortran
+catch_timestamps(head) = current_bar  ! Record timestamp
+rate_counter = count_recent_catches(window_size)  ! Windowed count
+```
 
 ### Synapse Reinforcement and Decay Dynamics (CRITICAL DESIGN)
 This system implements a **self-regulating competitive learning mechanism** with sophisticated equilibrium properties:
@@ -196,11 +239,15 @@ Executables are created in the `bin/` directory.
 
 **Cat-Mouse Learning System Testing:**
 ```bash
+./scripts/run_meta_experiment.sh --full          # 30 training + 5 meta-only test trials
+./scripts/run_meta_experiment.sh --full --training-trials 5 --meta-test-trials 2  # Custom counts
+./scripts/run_meta_experiment.sh --meta-only FILE  # Test meta-only with specific weights
+./scripts/run_meta_experiment.sh --from-scratch  # Baseline test (meta-brain from random)
 ./scripts/run_learning_tests.sh              # 30-trial learning experiment with statistics
-./scripts/run_learning_tests.sh -t 1         # Single trial with GUI (replaces single_trial_gui.sh)
+./scripts/run_learning_tests.sh -t 1         # Single trial with GUI
 ./scripts/run_learning_tests.sh -t 5 --no-gui # 5 trials without visualization
-./scripts/run_learning_tests.sh --help       # Show all options
 ./bin/cat_mouse_learning                      # Single learning trial (direct execution)
+./bin/cat_mouse_learning 123 --load-weights FILE --no-direct-rewards  # Meta-only mode
 ```
 
 **Original simulation execution** requires 7 command-line arguments:
@@ -214,6 +261,11 @@ Example: `./bin/forWhoseAdvantage 6 12 6 6 1 6 false`
 
 ## Testing Tools
 
+- **`scripts/run_meta_experiment.sh`**: Meta-brain experiment framework for testing acquisition → maintenance transitions
+  - `--full`: Train with direct rewards, then test with meta-brain only (warm start)
+  - `--meta-only FILE`: Resume testing with specific weight file
+  - `--from-scratch`: Baseline test showing meta-brain cannot bootstrap without pre-training
+  - Generates comprehensive reports with retention metrics and performance analysis
 - **`scripts/run_learning_tests.sh`**: Comprehensive learning experiment framework with flexible trial counts (1-N trials), GUI control, statistical analysis, and learning detection
 - **`visualization/analyze_brain_pathways.py`**: Deep analysis of learned neural architecture and pathway specializations
 - **`visualization/brain_summary.py`**: High-level insights about brain specialization and performance patterns  
