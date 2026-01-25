@@ -485,6 +485,18 @@ program cat_mouse_learning
         brain_pressure = calculate_brain_pressure(brain, rows, cols)
         
         ! ============================================================
+        ! BRAIN ENERGY DRAIN (Prevents saturation/accumulation)
+        ! ============================================================
+        ! Apply adaptive drain: stronger when pressure is high
+        ! Drain probability scales from 0% at pressure=0 to 10% at pressure=0.5+
+        ! This prevents runaway energy accumulation while preserving learned patterns
+        if (brain_pressure > 0.1) then
+            ! Calculate adaptive drain rate
+            dx = min(0.15, brain_pressure * 0.3)  ! 3% at p=0.1, 15% at p=0.5+
+            call drain_brain_energy(brain, incoming_direction, rows, cols, dx)
+        end if
+        
+        ! ============================================================
         ! META-BRAIN ENERGY DIAGNOSTIC (every 1000 bars)
         ! ============================================================
         if (mod(bar, 1000) == 0) then
@@ -1006,6 +1018,65 @@ program cat_mouse_learning
     end do
     close(csv_unit)
     
+    ! Save final meta-brain state for visualization
+    full_path = trim(output_dir) // 'meta_brain_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
+    write(csv_unit, '(A)') 'row,col,state'
+    do i = 1, meta_rows
+        do j = 1, meta_cols
+            write(csv_unit, '(I0,A,I0,A,I0)') i, ',', j, ',', meta_brain(i, j)%get()
+        end do
+    end do
+    close(csv_unit)
+    
+    ! Save final meta-inputter state for visualization
+    full_path = trim(output_dir) // 'meta_inputter_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
+    write(csv_unit, '(A)') 'col,state'
+    do j = 1, meta_input_length
+        write(csv_unit, '(I0,A,I0)') j, ',', meta_inputter(j)%get()
+    end do
+    close(csv_unit)
+    
+    ! Save final meta-outputter state for visualization
+    full_path = trim(output_dir) // 'meta_outputter_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
+    write(csv_unit, '(A)') 'col,state'
+    do j = 1, meta_output_length
+        write(csv_unit, '(I0,A,I0)') j, ',', meta_outputter(j)%get()
+    end do
+    close(csv_unit)
+    
+    ! Save final meta-synapse strengths for visualization
+    full_path = trim(output_dir) // 'meta_synapse_state.csv'
+    open(newunit=csv_unit, file=full_path, status='replace', action='write')
+    write(csv_unit, '(A)') 'from_row,from_col,to_row,to_col,strength,dominant_incoming_dir'
+    do i = 1, meta_rows
+        do j = 1, meta_cols
+            do k = 1, 8
+                ! Calculate target position for this direction
+                ni = i + move_directions(k, 1)
+                nj = j + move_directions(k, 2)
+                ! Only record valid synapses (within brain bounds or to output)
+                if ((ni >= 1 .and. ni <= meta_rows .and. nj >= 1 .and. nj <= meta_cols) .or. &
+                    (i == meta_rows .and. ni == meta_rows + 1)) then
+                    ! Find maximum strength across all incoming directions for this outgoing direction
+                    output_energy = 0  ! Reuse variable for max strength
+                    move_distance = 0  ! Reuse variable for dominant incoming direction
+                    do brain_step = 1, 8  ! Loop through incoming directions
+                        if (meta_synapses(i, j, brain_step, k) > output_energy) then
+                            output_energy = meta_synapses(i, j, brain_step, k)
+                            move_distance = brain_step  ! Track which incoming direction is dominant
+                        end if
+                    end do
+                    write(csv_unit, '(I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+                        i, ',', j, ',', ni, ',', nj, ',', output_energy, ',', move_distance
+                end if
+            end do
+        end do
+    end do
+    close(csv_unit)
+    
     ! Save final epoch if not already saved
     if (catches_this_epoch > 0 .or. moves_towards_this_epoch > 0) then
         epoch_catches(current_epoch) = catches_this_epoch
@@ -1072,6 +1143,8 @@ program cat_mouse_learning
     print *, "Results saved to:", trim(csv_filename)
     print *, "Brain state saved to:", trim(output_dir) // "brain_state.csv"
     print *, "Synapse state saved to:", trim(output_dir) // "synapse_state.csv"
+    print *, "Meta-brain state saved to:", trim(output_dir) // "meta_brain_state.csv"
+    print *, "Meta-synapse state saved to:", trim(output_dir) // "meta_synapse_state.csv"
     
     ! Save binary weight file for potential loading (use output_dir if specified)
     write(weight_file, '(A,A,I0,A)') trim(output_dir), 'weights_seed', user_seed, '.bin'

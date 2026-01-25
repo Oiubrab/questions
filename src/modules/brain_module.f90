@@ -442,14 +442,15 @@ end function calculate_brain_pressure
 
 function calculate_leftward_pull(pressure) result(leftward_multiplier)
     ! Valve 2: Leftward bias increases with pressure
+    ! Lower thresholds to start draining earlier and prevent energy accumulation
     real, intent(in) :: pressure
     real :: leftward_multiplier
     
-    if (pressure < 0.5) then
-        leftward_multiplier = 1.0  ! No pull - drain closed
-    else if (pressure < 0.7) then
-        ! Gradual increase: 1.0 → 2.0 as pressure goes 0.5 → 0.7
-        leftward_multiplier = 1.0 + (pressure - 0.5) / 0.2 * 1.0
+    if (pressure < 0.1) then
+        leftward_multiplier = 1.0  ! No pull - drain closed (very low pressure)
+    else if (pressure < 0.3) then
+        ! Gradual increase: 1.0 → 2.0 as pressure goes 0.1 → 0.3
+        leftward_multiplier = 1.0 + (pressure - 0.1) / 0.2 * 1.0
     else
         leftward_multiplier = 2.0  ! Strong pull - drain wide open
     end if
@@ -509,6 +510,44 @@ subroutine apply_throttled_meta_input(brain, incoming_direction, pressure, &
         end if
     end do
 end subroutine apply_throttled_meta_input
+
+! ============================================================
+! BRAIN ENERGY DRAIN (Prevents accumulation/saturation)
+! ============================================================
+! This subroutine probabilistically drains energy from the brain
+! to prevent runaway accumulation that blocks signal propagation.
+! 
+! The drain rate is adaptive: stronger when pressure is high,
+! gentler when pressure is low. This maintains a healthy energy
+! balance while preserving learned activation patterns.
+
+subroutine drain_brain_energy(brain, incoming_direction, rows, cols, drain_probability)
+    type(trinary), allocatable, intent(inout) :: brain(:,:)
+    integer, allocatable, intent(inout) :: incoming_direction(:,:,:)
+    integer, intent(in) :: rows, cols
+    real, intent(in) :: drain_probability
+    integer :: i, j
+    real :: rand_val
+    
+    do i = 1, rows
+        do j = 1, cols
+            if (brain(i, j)%value > low) then
+                call random_number(rand_val)
+                if (rand_val < drain_probability) then
+                    brain(i, j)%value = brain(i, j)%value - 1
+                    ! Clear incoming direction if now LOW
+                    if (brain(i, j)%value == low) then
+                        incoming_direction(i, j, 1) = 0
+                        incoming_direction(i, j, 2) = 0
+                    else if (brain(i, j)%value == medium) then
+                        ! Clear secondary incoming direction if now MEDIUM
+                        incoming_direction(i, j, 2) = 0
+                    end if
+                end if
+            end if
+        end do
+    end do
+end subroutine drain_brain_energy
 
 
 end module brain_module

@@ -14,6 +14,7 @@ TRAINING_TRIALS=30
 META_TEST_TRIALS=5
 SCRATCH_TEST_TRIALS=5
 RESULTS_BASE="results"
+SHOW_ANIMATION=0
 
 # Parse command line
 MODE=""
@@ -29,12 +30,14 @@ show_usage() {
     echo "  --training-trials N      Set number of training trials (default: 30)"
     echo "  --meta-test-trials N     Set number of meta-test trials (default: 5)"
     echo "  --scratch-test-trials N  Set number of from-scratch trials (default: 5)"
+    echo "  --animate                Show cat-mouse animation for best meta-only trial"
     echo "  --help                   Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 --full --training-trials 5 --meta-test-trials 2"
     echo "  $0 --meta-only results/run_20260102_063000/phase_1_full_reward/trial_01/weights_seed1.bin"
     echo "  $0 --from-scratch --scratch-test-trials 10"
+    echo "  $0 --full --animate  # With animation of best meta-only trial"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -63,6 +66,10 @@ while [[ $# -gt 0 ]]; do
         --scratch-test-trials)
             SCRATCH_TEST_TRIALS="$2"
             shift 2
+            ;;
+        --animate)
+            SHOW_ANIMATION=1
+            shift
             ;;
         --help)
             show_usage
@@ -122,6 +129,9 @@ if [ "$MODE" == "from-scratch" ]; then
         # Save stdout to results.txt
         echo "$output" > "$trial_dir/results.txt"
         
+        # Generate visualization for this trial
+        python3 "$WORKSPACE_ROOT/visualization/visualize_dual_brain.py" "$trial_dir" "$trial_dir/dual_brain_visualization.png" > /dev/null 2>&1
+        
         catches=$(echo "$output" | grep "Total mice caught:" | awk '{print $4}')
         towards=$(echo "$output" | grep "Moves TOWARDS" | grep -oP '\(\s*\K[0-9.]+' | head -1)
         away=$(echo "$output" | grep "Moves AWAY" | grep -oP '\(\s*\K[0-9.]+' | head -1)
@@ -170,6 +180,9 @@ if [ "$MODE" == "full" ]; then
         
         # Save stdout to results.txt
         echo "$output" > "$trial_dir/results.txt"
+        
+        # Generate visualization for this trial
+        python3 "$WORKSPACE_ROOT/visualization/visualize_dual_brain.py" "$trial_dir" "$trial_dir/dual_brain_visualization.png" > /dev/null 2>&1
         
         catches=$(echo "$output" | grep "Total mice caught:" | awk '{print $4}')
         towards=$(echo "$output" | grep "Moves TOWARDS" | grep -oP '\(\s*\K[0-9.]+' | head -1)
@@ -256,6 +269,9 @@ if [ "$MODE" == "full" ] || [ "$MODE" == "meta-only" ]; then
         
         # Save stdout to results.txt
         echo "$output" > "$trial_dir/results.txt"
+        
+        # Generate visualization for this trial
+        python3 "$WORKSPACE_ROOT/visualization/visualize_dual_brain.py" "$trial_dir" "$trial_dir/dual_brain_visualization.png" > /dev/null 2>&1
         
         catches=$(echo "$output" | grep "Total mice caught:" | awk '{print $4}')
         towards=$(echo "$output" | grep "Moves TOWARDS" | grep -oP '\(\s*\K[0-9.]+' | head -1)
@@ -482,6 +498,65 @@ fi
 
 if [ "$MODE" == "full" ]; then
     echo "Performance Retention: ${retention}% (vs training avg)"
+    echo ""
+fi
+
+# ============================================
+# ANIMATION (if requested)
+# ============================================
+if [ "$SHOW_ANIMATION" -eq 1 ]; then
+    echo "=========================================="
+    echo "PLAYING ANIMATION"
+    echo "=========================================="
+    
+    # Find best meta-only trial (or fallback to other modes)
+    if [ "$MODE" == "full" ] || [ "$MODE" == "meta-only" ]; then
+        # Find best meta-only trial
+        best_meta_catches=0
+        best_meta_trial=1
+        trial_num=1
+        while IFS=',' read seed catches towards away; do
+            if [ "$catches" -gt "$best_meta_catches" ]; then
+                best_meta_catches=$catches
+                best_meta_trial=$trial_num
+            fi
+            trial_num=$((trial_num + 1))
+        done < <(tail -n +2 "$PHASE2_DIR/results.csv")
+        BEST_TRIAL_DIR="$PHASE2_DIR/trial_$(printf "%02d" $best_meta_trial)"
+        echo "Using best meta-only trial: trial $best_meta_trial ($best_meta_catches catches)"
+    elif [ "$MODE" == "from-scratch" ]; then
+        # Find best scratch trial
+        best_scratch_catches=0
+        best_scratch_trial=1
+        trial_num=1
+        while IFS=',' read seed catches towards away; do
+            if [ "$catches" -gt "$best_scratch_catches" ]; then
+                best_scratch_catches=$catches
+                best_scratch_trial=$trial_num
+            fi
+            trial_num=$((trial_num + 1))
+        done < <(tail -n +2 "$SCRATCH_DIR/results.csv")
+        BEST_TRIAL_DIR="$SCRATCH_DIR/trial_$(printf "%02d" $best_scratch_trial)"
+        echo "Using best scratch trial: trial $best_scratch_trial ($best_scratch_catches catches)"
+    fi
+    
+    echo ""
+    echo "Starting cat-mouse animation..."
+    echo "Reading from: $BEST_TRIAL_DIR/simulation_log.csv"
+    echo "(Close window when done)"
+    echo ""
+    
+    if [ -f "$BEST_TRIAL_DIR/simulation_log.csv" ]; then
+        # Extract just the simulation data (skip header)
+        tail -n +2 "$BEST_TRIAL_DIR/simulation_log.csv" | \
+            python3 "$WORKSPACE_ROOT/visualization/cat_mouse_gui.py"
+        echo "✓ Animation complete"
+    else
+        echo "⚠ Simulation log not found: $BEST_TRIAL_DIR/simulation_log.csv"
+    fi
+    
+    echo ""
+    echo "=========================================="
     echo ""
 fi
 
