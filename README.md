@@ -1,344 +1,136 @@
 # ForWhoseAdvantage
 
-**A sophisticated brain simulation system** that demonstrates emergent learning behavior through neural networks with **4D directional routing** and **hierarchical meta-learning**. Watch as an artificial cat learns to hunt a mouse using vision-based sensorimotor learning, achieving **94%+ directional accuracy** with a meta-brain that maintains and enhances learned behavior even without direct rewards.
+**A q/kdb-x neural simulation** demonstrating emergent learning through a **dual-brain architecture** with 4D directional synaptic routing and hierarchical meta-learning. Watch an artificial cat learn to hunt a mouse using 8-slice angular vision — achieving **94%+ directional accuracy** with a meta-brain that maintains and enhances learned behaviour even without direct rewards.
 
-## 🧠 What Makes This Special
+## What Makes This Special
 
-ForWhoseAdvantage implements a **unique dual-brain architecture** with 4D synaptic routing and hierarchical meta-learning:
+ForWhoseAdvantage implements a unique dual-brain system:
 
-**Primary Brain**: 4D directional routing where each neuron maintains 64 different connection strengths (8 incoming × 8 outgoing directions), enabling **context-dependent learning** that mirrors biological information processing.
+**Primary Brain**: 4D directional routing where each neuron maintains 64 connection strengths (8 incoming × 8 outgoing directions), enabling context-dependent learning that mirrors biological information processing.
 
-**Meta-Brain**: A smaller control system (3×5) that learns to trigger strategic reinforcement based on performance metrics, demonstrating **acquisition → maintenance transitions** where learned behavior persists and improves even after removing direct rewards.
+**Meta-Brain**: A smaller control system (3×5) that learns to trigger strategic reinforcement based on performance metrics, demonstrating **acquisition → maintenance transitions** where learned behaviour persists and improves after removing direct rewards.
 
 **Key Capabilities:**
-- **Hierarchical Meta-Learning**: Meta-brain maintains and enhances learned behavior without direct rewards (130% retention!)
-- **Advanced Neural Architecture**: 4D directional routing with context-dependent pathway selection
-- **Real-Time Learning**: Watch the cat develop hunting strategies over time  
-- **Exceptional Performance**: 94%+ directional learning with 1,300+ average catches per trial
-- **Brain State Persistence**: Warm-start loading of complete neural state (energy + pathways + routing)
-- **Windowed Performance Metrics**: Proper sliding-window rate calculation prevents saturation
-- **Complete Visualization Suite**: Real-time GUI, brain state analysis, and pathway visualization
-- **Comprehensive Analytics**: Meta-experiment framework with retention analysis
+- Hierarchical meta-learning — meta-brain maintains and enhances behaviour without direct rewards (130% retention)
+- 4D directional routing with context-dependent pathway selection
+- Energy-conserving trinary neuron model (propagation as functional fold)
+- Native kdb-x simulation log — query the running experiment in real time
+- Brain state persistence — warm-start with saved weights
+- Windowed catch-rate metrics with rolling 200-bar window
 
-## 🎯 Performance Highlights
+## Performance Highlights
 
-**Latest Results** (Meta-Learning System):
-- **🎯 Directional Learning**: 94.1% accuracy moving toward target in meta-only mode
-- **🏆 Hunt Success**: 1,326 average catches per trial with meta-brain only (130% retention!)
-- **📈 Training Performance**: 1,011 average catches with direct + meta rewards (84.3% accuracy)
-- **🧠 Meta-Brain Breakthrough**: Performance INCREASES when direct rewards removed
-- **⭐ Overall Assessment**: ✓✓✓ EXCEPTIONAL - Meta-brain successfully maintains and enhances behavior
+**Latest Results** (reaction-dissociation branch):
+- **Directional Learning**: 94.1% accuracy moving toward target in meta-only mode
+- **Hunt Success**: 1,326 average catches/trial with meta-brain only (130% retention)
+- **Training Performance**: 1,011 average catches with direct + meta rewards
+- **Meta-Brain Breakthrough**: Performance *increases* when direct rewards are removed (+15%)
 
-## 🚀 Quick Start Guide
+## Quick Start
 
-**1. Get Up and Running** (3 commands):
+**Prerequisites**: [kdb-x](https://kx.com) (kdb-x CLI, `q`)
+
 ```bash
-git clone git@github.com:Oiubrab/questions.git
-cd questions  
-make learning    # Auto-detects nvfortran or gfortran, creates bin/ automatically
+# Run a 20,000-bar simulation
+q q/programs/cat_mouse.q --seed 42 --bars 20000
+
+# Meta-only mode with pre-trained weights
+q q/programs/cat_mouse.q --load-weights results/path/to/weights.q --meta-only
+
+# Interactive exploration
+q q/load.q
 ```
 
-**2. Run Your First Meta-Learning Experiment**:
-```bash
-./scripts/run_meta_experiment.sh --full --training-trials 2 --meta-test-trials 2  # Quick test
+## Project Structure
+
+```
+q/
+├── load.q                  # Master loader — loads all modules in dependency order
+├── modules/
+│   ├── trinary.q           # .trinary — LOW/MEDIUM/HIGH neuron states
+│   ├── directions.q        # .dirs — 8 direction deltas, opposites, biases
+│   ├── synapses.q          # .syn — 4D synapse init, decay, reinforce, punish
+│   ├── brain.q             # .brain — propagation fold, pressure, cross-flow
+│   ├── brain_engine.q      # .engine — initSystem, runCycle, runCycleSimple
+│   └── vision.q            # .vision — atan2 vision, toroidal field, mouse movement
+├── programs/
+│   └── cat_mouse.q         # Full simulation: main loop, reward logic, kdb-x log
+└── tests/
+    ├── test_trinary.q
+    └── test_conservation.q
+results/                    # Experimental output (gitignored)
 ```
 
-**3. Full Meta-Brain Analysis**:
+See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for a detailed layout.
+
+## Running Tests
+
 ```bash
-./scripts/run_meta_experiment.sh --full  # 30 training + 5 meta-only trials
+q q/tests/test_trinary.q
+q q/tests/test_conservation.q
 ```
 
-That's it! You'll see the cat develop expert hunting behavior, then watch the meta-brain maintain and enhance that behavior even after direct rewards are removed - demonstrating true hierarchical meta-learning.
+Energy conservation is a hard invariant — `test_conservation.q` must pass after any brain changes.
 
-## 📁 Project Structure
+## System Architecture
 
-The project uses a clean, organized structure:
-- **`src/`**: All Fortran source code (modules, programs, tests)
-- **`bin/`**: Compiled executables and build artifacts
-- **`scripts/`**: Shell scripts for running experiments
-- **`visualization/`**: Python GUI and analysis tools
-- **`results/`**: Generated output data and visualizations
+### Neural Simulation Engine (q/kdb-x)
 
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed layout and usage patterns.
+- **`trinary.q`** — Trinary state neurons (LOW=0i, MEDIUM=1i, HIGH=2i) with shift operations
+- **`brain.q`** — Primary brain (6×12) and meta-brain (3×5) with 4D synaptic routing; propagation via functional fold
+- **`brain_engine.q`** — Unified interface for dual-brain system management
+- **`synapses.q`** — 4D synapse arrays with adaptive decay/reinforcement/punishment
+- **`vision.q`** — 8-slice angular vision system (45° per slice) on a toroidal field
+- **`directions.q`** — Direction constants, biases, and opposites
 
-## 📋 Prerequisites
+### Simulation Log (kdb-x table)
 
-- **Fortran Compiler**: `nvfortran` (preferred) or `gfortran`
-- **Python 3**: For visualization and analysis tools
-- **Python packages**: `pip install matplotlib numpy pygame`
-
-*The Makefile automatically detects your available compiler - just run `make learning` and you're ready to go!*
-
-## 🎮 Complete Usage Guide
-
-### Meta-Learning Experiments (NEW!)
-
-**🔬 Full Acquisition → Maintenance Pipeline** (Recommended):
-```bash
-./scripts/run_meta_experiment.sh --full       # Train 30 brains, test best with meta-only
-./scripts/run_meta_experiment.sh --full --training-trials 5 --meta-test-trials 2  # Custom counts
-```
-*Demonstrates meta-brain's ability to maintain and enhance learned behavior without direct rewards*
-
-**🧪 Resume from Checkpoint**:
-```bash
-./scripts/run_meta_experiment.sh --meta-only results/run_*/best_weights.bin
-```
-*Test meta-only maintenance with previously trained weights*
-
-**📊 Baseline Comparison**:
-```bash
-./scripts/run_meta_experiment.sh --from-scratch  # Verify bootstrap requirement
-```
-*Shows meta-brain cannot learn from scratch - needs initial pathways from training phase*
-
-### Learning Experiments
-
-**🔬 Full Scientific Analysis**:
-```bash
-./scripts/run_learning_tests.sh       # 30 trials + statistical analysis + GUI replay
-./scripts/run_learning_tests.sh --no-gui  # Analysis only, no visualization
-```
-*Generates comprehensive statistics, temporal learning analysis, and oscillation detection*
-
-**⚡ Quick Development Testing**:
-```bash
-./scripts/run_learning_tests.sh -t 5     # Fast 5-trial evaluation  
-./scripts/run_learning_tests.sh -t 1     # Single trial with immediate visualization
+`simLog` is a live kdb-x table appended each bar. Query it in real time:
+```q
+select avg catches from simLog where bar > 18000
+select epochN, catchRate, metaScope from simLog
 ```
 
-**🎯 Direct Execution**:
-```bash
-./bin/cat_mouse_learning <seed>                                    # Training mode
-./bin/cat_mouse_learning <seed> --load-weights FILE                # Resume training
-./bin/cat_mouse_learning <seed> --load-weights FILE --no-direct-rewards  # Meta-only mode
-```
+This is a significant improvement over the previous CSV-based approach.
 
-### Visualization & Analysis
-
-**🧠 Brain Pathway Analysis** (Run after learning experiments):
-```bash
-python3 visualization/analyze_brain_pathways.py  # Detailed neural pathway strengths
-python3 visualization/brain_summary.py          # High-level specialization insights
-```
-*Reveals which vision inputs became dominant, which movements are preferred, and how the dual-brain system specialized*
-
-**📊 Visual Brain State**:
-```bash
-python3 visualization/visualize_brain.py    # Creates brain_visualization.png
-```
-*Color-coded brain diagram showing learned neural connections*
-
-**🎬 Real-Time GUI Observation**:
-```bash
-# All learning tests include GUI visualization by default
-./scripts/run_learning_tests.sh -t 1   # Single trial with GUI
-./scripts/run_learning_tests.sh        # Multi-trial with GUI replay
-./bin/cat_mouse_learning               # Direct execution (generates CSV for GUI)
-```
-*Watch the detailed cat sprite learn to chase the mouse through hierarchical meta-learning*
-
-### Advanced Usage
-
-**🔧 Original Simulation** (for researchers):
-```bash
-make                          # Build the original program
-./bin/forWhoseAdvantage <rows> <cols> <input_offset> <input_length> <output_offset> <output_length> <print_synapses>
-# Example: ./bin/forWhoseAdvantage 6 12 3 8 3 8 false
-```
-
-**🧪 Core Mechanics Testing**:
-```bash
-make test_4d_mechanics && ./bin/test_4d_mechanics  # Validate 4D routing system
-```
-
-**🧠 Meta-Brain Experiments** (NEW!):
-```bash
-# Full pipeline: train 30 brains, test best with meta-brain only
-./scripts/run_meta_experiment.sh --full
-
-# Resume from checkpoint: test with existing trained weights
-./scripts/run_meta_experiment.sh --meta-only results/meta_experiments/run_*/best_weights.bin
-
-# Baseline validation: verify meta-brain can't learn from scratch
-./scripts/run_meta_experiment.sh --from-scratch
-```
-*Breakthrough finding: Pre-trained brains with meta-brain only EXCEED original training performance by 15%! See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) for details.*
-
-## 🏗️ System Architecture
-
-### Core Technology Stack
-
-**Neural Simulation Engine** (Fortran 90):
-- **`trinary_module.f90`**: Trinary state neurons (low/medium/high) with encapsulated operations
-- **`brain_module.f90`**: Primary brain (6×12) and meta-brain (7×7) with 4D synaptic routing
-- **`brain_engine_module.f90`**: Unified interface for dual-brain system management
-- **`synapses_module.f90`**: 4D synapse arrays with adaptive learning (decay/reinforcement)
-- **`vision_simulation_module.f90`**: 8-slice angular vision system (45° per slice)
-- **`inputter_module.f90`**: Vision-to-brain interface (8 directional inputs)
-- **`outputter_module.f90`**: Brain-to-movement interface (8 directional outputs)
-
-**Learning Programs**:
-- **`cat_mouse_learning.f90`**: **DUAL-BRAIN META-LEARNING SYSTEM** with hierarchical strategy control
-- **`forWhoseAdvantage.f90`**: Original configurable brain simulation
-- **`cat_mouse_gui_demo.f90`**: Real-time visualization version
-
-**Analysis & Visualization** (Python):
-- **`run_learning_tests.sh`**: Flexible multi-trial framework (1-30 trials) with comprehensive analysis
-- **`analyze_brain_pathways.py`**: Neural pathway strength analysis for dual-brain system
-- **`brain_summary.py`**: High-level brain specialization insights
-- **`visualize_brain.py`**: Brain state visualization with color-coded connections
-- **`cat_mouse_gui.py`**: Real-time Pygame GUI with field visualization
-- **`detect_oscillation.py`**: Movement efficiency and pattern analysis
-
-## 🧪 Understanding the Dual-Brain Learning Process
+## Understanding the Dual-Brain Learning Process
 
 ### The Dual-Brain Meta-Learning Loop
 
 **1. Primary Brain Vision System**
 - 8 angular slices detect mouse position (45° coverage each)
-- Active slice triggers corresponding primary brain input
-- System learns which visual patterns predict successful movements
+- Active slice triggers corresponding primary brain input (top row, cols 3-10)
 
 **2. Primary Brain Neural Processing**
-- 6×12 brain grid with 4D directional routing: each neuron has 64 connection strengths (8×8 matrix)
-- Context-dependent signaling: route selection based on signal origin
-- 12 processing steps per time unit allow signal propagation through all layers
+- 6×12 brain grid with 4D directional routing: `syns[r][c][inDir][outDir]`
+- 12 propagation steps per Bar using `f/[acc; activeList]` fold
+- Energy conservation maintained: each neuron only changes state by ±1 per step
 
 **3. Meta-Brain Performance Monitoring**
-- 7×7 meta-brain monitors catch rate performance over time
-- Positional encoding: catch rates 1-5 = MEDIUM states, rates 6-10 = HIGH states
-- Meta-brain learns to associate high performance with strategy reinforcement triggers
+- 3×5 meta-brain monitors rolling catch rate
+- Positional encoding: rates 1-5 → MEDIUM, rates 6-10 → HIGH
+- Meta-brain learns to associate high performance with strategy reinforcement
 
 **4. Hierarchical Reinforcement**
 - **Primary Brain**: Immediate rewards for moving toward mouse
-- **Meta-Brain Control**: Learns to trigger broad strategy reinforcement across 20-120 previous time steps
-- **Strategy Amplification**: Meta-brain reinforces successful hunting patterns when catch rates are high
-- **Temporal Credit Assignment**: Rewards entire behavioral sequences that led to sustained success
+- **Meta-Brain Control**: Learns to trigger broad strategy reinforcement across 20-120 previous bars
+- **Temporal Credit Assignment**: 5D circular history buffer `(100; 6; 12; 8; 8)` boolean
 
 **5. Dual-Loop Learning**
 - **Fast Loop**: Primary brain learns individual vision→movement mappings
-- **Slow Loop**: Meta-brain learns when to reinforce successful behavioral strategies
-- **Emergent Synergy**: Combined system achieves superhuman hunting performance
+- **Slow Loop**: Meta-brain learns when to reinforce successful strategies
+- **Emergent Synergy**: Combined system achieves sustained high catch rates
 
-### What You'll Observe
+## Branch Context (`reaction-dissociation`)
 
-**Early Learning** (0-5000 steps):
-- Primary brain: Random movement patterns, weak neural connections
-- Meta-brain: No activity, learning phase
-- Low catch rates (few successful hunts)
+This branch investigates the dissociation between:
+- **Reaction mode** — tactical, 1-bar-timescale direct rewards
+- **Dissociation mode** — strategic, 20-120 bar meta-brain reinforcement
 
-**Mid Learning** (5000-10000 steps):
-- Primary brain: Emerging directional preferences
-- Meta-brain: Begins triggering strategy reinforcement
-- Formation of specialized neural pathways
+Core hypothesis: mixed tactical+strategic signals interfere. Removing tactical rewards during meta-brain operation improves performance. Current evidence: meta-only +15% vs training average, +35% in best runs.
 
-**Expert Behavior** (10000+ steps):
-- Primary brain: Consistent directional accuracy (86%+ toward mouse)
-- Meta-brain: Sophisticated strategy control with temporal reinforcement
-- Hyper-specialized neural networks with dominant "superhighway" pathways
-- Sustained high catch rates (1,100+ per trial) through meta-learning optimization
+See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) for experiment details.
 
-## 📊 Analysis Tools Explained
+## License
 
-### Statistical Analysis (`run_learning_tests.sh`)
-**Outputs comprehensive performance metrics:**
-- Individual trial results with catch rates
-- Aggregate statistics (mean, std deviation, median)
-- Directional learning percentages (towards vs away from mouse)
-- Temporal learning analysis (early vs late epoch performance)
-- Oscillation detection warnings
-
-### Brain Pathway Analysis (`analyze_brain_pathways.py`)
-**Reveals the learned neural architecture:**
-- Input pathway strengths by vision slice (which directions became dominant)
-- Output pathway preferences by movement direction
-- Strongest individual synaptic connections (the learned "superhighways")
-- Vision-to-movement mapping analysis
-
-### Brain Visualization (`visualize_brain.py`)
-**Creates visual brain diagrams showing:**
-- Neuron activation states (color-coded by intensity)
-- Synaptic connections with thickness indicating strength
-- Directional routing patterns with color-coded flow directions
-- Input and output layer activation patterns
-
-## 🔬 For Researchers & Developers
-
-### Key Technical Concepts
-
-**4D Directional Routing:**
-Each neuron maintains an 8×8 matrix of connection strengths, enabling context-dependent signal routing based on incoming direction. This allows different input patterns to learn different pathways through the same neural substrate.
-
-**Temporal Bar Structure:**
-One "Bar" (time unit) contains 12 brain processing steps followed by learning updates. This allows complete signal propagation from vision input to motor output within a single decision cycle.
-
-**Embodied Learning:**
-The system learns sensorimotor mappings through environmental interaction rather than supervised training, developing specialized neural pathways for specific behavioral contexts.
-
-**Meta-Brain Discovery (NEW!):**
-Breakthrough finding reveals that **strategic reinforcement alone outperforms tactical+strategic combined**:
-- Pre-trained brains tested with meta-brain only: **1,944 catches avg** (95.2% directional accuracy)
-- Same brains during training: **1,693 catches best** (varied accuracy)
-- Fresh brains with meta-brain only: **0 catches** (random walk)
-
-**Key Insights:**
-1. **Meta-brain needs bootstrap**: Cannot learn from scratch, requires direct rewards to create initial pathways
-2. **Strategic > tactical feedback**: Meta-brain alone maintains and EXCEEDS training performance (+15%)
-3. **Two-stage learning architecture**: Direct rewards for acquisition, meta-brain for mastery
-4. **Noise reduction hypothesis**: Removing tactical rewards may reduce interference, allowing pure strategy execution
-
-This validates hierarchical learning where high-level strategy control can exceed low-level tactical feedback once basic skills are established.
-
-### Performance Characteristics
-
-**Scalability:** 6×12 brain (72 neurons) with 64 connections each = 4,608 total synaptic weights
-**Learning Speed:** Typically shows improvement within 2000-5000 time steps
-**Specialization:** Develops extreme pathway preferences (some connections 1000× stronger than others)
-**Reliability:** 100% learning success rate across different random seeds
-
-## 🛠️ Troubleshooting
-
-**"Permission denied" when running scripts:**
-```bash
-chmod +x *.sh    # Make all scripts executable
-```
-
-**"Command not found" errors:**
-- Ensure you have `nvfortran` or `gfortran` installed
-- For Python tools: `pip install matplotlib numpy pygame`
-
-**Build failures:**
-```bash
-make clean       # Clear build artifacts
-make learning    # Rebuild from scratch
-```
-
-**GUI won't start:**
-- Ensure you have display/X11 forwarding if using SSH
-- Install pygame: `pip install pygame`
-
-## 🤝 Contributing
-
-We welcome contributions! Whether you want to:
-- Experiment with different brain architectures
-- Improve the learning algorithms  
-- Add new visualization features
-- Extend the analysis tools
-- Optimize performance
-
-Please fork the repository, create a feature branch, and submit a pull request with your improvements.
-
-## 📄 License
-
-This project is open-source and available under the [GNU General Public License v3](LICENSE).
-
-## 🎯 What's Next?
-
-Try running the system and watch artificial intelligence emerge through learning! Start with `./single_trial_gui.sh` to see the magic happen, then dive deeper with the full analysis suite.
-
-**Questions?** Open an issue - we'd love to hear about your experiments and results!
-
----
-
-*ForWhoseAdvantage demonstrates that sophisticated learning behaviors can emerge from relatively simple neural architectures when the right learning principles are applied. The 4D directional routing system represents a novel approach to context-dependent neural computation that could inspire new AI architectures.*
+[GNU General Public License v3](LICENSE)

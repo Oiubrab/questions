@@ -1,76 +1,74 @@
 # Meta-Brain Experiment Framework
 
-Standardized scripts for testing the meta-brain's ability to maintain pre-trained behavior.
+Standardized approach for testing the meta-brain's ability to maintain pre-trained behaviour.
 
 ## Quick Start
 
 ### Full Pipeline (Train → Test)
 Run complete experiment: train 30 brains, test best with meta-brain only:
 ```bash
-./scripts/run_meta_experiment.sh --full
+q q/load.q q/programs/cat_mouse.q -- --seed 1 --bars 20000
+# ... repeat for seeds 1-30, save results
+# Then test best weights:
+q q/load.q q/programs/cat_mouse.q -- --load-weights results/.../weights.q --meta-only
 ```
-
-**Time:** ~10-12 minutes (30 training + 5 testing trials)
 
 ### Resume from Checkpoint
-Test meta-brain maintenance using previously trained weights:
+Test meta-brain maintenance using previously saved weights:
 ```bash
-./scripts/run_meta_experiment.sh --meta-only results/meta_experiments/run_TIMESTAMP/best_weights.bin
+q q/load.q q/programs/cat_mouse.q -- --load-weights results/run_TIMESTAMP/weights.q --meta-only
 ```
-
-**Time:** ~2 minutes (5 testing trials)
 
 ### Baseline Test
-Verify meta-brain cannot learn from scratch (no pre-training):
+Verify meta-brain cannot learn from scratch:
 ```bash
-./scripts/run_meta_experiment.sh --from-scratch
+q q/load.q q/programs/cat_mouse.q -- --seed 42 --bars 20000 --meta-only
 ```
-
-**Time:** ~2 minutes (5 trials)
 
 ## Results Directory Structure
 
 All experiments save to timestamped directories:
 ```
-results/meta_experiments/
+results/
 └── run_YYYYMMDD_HHMMSS/
-    ├── training_results.csv       # Training phase catches per seed
-    ├── meta_only_results.csv      # Meta-only phase detailed results
-    ├── best_weights.bin           # Best performer's brain weights
-    └── weights_seed*.bin          # All training trial weights (full mode)
+    ├── simLog.csv        # Exported kdb-x simulation log (all bars)
+    ├── weights.q         # Brain weights — q binary (prim + meta synapses)
+    └── epoch_summary.csv # Per-epoch catch rate, directionality, meta activity
 ```
+
+**Note:** `results/` is gitignored. Weights use native q binary serialization (`set`/`get`), not the old Fortran `.bin` format.
 
 ## Experimental Design
 
 ### Three Test Modes
 
-#### 1. Full Pipeline (`--full`)
+#### 1. Full Pipeline (`--bars 20000`)
 **Purpose:** Complete acquisition → maintenance test
 
 **Process:**
-1. Train 30 fresh brains with direct + meta rewards
-2. Identify best performer (highest catches)
-3. Load best weights into 5 new trials
-4. Test with meta-brain only (no direct rewards)
+1. Train 30 fresh brains with direct + meta rewards (`--seed 1` through `--seed 30`)
+2. Identify best performer (highest total catches from `simLog`)
+3. Load best weights into 5 new trials with `--meta-only`
+4. Compare meta-only performance vs training performance
 
 **Answers:** "Can meta-brain maintain trained performance?"
 
-#### 2. Resume from Checkpoint (`--meta-only FILE`)
+#### 2. Resume from Checkpoint (`--load-weights FILE --meta-only`)
 **Purpose:** Re-test maintenance with different conditions
 
 **Process:**
-1. Load specified weight file
-2. Run 5 trials with meta-brain only
-3. Analyze performance retention
+1. Load saved weight file
+2. Run with `--meta-only` flag (disables direct per-bar rewards)
+3. Analyse performance retention via `simLog`
 
 **Answers:** "How robust is meta-brain maintenance?"
 
-#### 3. Baseline Test (`--from-scratch`)
+#### 3. Baseline Test (`--meta-only` without `--load-weights`)
 **Purpose:** Verify bootstrap requirement
 
 **Process:**
-1. Start 5 fresh brains (random weights)
-2. Train with meta-brain only (no direct rewards)
+1. Start with random weights (no `--load-weights`)
+2. Run with `--meta-only` from the start
 3. Measure failure to learn
 
 **Answers:** "Does meta-brain need initial pathways?"
@@ -80,10 +78,10 @@ results/meta_experiments/
 ### Full Pipeline
 - **Training best:** 1,400-1,700 catches
 - **Training average:** 1,100-1,200 catches
-- **Meta-only average:** 1,800-2,000 catches (~115% retention!)
+- **Meta-only average:** 1,800-2,000 catches (~115% retention)
 - **Directionality:** 95%+ towards mouse
 
-### From Scratch
+### From Scratch (meta-only, no pre-training)
 - **Catches:** 0-6 (essentially random)
 - **Directionality:** 2-10% towards (chance level)
 - **Conclusion:** Meta-brain cannot bootstrap
@@ -100,68 +98,43 @@ results/meta_experiments/
    - Removing tactical noise improves strategic execution
 
 3. **Bootstrap requirement validated**
-   - Meta-brain alone: 0 catches (random walk)
-   - Requires direct rewards to create initial pathways
+   - Meta-brain alone from scratch: 0 catches (random walk)
+   - Requires direct rewards to create initial pathways first
 
 4. **Two-stage learning architecture**
-   - **Stage 1 (Direct rewards):** Acquisition - build basic pathways
-   - **Stage 2 (Meta-brain):** Mastery - maintain & optimize strategies
+   - **Stage 1 (Direct rewards):** Acquisition — build basic pathways
+   - **Stage 2 (Meta-brain only):** Mastery — maintain and optimise strategies
 
-## Command-Line Options
+## Querying Results in q
 
-```bash
-./scripts/run_meta_experiment.sh [OPTIONS]
+After a run, `simLog` is a kdb-x table. Query it directly:
 
-Options:
-  --full              Run full experiment: train 30 trials, test best with meta-only
-  --meta-only FILE    Test meta-only mode using specified weight file
-  --from-scratch      Test meta-only from scratch (no pre-training) as baseline
-  --help              Show this help message
+```q
+/ Total catches per epoch
+select sum catches by epochN from simLog
+
+/ Directional accuracy over time
+select avg towardPct by epochN from simLog
+
+/ Meta-brain activity (when did it fire?)
+select bar, metaScope, metaMag from simLog where metaScope > 0
+
+/ Best epoch
+select from (select sum catches by epochN from simLog) where catches = max catches
 ```
-
-## Configuration
-
-Edit script header to customize:
-```bash
-TRAINING_TRIALS=30        # Number of training trials (full mode)
-META_TEST_TRIALS=5        # Number of meta-only test trials
-SCRATCH_TEST_TRIALS=5     # Number of from-scratch baseline trials
-```
-
-## Output Files
-
-### training_results.csv
-```csv
-seed,catches
-1,1123
-2,1456
-...
-```
-
-### meta_only_results.csv
-```csv
-seed,catches,towards_pct,away_pct
-1001,1923,95.3,4.5
-1002,1876,94.8,4.9
-...
-```
-
-### best_weights.bin
-Binary file containing:
-- Primary brain synapses: (6, 12, 8, 8) - 4D directional routing
-- Meta-brain synapses: (7, 7, 8, 8) - 4D directional routing
-
-## Related Scripts
-
-- `run_learning_tests.sh` - Multi-trial learning with statistics
-- `test_meta_only.sh` - Original meta-only experiment (deprecated)
 
 ## Biological Analogy
 
-**Direct rewards:** Dopamine-based immediate feedback for basic skill acquisition
+**Direct rewards:** Dopamine-based immediate feedback for basic skill acquisition.
 
-**Meta-brain:** Executive function / prefrontal cortex strategy recognition
+**Meta-brain:** Executive function / prefrontal cortex strategy recognition.
 
-**Finding:** Can't develop hunting strategy without basic movement skills first, but once acquired, strategic control alone is MORE effective than mixing strategic + tactical feedback.
+**Finding:** Cannot develop hunting strategy without basic movement skills first. But once acquired, strategic control alone is *more* effective than mixing strategic + tactical feedback.
 
-Similar to how expert performance often becomes "unconscious" - direct feedback during execution can disrupt flow state!
+Similar to expert performance becoming "unconscious" — direct feedback during execution can disrupt flow state.
+
+## Related Documentation
+
+- [README.md](../README.md) — Project overview and quick start
+- [BAR_STRUCTURE.md](../BAR_STRUCTURE.md) — Temporal organisation and credit assignment
+- [CROSS_FLOW_ARCHITECTURE.md](../CROSS_FLOW_ARCHITECTURE.md) — Pressure-regulated brain I/O

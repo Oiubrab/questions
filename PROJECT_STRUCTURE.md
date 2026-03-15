@@ -1,102 +1,106 @@
 # Project Structure
 
-This document describes the reorganized directory structure of the ForWhoseAdvantage brain simulation project.
+This document describes the directory structure of the ForWhoseAdvantage q/kdb-x brain simulation.
 
 ## Directory Layout
 
 ```
 .
-├── bin/                          # Compiled executables and build artifacts
-│   ├── cat_mouse_learning       # Main learning simulation executable
-│   ├── forWhoseAdvantage        # Original simulation executable
-│   └── *.mod                    # Fortran module files
-│
-├── src/                         # Source code
-│   ├── modules/                 # Reusable Fortran modules
-│   │   ├── trinary_module.f90
-│   │   ├── brain_module.f90
-│   │   ├── synapses_module.f90
-│   │   ├── inputter_module.f90
-│   │   ├── outputter_module.f90
-│   │   ├── vision_simulation_module.f90
-│   │   └── statistics_module.f90
+├── q/                            # All q/kdb-x source code
+│   ├── load.q                    # Master loader — \l all modules in dependency order
 │   │
-│   ├── programs/                # Main program entry points
-│   │   ├── forWhoseAdvantage.f90
-│   │   ├── cat_mouse_learning.f90
-│   │   └── cat_mouse_vision.f90
+│   ├── modules/                  # Reusable q modules (loaded via load.q)
+│   │   ├── trinary.q             # .trinary — LOW/MEDIUM/HIGH constants and shift
+│   │   ├── directions.q          # .dirs — direction deltas, opposites, biases
+│   │   ├── synapses.q            # .syn — 4D synapse init, decay, reinforce, punish
+│   │   ├── brain.q               # .brain — propagation fold, pressure, cross-flow
+│   │   ├── brain_engine.q        # .engine — initSystem, runCycle, runCycleSimple
+│   │   └── vision.q              # .vision — atan2 vision, toroidal field, mouse movement
 │   │
-│   └── tests/                   # Test programs
-│       ├── test_trinary.f90
-│       ├── test_conservation.f90
-│       ├── test_synapse_decay.f90
-│       └── ...
+│   ├── programs/                 # Simulation entry points
+│   │   └── cat_mouse.q           # Full dual-brain cat/mouse simulation
+│   │
+│   └── tests/                    # Test programs
+│       ├── test_trinary.q        # Trinary constant and shift tests
+│       └── test_conservation.q   # Energy conservation invariant tests (must pass)
 │
-├── scripts/                     # Shell scripts for running experiments
-│   ├── run_learning_tests.sh   # Multi-trial testing framework
-│   ├── single_trial_gui.sh     # Single trial with GUI
-│   ├── run_gui.sh              # Real-time GUI visualization
-│   └── quick_test.sh           # Quick validation tests
+├── results/                      # Experiment output (gitignored)
+│   └── run_YYYYMMDD_HHMMSS/      # Timestamped run directory
+│       ├── simLog.csv            # Exported simulation log
+│       ├── weights.q             # Saved brain weights (q binary)
+│       └── experiment_report.md  # Auto-generated summary
 │
-├── visualization/               # Python visualization and analysis tools
-│   ├── cat_mouse_gui.py        # Pygame GUI for cat-mouse simulation
-│   ├── visualize_brain.py      # Brain state visualization
-│   ├── detect_oscillation.py   # Movement pattern analysis
-│   ├── analyze_brain_pathways.py
-│   └── brain_summary.py
+├── scripts/                      # Experiment shell scripts
+│   └── META_EXPERIMENT_README.md # Meta-experiment framework documentation
 │
-├── results/                     # Test results, logs, and data files
-│   ├── trial_*.csv             # Trial simulation data
-│   ├── trial_*.log             # Trial output logs
-│   ├── trial_*_oscillation.txt # Oscillation analysis
-│   └── *.png                   # Generated visualizations
+├── bin/                          # Empty — no compiled artifacts in q
 │
-├── Makefile                     # Build system
-├── README.md                    # Project documentation
-├── LICENSE                      # Project license
-└── BAR_STRUCTURE.md            # Temporal organization documentation
+├── CLAUDE.md                     # Claude Code instructions for this project
+├── README.md                     # Project overview and quick start
+├── BAR_STRUCTURE.md              # Temporal organization and Bar concept
+├── CROSS_FLOW_ARCHITECTURE.md    # Pressure-regulated cross-flow I/O design
+├── OPTIMIZATION_NOTES.md         # Performance notes and design trade-offs
+├── PROJECT_STRUCTURE.md          # This file
+└── LICENSE                       # GNU GPLv3
 ```
 
-## Building the Project
+## Module Dependency Order
 
-All build commands remain the same:
+`load.q` loads modules in this order (dependency chain):
+
+```
+trinary.q → directions.q → synapses.q → brain.q → brain_engine.q → vision.q
+```
+
+Do not reorder — later modules depend on earlier namespaces (e.g. `.brain` uses `.trinary` and `.dirs`).
+
+## Running the Simulation
 
 ```bash
-make                  # Build main forWhoseAdvantage executable
-make learning         # Build cat-mouse learning system
-make clean           # Clean build artifacts
-make all-programs    # Build all executables
+# Full simulation
+q q/load.q q/programs/cat_mouse.q -- --seed 42 --bars 20000
+
+# Meta-only mode with pre-trained weights
+q q/load.q q/programs/cat_mouse.q -- --load-weights results/.../weights.q --meta-only
+
+# Interactive module exploration
+q q/load.q
 ```
 
-Executables are created in the `bin/` directory.
-
-## Running Experiments
-
-Scripts are now in the `scripts/` directory:
+## Running Tests
 
 ```bash
-./scripts/run_learning_tests.sh          # 30-trial learning experiment
-./scripts/run_learning_tests.sh --no-gui # Fast mode without visualization
-./scripts/single_trial_gui.sh            # Single trial with GUI replay
-./scripts/run_gui.sh                     # Real-time GUI visualization
+q q/tests/test_trinary.q
+q q/tests/test_conservation.q
 ```
 
-Results are saved to the `results/` directory.
+`test_conservation.q` is a hard invariant — run it after any changes to `brain.q`.
 
-## Visualization
+## Querying Results
 
-Python visualization tools are in the `visualization/` directory:
+`simLog` is a live kdb-x table during simulation. After a run it can be exported:
 
-```bash
-python3 visualization/cat_mouse_gui.py < results/trial_1.csv
-python3 visualization/visualize_brain.py
-python3 visualization/detect_oscillation.py results/trial_1.csv
+```q
+/ During simulation (interactive q session):
+select avg catchRate by epochN from simLog
+select bar, catchRate, metaScope from simLog where catchRate > 10
+
+/ Save to CSV:
+`:/results/run_latest/simLog.csv 0: csv 0: simLog
 ```
 
-## Benefits of New Structure
+## Key Files
 
-1. **Clear Separation**: Source code, scripts, results, and binaries are organized
-2. **Easier Navigation**: Related files are grouped together
-3. **Cleaner Root**: Documentation and build files remain at top level
-4. **Version Control**: Easier to .gitignore results/ and bin/ directories
-5. **Scalability**: Easy to add new modules, programs, or scripts
+| File | Purpose |
+|------|---------|
+| `q/modules/brain.q` | Core propagation fold — most complex module; touch with care |
+| `q/programs/cat_mouse.q` | Main simulation loop, reward logic, meta-brain strategy |
+| `q/tests/test_conservation.q` | Energy conservation invariant — must always pass |
+| `CLAUDE.md` | Coding conventions and gotchas specific to this q codebase |
+
+## What's Not Here (Intentionally)
+
+- **No Fortran source** — the project was fully ported to q; `src/` is gone
+- **No Makefile** — q needs no compilation
+- **No Python visualization scripts** — the kdb-x `simLog` table replaces CSV-based analysis
+- **No results or weight files** — `results/` is gitignored; weights are saved locally only

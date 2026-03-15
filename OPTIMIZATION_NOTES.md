@@ -1,87 +1,89 @@
-# Performance Optimization Summary
+# Performance Notes
 
-## Date: 2 January 2026
+## Q/kdb-x Implementation
 
-### Optimizations Implemented
+The q port replaces the Fortran/OpenMP implementation. The key architectural shift is from **parallel imperative loops** to **functional fold**.
 
-1. **Module-level buffer caching** - Eliminated repeated allocations in `brain_module.f90`
-   - `brain_next_cache` and `incoming_direction_next_cache` reused across calls
-   - Stack-allocated fixed-size arrays instead of heap allocations
+### Propagation as Functional Fold
 
-2. **Direct value access** - Bypassed method call overhead
-   - Changed from `.get()/.set()` to direct `%value` access
-   - Removed `private` attribute from trinary type
+The core performance design in q:
 
-3. **Precomputed constants** - Module-level parameters
-   - `directions(8,2)`, `direction_opposites(8)`, `direction_bias(8)`
-   - Computed once at compile time instead of runtime
-
-4. **OpenMP parallelization**
-   - `apply_decay()` - 4-nested loop with `collapse(4)`
-   - `apply_adaptive_reinforcement()` - parallelized synapse updates
-   - `apply_adaptive_punishment()` - parallelized synapse updates
-   - `update_brain_state_based_on_synapses()` - parallelized neuron processing with critical sections
-
-5. **Compiler optimizations**
-   - nvfortran: `-O3 -mp -Minfo=mp,vect -fast`
-   - gfortran: `-O3 -fopenmp -ftree-vectorize -ffast-math -march=native`
-   - SIMD vectorization enabled where possible
-
-6. **Simplified probability calculation**
-   - Removed heap allocations for cumulative probabilities
-   - Used stack arrays and inline cumulative sum
-
-### Performance Results
-
-**Test configuration**: 20,000 Bars, seed 789
-- **Single-threaded**: 50.7 seconds (wall clock)
-- **Multi-threaded**: 27.8 seconds (wall clock), 363s CPU time across ~15 cores
-- **Speedup: 1.82x faster**
-
-**Learning quality maintained**:
-- 1,107 catches (excellent learning)
-- 85%+ directional accuracy
-- Consistent results across multiple seeds
-
-### Compiler Feedback
-
-Key optimizations confirmed by compiler:
-- ✅ OpenMP parallel regions created
-- ✅ SIMD vectorization for simple loops
-- ✅ Critical sections for race condition protection
-- ⚠️  Some loops not vectorized due to calls/complexity
-
-### Limitations
-
-1. **Critical sections** create contention when multiple threads target same neurons
-2. **Amdahl's Law** - not all code parallelizable (I/O, initialization, etc.)
-3. **Memory bandwidth** becomes bottleneck with 15+ threads
-4. **Random number generation** cannot be easily parallelized
-
-### Future Optimization Opportunities
-
-1. **Atomic operations** - Replace critical sections with lock-free atomics where possible
-2. **Thread-local random generators** - Pre-generate random number buffers per thread
-3. **Memory layout** - Experiment with different array dimension ordering for cache efficiency
-4. **GPU acceleration** - Consider CUDA/OpenACC for massively parallel neuron updates
-5. **Profile-guided optimization** - Use profiling data to guide compiler optimizations
-
-### How to Build
-
-```bash
-make clean
-make learning   # Automatically detects nvfortran or gfortran
+```q
+/ f/[accumulator; activeNeuronList] threads (br;syns;su;inc0;inc1;out) through each neuron
+/ Sequential but energy-conserving — no critical sections needed
+acc: f/[(br;syns;su;inc0;inc1;out); activeNeuronList]
 ```
 
-### Environment Variables
+**Why fold instead of `each`:**
+- `each` discards return values — synapse updates would be lost
+- Fold threads mutable state through the list sequentially
+- Energy conservation is maintained without OpenMP critical sections
+- Correct credit assignment: each neuron sees the state left by the previous one
 
-- `OMP_NUM_THREADS=N` - Limit parallel threads (default: all available cores)
-- `OMP_SCHEDULE=type,chunk` - Control loop scheduling (e.g., `dynamic,10`)
-- `OMP_PROC_BIND=true` - Pin threads to cores for better cache locality
+### Avoiding Repeated Allocation
 
-### Verification
+In the Fortran version, module-level buffer caching eliminated repeated heap allocations. In q, nested lists are structural and reused by reference — no special caching needed. The main cost is the fold iteration itself.
 
-All optimizations preserve correctness:
-- Same learning behavior
-- Same catch rates (within random variation)
-- No race conditions or memory corruption detected
+### Array Access Patterns
+
+4D synapse access in q:
+```q
+/ syns[r][c][inDir][outDir] — nested list access
+sc: syns[r][c];          / 8x8 int matrix
+w:  sc[inDir][outDir];   / scalar weight
+```
+
+The nested list layout (rows × cols × 8 × 8) mirrors the Fortran array layout and gives good locality for per-neuron processing.
+
+### Precomputed Constants
+
+Direction constants, biases, and opposites are computed once at load time in `.dirs`:
+```q
+dr: -1 -1 -1 0i 0i 1i 1i 1i    / row deltas (8-element int vector)
+dc: -1i 0i 1i -1i 1i -1i 0i 1i / col deltas
+vBias: 0.5 0.5 0.5 1.0 1.0 1.5 1.8 1.5
+```
+
+Vector operations on these (e.g. `vBias * mult`) are SIMD-friendly in q's array engine.
+
+### Synapse Decay (Vectorized)
+
+Decay applies a random multiplier (0.98–0.995) element-wise across each 8×8 matrix:
+```q
+decayCell:{[sc]
+  noise: 8 8 # 0.98 + 0.015*(64?1.0);
+  MIN_STRENGTH | `int$(`float$sc) * noise}
+applyDecay:{[syns] {decayCell each x} each syns}
+```
+
+The 8×8 matrix multiply is vectorized by q's array engine. The `MIN_STRENGTH |` clamp prevents underflow without branching.
+
+## Fortran Baseline (Historical Reference)
+
+The prior Fortran implementation achieved:
+- **Single-threaded**: 50.7 seconds (wall clock, 20,000 bars)
+- **Multi-threaded (OpenMP, ~15 cores)**: 27.8 seconds — 1.82× speedup
+- Learning quality maintained: 1,107 catches, 85%+ directional accuracy
+
+The OpenMP approach used:
+- `collapse(4)` on decay loops
+- Critical sections for synapse write conflicts
+- SIMD vectorization via `-O3 -ftree-vectorize`
+
+The q fold approach trades raw throughput for correctness guarantees (no race conditions possible). For the current brain size (6×12 = 72 neurons, 4,608 synapses), q performance is adequate.
+
+## Scaling Considerations
+
+If brain size is increased significantly:
+1. **Fold bottleneck**: Active neuron count scales with `rows × cols`; consider batching inactive neurons
+2. **Synapse decay**: `{decayCell each x} each syns` maps well to q's vector engine; scales quadratically with `rows × cols`
+3. **History buffer**: `(100; rows; cols; 8; 8)` boolean — memory scales linearly with brain size
+4. **Meta-brain**: Keep at 3×5 — larger sizes cause energy accumulation bugs (prior experiments)
+
+## kdb-x Simulation Log Advantage
+
+The `simLog` kdb-x table approach significantly outperforms the previous CSV file approach:
+- Appends are O(1) (in-memory columnar append)
+- Real-time queries with no parsing overhead
+- Full q query language available during simulation
+- Weight saving uses native q binary serialization (`weightPath set ...`)
