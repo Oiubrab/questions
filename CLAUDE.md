@@ -112,6 +112,27 @@ Energy conservation is a hard invariant — `test_conservation.q` must pass afte
 
 ---
 
+## Tooling
+
+Two Claude Code skills from the `q-knowledge@kx-skills` plugin apply to this repo:
+
+| Skill | Use |
+|-------|-----|
+| `q` | kdb+/q language reference — idiomatic q, qsql, IPC, common errors. Auto-triggers on q work; no setup needed. |
+| `/qlint-snippet` | KX qlint. Requires `AXLIBRARIES_HOME` (machine-local setup, see below). |
+
+**qlint is a *snippet* linter, not a file linter.** Feeding it a whole module produces a cascade of false positives: every module here opens with `\d .namespace` (see Coding Conventions), and qlint parses everything after the `\d` as one unindented expression. On `trinary.q` that yields 4 bogus `UNINDENTED_CODE` errors plus `UNUSED_VAR` on every top-level constant — all noise. Lint one function at a time:
+
+```q
+shift:{[v;d] HIGH & LOW | v + `int$d}
+```
+
+Also expect `UNDECLARED_VAR` on `HIGH`/`MEDIUM`/`LOW` in any snippet lifted out of `.trinary` — they resolve through the namespace at runtime, so that warning is expected here too.
+
+**Per-machine setup:** qlint ships inside KX Developer's *nested* `ax-libraries.zip`. Extract that, flatten `ws/lib/<os>_x64/*` into `ws/lib/`, then export `AXLIBRARIES_HOME=<ax-libraries dir>` and `QLINT_DIR=$AXLIBRARIES_HOME/ws`. `AXLIBRARIES_HOME` is the variable that matters — setting `QHOME` or `LD_LIBRARY_PATH` instead does **not** work, and a full KX Developer `install.sh` run is unnecessary.
+
+---
+
 ## Key Parameters
 
 All in `q/programs/cat_mouse.q`:
@@ -135,6 +156,7 @@ FIELD_SIZE:100.0             / Toroidal hunting field size
 - **Don't wrap multi-way `$[...]` conditions in `[]`** — they become block expressions evaluated as always-truthy lists.
 - **Don't use `each` where fold is needed** — `each` discards return values; use `f/[init;list]` when accumulating state updates.
 - **Don't commit results or weight files** — `results/` data is preserved but not tracked.
+- **Don't run qlint on a whole module** — the `\d .namespace` header makes it emit false `UNINDENTED_CODE`/`UNUSED_VAR` cascades. Lint single functions (see Tooling).
 
 ---
 
