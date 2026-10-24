@@ -1,138 +1,58 @@
-# Cross-Flow Pressure-Regulated Brain Architecture
+# Cross-Flow and Pressure Architecture
 
-## Overview
+The primary brain (6×12) has four edges. Two carry signals *in* and two carry signals *out*. A "pressure" mechanism was designed to stop the grid filling up with energy.
 
-The brain uses a **cross-flow pressure-regulated** design with internal dynamics and multiple I/O ports. Signals flow both vertically (vision from top → motor output at bottom) and horizontally (meta-brain from right → overflow drain at left).
-
-## Architecture
+**Summary of current state:** the top/bottom and right-edge flows are active. The left edge is only logged. The pressure valves are partly implemented but **never engage in practice**, because measured pressure stays far below their thresholds.
 
 ```
-                  SENSORY INPUT
-                       ↓
-        ┌──────────────────────────────┐
-        │     vision slices → top      │
-        └──────────────────────────────┘
-                       ↓
-┌──────────┐                            ┌──────────┐
-│ OVERFLOW │ ←  ┌───────────────┐   ←  │META-INPUT│
-│  (left)  │    │               │       │ (right)  │
-│          │ ←  │  MAIN BRAIN   │   ←  │          │
-│  drain   │    │    (6×12)     │       │  from    │
-│  excess  │ ←  │               │   ←  │meta-brain│
-└──────────┘    └───────────────┘       └──────────┘
-                       ↓
-        ┌──────────────────────────────┐
-        │    bottom → motor commands   │
-        └──────────────────────────────┘
-                  MOTOR OUTPUT
+                       vision (8 slices)
+                               ↓  top row, cols 2–9
+                 ┌───────────────────────────┐
+  overflow    ←  │                           │  ←  meta-brain output
+  (logged only)  │   PRIMARY BRAIN  6 × 12   │     (previous bar)
+  left col,      │                           │     right col,
+  rows 1–4       │                           │     rows 1–5
+                 └───────────────────────────┘
+                               ↓  bottom row, cols 2–9
+                  outputter: 8 move directions
 ```
 
-**Four I/O Ports:**
-1. **TOP (Sensory Input)**: Vision system → brain top row, always active
-2. **RIGHT (Meta-Brain Input)**: Meta-brain output → right column, throttled by pressure
-3. **BOTTOM (Motor Output)**: Brain bottom row → movement commands, always active
-4. **LEFT (Overflow Drain)**: Brain left column → drain excess activity, pressure-activated
+## The four edges
 
-## Pressure Regulation System
+| Edge | Direction | Code | What actually happens |
+|---|---|---|---|
+| Top | in | `.brain.copyInputToTopRow` | On the first step of each bar, the active vision slice is written as MEDIUM into the top row (cols `IN_OFF`=2 to 9), with incoming-direction label 7. |
+| Bottom | out | inside `.brain.stepNeuron` | A bottom-row neuron can move an energy unit into the outputter slot below it (cols `OUT_OFF`=2 to 9). That energy leaves the brain. The slot with the highest value picks the move. |
+| Right | in | `.brain.applyThrottledMetaInput` | The previous bar's meta-brain output (5 values, 0–2) is written into the right column, rows 1–5, with incoming-direction label 8, subject to valve 1. |
+| Left | out | `.brain.captureOverflow` | Rows 1–4 of the left column are read and summed into `simLog.overflow`. **Nothing is removed or fed back;** this is a logging hook only. |
 
-### Brain Pressure Calculation (q)
+Notes:
+- The top and right inputs **overwrite** cells rather than adding to them. So they can create or destroy energy (finding F16 in [REVIVAL_PLAN.md](REVIVAL_PLAN.md)). Conservation is guaranteed only inside propagation.
+- The incoming-direction labels (7 = S, 8 = SE in `.dirs` numbering) only choose which row of a neuron's 8×8 synapse matrix is used next. They don't mean "came from above" or "came from the right" geometrically. The system is consistent, so this doesn't break anything.
+- Propagation always uses the downward bias `.dirs.vBias`. The horizontal bias `.dirs.hBias` is defined but unused.
+
+## Pressure
 
 ```q
-/ Activity = sum of all trinary cell values (0, 1, or 2)
-/ Max possible = rows × cols × 2 = 6 × 12 × 2 = 144
-/ Pressure = activity / max_activity  (range: 0.0 to 1.0)
-pressure:{[br;rows;cols] (sum sum each br) % `float$(rows*cols*2i)}
+.brain.pressure: total energy / (rows × cols × 2)      / 0 = empty, 1 = every neuron HIGH
 ```
 
-### Three Valves
+Pressure is computed after each bar's propagation and is used by:
 
-**Valve 1: Meta-Brain Input Throttle (Right Side)**
-- Pressure < 0.3: Full flow (100% of meta-brain output applied)
-- Pressure 0.3–0.6: Linear throttle (100% → 0%)
-- Pressure > 0.6: Cut off (0% flow)
-- Prevents runaway activity accumulation
+| Mechanism | Status | Rule |
+|---|---|---|
+| **Valve 1** — meta-input throttle | implemented | flow probability 1 if p < 0.3; falls linearly to 0 between 0.3 and 0.6; 0 above 0.6 |
+| **Drain** | implemented | if p > 0.1, each active neuron independently loses 1 unit with probability `min(0.15, 0.3p)` (uniform, not directional) |
+| **Valve 2** — leftward pull | **not wired in** | `.brain.leftwardPull` exists but is never called |
+| **Valve 3** — pressure-dependent bias steepening | **not implemented** | described in the original design only |
 
-```q
-/ In .brain.applyThrottledMetaInput:
-flowRate: $[pressure < 0.3; 1.0; pressure < 0.6; 1.0-(pressure-0.3)%0.3; 0.0]
-```
+**Measured in practice** (16 brains × 20,000 bars, October 2026):
+- Mean pressure per run: 0.0002–0.009.
+- The peak in a full training run was about 0.056.
+- So **valve 1 is always fully open and the drain has never fired.** The brain ends almost every bar nearly empty, so energy does not build up between bars.
 
-**Valve 2: Overflow Drain (Left Side)**
-- Pressure < 0.5: Closed (no drain)
-- Pressure 0.5–0.7: Gradual leftward bias increase (drain opening)
-- Pressure > 0.7: Strong leftward pull (drain wide open)
-- Implemented as pressure-adjusted leftward directional bias (directions NW/SW/W boosted)
+Whether to wire in valve 2, implement valve 3, or remove them from the design is an open decision (REVIVAL_PLAN.md §7).
 
-```q
-/ In .brain.leftwardPull:
-leftMult: $[pressure < 0.5; 1.0; pressure < 0.7; 1.0+(pressure-0.5)%0.2; 2.0]
-/ Applied to bias indices for NW(0), SW(6), W(7) directions
-```
+## Meta-brain size
 
-**Valve 3: Dynamic Gradient Steepness**
-- Vertical bias multiplier: `1.0 + pressure × 1.0` (range 1.0 → 2.0)
-- Horizontal bias multiplier: `1.0 + pressure × 0.5` (range 1.0 → 1.5)
-- Higher pressure = steeper gradients = faster drain to outputs
-
-## Directional Bias System
-
-Two bias arrays serve different signal sources (both in `.dirs` namespace):
-
-```q
-/ Vertical bias: favours downward propagation (vision signals entering top row)
-vBias: 0.5 0.5 0.5 1.0 1.0 1.5 1.8 1.5
-/       NW   N   NE   W   E   SW   S  SE
-
-/ Horizontal bias: favours leftward propagation (meta-brain signals entering right column)
-hBias: 1.5 1.0 0.5 0.5 0.5 1.0 1.5 1.8
-/       NW   N  NE   W   E   SW   S   W
-```
-
-The active bias for each neuron step is selected based on signal origin (tracked via `inc0`/`inc1`).
-
-## Cross-Flow Conflict Resolution
-
-When a neuron receives signals from BOTH top and right simultaneously, the existing 4D synapse system handles it naturally:
-
-- `inc0`/`inc1` track up to 2 incoming directions per neuron
-- For HIGH state (two active inputs), synapse weights from both incoming directions are averaged
-- The 4D structure `syns[r][c][inDir][outDir]` was designed precisely for this
-
-No additional conflict-resolution logic is needed.
-
-## Q Implementation
-
-The cross-flow mechanics are implemented in [q/modules/brain.q](q/modules/brain.q):
-
-- `.brain.stepNeuron` — processes one neuron, applies context-appropriate bias, returns updated accumulator
-- `.brain.propagate` — folds `stepNeuron` over all active neurons
-- `.brain.applyThrottledMetaInput` — applies meta-brain output to right column with pressure throttling
-- `.brain.captureOverflow` — captures activity from left column (like outputter captures bottom row)
-- `.brain.pressure` — calculates current brain pressure (0.0–1.0)
-- `.brain.leftwardPull` — calculates leftward drain multiplier from pressure
-- `.brain.drain` — applies overflow drain using pressure-scaled leftward bias
-
-## Bar Processing Sequence
-
-```q
-/ Inside the main Bar loop in cat_mouse.q:
-pressure: .brain.pressure[prim`br; ROWS; COLS];
-/ 1. Apply throttled meta-brain input to right column
-prim: .brain.applyThrottledMetaInput[prim; meta`out; pressure];
-/ 2. Run STEPS_PER_BAR propagation cycles
-do[STEPS_PER_BAR; prim: .engine.runCycle[prim]];
-/ 3. Capture overflow from left column
-overflow: .brain.captureOverflow[prim`br; ROWS];
-```
-
-## Design Decisions (Resolved)
-
-1. **Overflow data**: Logged to `simLog` for analysis (not discarded, not fed back yet)
-2. **Meta-brain output mapping**: Uses variable offset/length parameters matching top/bottom I/O pattern
-3. **Cross-flow conflicts**: Resolved by existing 4D synapse averaging — no extra logic needed
-4. **Drain mechanism**: Gradient-based flow via pressure-adjusted leftward bias (same mechanics as output vector)
-5. **Incoming direction for meta-input**: Direction 8 (West) — indicates intended leftward flow
-
-## Status
-
-Architecture fully implemented in q. The Fortran predecessor validated the pressure thresholds (0.3/0.6 throttle, 0.5/0.7 drain) experimentally. Meta-brain size is fixed at 3×5 — larger sizes cause energy accumulation bugs (validated in prior experiments).
+The meta-brain is 3×5. Fortran-era notes said larger meta-brains caused "energy accumulation". In the q version, `q/tests/test_conservation.q` shows propagation conserves energy at 3×5, 6×12 and 8×16. So if accumulation does occur, it would come from the overwriting inputs (F16), not from propagation. This hasn't been re-tested. Run the tests and check `simLog.brainEnergy` before resizing.

@@ -1,135 +1,143 @@
 # ForWhoseAdvantage
 
-**A q/kdb-x neural simulation** demonstrating emergent learning through a **dual-brain architecture** with 4D directional synaptic routing and hierarchical meta-learning. Watch an artificial cat learn to hunt a mouse using 8-slice angular vision — achieving **94%+ directional accuracy** with a meta-brain that maintains and enhances learned behaviour even without direct rewards.
+A **q/kdb-x** neural simulation in which an artificial cat learns to hunt a mouse. The cat has no neural-network library, no gradients and no backpropagation. Its "brain" is a small grid of three-state neurons that pass units of energy to their neighbours along weighted routes. Learning means strengthening the routes that were in use when something good happened.
 
-## What Makes This Special
+The project also asks a research question about *how* rewards should be delivered (see [Research status](#research-status)).
 
-ForWhoseAdvantage implements a unique dual-brain system:
+> **Goal:** the cat reliably learns to head towards the mouse. That's the foundation for generalising the system to richer inputs, outputs and rewards. Current trained cats move towards the mouse 74–95% of the time, but how well their moves line up with the mouse varies a lot between brains. Making that learning reliable, fast and able to re-learn is the active work.
+>
+> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs, and re-ran the project's main experiment under controlled conditions. The headline result in earlier versions of this README did not hold up. Work in progress is tracked in [REVIVAL_PLAN.md](REVIVAL_PLAN.md).
 
-**Primary Brain**: 4D directional routing where each neuron maintains 64 connection strengths (8 incoming × 8 outgoing directions), enabling context-dependent learning that mirrors biological information processing.
+---
 
-**Meta-Brain**: A smaller control system (3×5) that learns to trigger strategic reinforcement based on performance metrics, demonstrating **acquisition → maintenance transitions** where learned behaviour persists and improves after removing direct rewards.
+## What it does
 
-**Key Capabilities:**
-- Hierarchical meta-learning — meta-brain maintains and enhances behaviour without direct rewards (130% retention)
-- 4D directional routing with context-dependent pathway selection
-- Energy-conserving trinary neuron model (propagation as functional fold)
-- Native kdb-x simulation log — query the running experiment in real time
-- Brain state persistence — warm-start with saved weights
-- Windowed catch-rate metrics with rolling 200-bar window
+- **The world:** a 100×100 field.
+  - The mouse wanders randomly (2 units every 10 decisions) and wraps around the edges.
+  - The cat sees only *which of 8 directions* the mouse lies in (45° vision slices).
+  - The cat moves 5 or 10 units per decision in one of 8 compass directions.
+  - A **catch** is when the cat's path passes within 2 units of the mouse. The mouse then respawns 30–45 units away.
+- **The primary brain:**
+  - A 6×12 grid of **trinary** neurons (LOW/MEDIUM/HIGH = 0/1/2 energy units).
+  - Vision lights up one cell of the top row. Energy then flows through the grid, and whatever reaches the bottom row picks the move.
+  - Each neuron has **64 synapse weights**, one for each (incoming direction, outgoing direction) pair. So where energy goes next depends on where it came from.
+  - Energy is **conserved** while it moves; this is enforced by tests.
+- **Learning:**
+  - **Direct ("tactical") rewards:** every decision, routes used on a move towards the mouse are strengthened, and routes used on a move away are weakened.
+  - **Catch boost:** after each catch, routes used in the last 20 decisions are boosted.
+  - **Hebbian strengthening and decay:** every use strengthens a route a little, and all routes slowly decay.
+- **The meta-brain:**
+  - A second, 3×5 brain that sees the recent catch rate.
+  - Its output sets how far back (20–80 decisions) and how strongly to apply a "strategic" reinforcement of past routes. That reinforcement fires whenever the catch rate is high enough.
+  - Its output is also fed into the side of the primary brain.
 
-## Performance Highlights
+From a random start, a cat typically goes from about 8 catches per 1000 decisions in its first 2000 decisions to about 37 by its tenth 2000. Across 16 trained brains, about 82% of its moves have a component towards the mouse.
 
-**Latest Results** (reaction-dissociation branch):
-- **Directional Learning**: 94.1% accuracy moving toward target in meta-only mode
-- **Hunt Success**: 1,326 average catches/trial with meta-brain only (130% retention)
-- **Training Performance**: 1,011 average catches with direct + meta rewards
-- **Meta-Brain Breakthrough**: Performance *increases* when direct rewards are removed (+15%)
+---
 
-## Quick Start
+## Research status
 
-**Prerequisites**: [kdb-x](https://kx.com) (kdb-x CLI, `q`)
+**The question (branch `reaction-dissaccociation`):** do fast tactical rewards interfere with the slower, meta-brain-controlled strategic reinforcement? In other words, does a trained cat do *better* if direct rewards are switched off and only the meta-brain's reinforcement remains ("meta-only" mode)?
+
+**The earlier claim** was "+15%: meta-only beats training". It came from the older Fortran version and **does not stand**:
+- In the Fortran code, the meta-brain's strategic reinforcement only ran during the first 100 decisions of each run. After that, the meta-brain had no effect at all.
+- The comparison set the *best* of 30 trained brains, already warmed up, against the *average* of all 30 runs from scratch, including the early phase before any of them had learned.
+- The q port that followed had arithmetic bugs that produced phantom catches. These are now fixed.
+
+**Controlled re-test (October 2026).** 16 brains were trained, and each was continued for 10,000 decisions in four conditions. Results are paired by brain, with bootstrap 95% confidence intervals:
+
+| Condition (from the same trained brain) | Catches per 1000 decisions | vs meta-only |
+|---|---|---|
+| A — keep training (direct + meta rewards) | **31.1** | |
+| B — meta-only (no direct rewards) | 15.7 | — |
+| C — meta-only, strategic reinforcement off too | 22.8 | +45% (CI just includes 0) |
+| D — meta-only, meta-brain's output zeroed | 16.0 | +2% (no effect) |
+
+What this shows:
+- **Switching off direct rewards halves performance** (−49%, CI −66% to −31%). It also keeps falling over time, from 20 to 11 catches per 1000 decisions over the run.
+- **The meta-brain contributes nothing measurable:** zeroing its output changes nothing.
+- **A minority of brains (3 of 16) do better without direct rewards,** while others collapse. Testing only the best trained brain, as the old experiment did, will tend to pick out exactly these cases.
+
+The open question now is what lets some brains sustain hunting on their own while most decay. Full numbers and caveats are in [REVIVAL_PLAN.md §6](REVIVAL_PLAN.md#6-results).
+
+---
+
+## Quick start
+
+**Requires:** [kdb-x](https://kx.com) with `q` on your `PATH`. **Run everything from the repository root**, because scripts load modules by relative path.
 
 ```bash
-# Run a 20,000-bar simulation
-q q/programs/cat_mouse.q --seed 42 --bars 20000
+# One run: 20,000 decisions, seed 42; writes results/seed42/
+q q/programs/cat_mouse.q --seed 42 --bars 20000 < /dev/null
 
-# Meta-only mode with pre-trained weights
-q q/programs/cat_mouse.q --load-weights results/path/to/weights.q --meta-only
+# Same, but stay in the q session afterwards to query the live log table
+q q/programs/cat_mouse.q --seed 42 --bars 5000
+q) select avg pressure, max catches by 1000 xbar bar from simLog
 
-# Interactive exploration
-q q/load.q
+# Continue from a saved brain without direct rewards ("meta-only")
+q q/programs/cat_mouse.q --seed 7 --bars 10000 \
+  --load-weights results/seed42/weights_seed42.bin --meta-only < /dev/null
+
+# Tests (must pass after any code change)
+q/tests/run_all.sh
 ```
 
-## Project Structure
+`< /dev/null` makes q exit when the run ends. Without it, q stays open at its prompt.
 
-```
-q/
-├── load.q                  # Master loader — loads all modules in dependency order
-├── modules/
-│   ├── trinary.q           # .trinary — LOW/MEDIUM/HIGH neuron states
-│   ├── directions.q        # .dirs — 8 direction deltas, opposites, biases
-│   ├── synapses.q          # .syn — 4D synapse init, decay, reinforce, punish
-│   ├── brain.q             # .brain — propagation fold, pressure, cross-flow
-│   ├── brain_engine.q      # .engine — initSystem, runCycle, runCycleSimple
-│   └── vision.q            # .vision — atan2 vision, toroidal field, mouse movement
-├── programs/
-│   └── cat_mouse.q         # Full simulation: main loop, reward logic, kdb-x log
-└── tests/
-    ├── test_trinary.q
-    └── test_conservation.q
-results/                    # Experimental output (gitignored)
-```
+### Command-line flags (`q/programs/cat_mouse.q`)
 
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for a detailed layout.
+| Flag | Meaning |
+|---|---|
+| `--seed N` | Random seed (default: time of day) |
+| `--bars N` | Number of decisions to simulate (default 20000) |
+| `--output-dir DIR` | Where outputs go (default `results/seed<N>/`) |
+| `--load-weights FILE` | Start from a brain saved by an earlier run (`weights_seed<N>.bin`) |
+| `--meta-only` / `--no-direct-rewards` | Turn off direct (tactical) rewards |
+| `--no-meta-rewards` | Turn off the meta-brain-controlled strategic reinforcement |
+| `--ablate-meta` | Treat the meta-brain's output as all zeros (a control condition) |
 
-## Running Tests
+An unknown flag stops the run with an error, so a typo can't silently run the wrong condition.
+
+### Outputs (per run)
+
+| File | Contents |
+|---|---|
+| `summary.csv` | One row: seed, settings, total catches, move directionality, mean pressure |
+| `epoch_summary.csv` | Catches and move counts for each 2000-decision epoch |
+| `simulation_log.csv` | One row per decision: positions, vision slice, brain energy, action, catches, pressure |
+| `brain_state.csv`, `meta_brain_state.csv`, `synapse_state.csv` | Final brain state |
+| `weights_seed<N>.bin` (+ `.bin#`) | Full saved state, for `--load-weights` |
+
+### Multi-seed experiments
+
+Results vary a lot from seed to seed. One trained brain scored 1 catch where another scored 570 under the same condition. So **compare conditions across many seeds, paired by brain**:
 
 ```bash
-q q/tests/test_trinary.q
-q q/tests/test_conservation.q
+scripts/run_trials.sh -l myrun -i "1 2 3 4 5 6 7 8" -- --bars 10000          # parallel runs
+q q/programs/compare.q results/myrun results/otherrun < /dev/null           # paired stats
+scripts/phase3_experiment.sh                                                # the full re-test above
 ```
 
-Energy conservation is a hard invariant — `test_conservation.q` must pass after any brain changes.
+See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md).
 
-## System Architecture
+---
 
-### Neural Simulation Engine (q/kdb-x)
+## Documentation
 
-- **`trinary.q`** — Trinary state neurons (LOW=0i, MEDIUM=1i, HIGH=2i) with shift operations
-- **`brain.q`** — Primary brain (6×12) and meta-brain (3×5) with 4D synaptic routing; propagation via functional fold
-- **`brain_engine.q`** — Unified interface for dual-brain system management
-- **`synapses.q`** — 4D synapse arrays with adaptive decay/reinforcement/punishment
-- **`vision.q`** — 8-slice angular vision system (45° per slice) on a toroidal field
-- **`directions.q`** — Direction constants, biases, and opposites
+| Document | Covers |
+|---|---|
+| [REVIVAL_PLAN.md](REVIVAL_PLAN.md) | Audit findings, fixes, results, and the task list for ongoing work |
+| [THEORY.md](THEORY.md) | The mathematics: the brain as a Markov chain, learning as a reinforced urn, memory and reward arithmetic, testable predictions |
+| [BAR_STRUCTURE.md](BAR_STRUCTURE.md) | What happens in one decision cycle ("bar"), step by step, including every reward |
+| [CROSS_FLOW_ARCHITECTURE.md](CROSS_FLOW_ARCHITECTURE.md) | The brain's four input/output edges and the pressure mechanisms (mostly inactive in practice) |
+| [OPTIMIZATION_NOTES.md](OPTIMIZATION_NOTES.md) | Runtime costs, why propagation is a fold, Fortran-era history |
+| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Directory layout |
+| [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) | How to run and analyse controlled experiments |
+| [CLAUDE.md](CLAUDE.md) | Instructions for AI coding assistants working in this repo |
 
-### Simulation Log (kdb-x table)
+## History
 
-`simLog` is a live kdb-x table appended each bar. Query it in real time:
-```q
-select avg catches from simLog where bar > 18000
-select epochN, catchRate, metaScope from simLog
-```
-
-This is a significant improvement over the previous CSV-based approach.
-
-## Understanding the Dual-Brain Learning Process
-
-### The Dual-Brain Meta-Learning Loop
-
-**1. Primary Brain Vision System**
-- 8 angular slices detect mouse position (45° coverage each)
-- Active slice triggers corresponding primary brain input (top row, cols 3-10)
-
-**2. Primary Brain Neural Processing**
-- 6×12 brain grid with 4D directional routing: `syns[r][c][inDir][outDir]`
-- 12 propagation steps per Bar using `f/[acc; activeList]` fold
-- Energy conservation maintained: each neuron only changes state by ±1 per step
-
-**3. Meta-Brain Performance Monitoring**
-- 3×5 meta-brain monitors rolling catch rate
-- Positional encoding: rates 1-5 → MEDIUM, rates 6-10 → HIGH
-- Meta-brain learns to associate high performance with strategy reinforcement
-
-**4. Hierarchical Reinforcement**
-- **Primary Brain**: Immediate rewards for moving toward mouse
-- **Meta-Brain Control**: Learns to trigger broad strategy reinforcement across 20-120 previous bars
-- **Temporal Credit Assignment**: 5D circular history buffer `(100; 6; 12; 8; 8)` boolean
-
-**5. Dual-Loop Learning**
-- **Fast Loop**: Primary brain learns individual vision→movement mappings
-- **Slow Loop**: Meta-brain learns when to reinforce successful strategies
-- **Emergent Synergy**: Combined system achieves sustained high catch rates
-
-## Branch Context (`reaction-dissociation`)
-
-This branch investigates the dissociation between:
-- **Reaction mode** — tactical, 1-bar-timescale direct rewards
-- **Dissociation mode** — strategic, 20-120 bar meta-brain reinforcement
-
-Core hypothesis: mixed tactical+strategic signals interfere. Removing tactical rewards during meta-brain operation improves performance. Current evidence: meta-only +15% vs training average, +35% in best runs.
-
-See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) for experiment details.
+The project was written in Fortran (later with OpenMP and GPU support), then ported to q/kdb-x in March 2026. The Fortran source is still in git history, e.g. `git show c6f1c17:src/programs/cat_mouse_learning.f90`.
 
 ## License
 

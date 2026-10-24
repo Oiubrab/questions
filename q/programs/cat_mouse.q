@@ -1,12 +1,18 @@
 / Cat-Mouse Learning Simulation — q/kdb-x port
 / Mirrors src/programs/cat_mouse_learning.f90
 
-/ Usage:
-/   q q/programs/cat_mouse.q              (random seed)
-/   q q/programs/cat_mouse.q 42           (seed 42)
-/   q q/programs/cat_mouse.q 42 --no-direct-rewards
-/   q q/programs/cat_mouse.q 42 --load-weights weights_seed42.bin
-/   q q/programs/cat_mouse.q 42 --output-dir results/run1/
+/ Usage (run from repo root):
+/   q q/programs/cat_mouse.q --seed 42 --bars 20000 [flags]
+/ Flags:
+/   --seed N              RNG seed (or first positional arg); default: time of day
+/   --bars N              bars to simulate (default 20000)
+/   --output-dir DIR      where CSVs and weights go (default results/seed<N>/)
+/   --load-weights FILE   warm start from a weights_seed<N>.bin written by an earlier run
+/   --meta-only           same as --no-direct-rewards (no tactical per-bar rewards)
+/   --no-direct-rewards
+/   --no-meta-rewards     disable strategic (meta-controlled) reinforcement of the primary brain
+/   --ablate-meta         treat meta-brain output as all-zero: no cross-flow, minimum scope/magnitude
+/ Headless: append < /dev/null so q exits when the run ends instead of staying in the REPL.
 
 / Load all modules first
 \l q/modules/trinary.q
@@ -17,27 +23,30 @@
 \l q/modules/brain_engine.q
 
 / ================================================================
-/ PARSE COMMAND LINE ARGUMENTS
-/ Usage: q q/load.q q/programs/cat_mouse.q -- --seed 42 --bars 20000
-/        q q/load.q q/programs/cat_mouse.q -- --seed 42 --meta-only
-/        q q/load.q q/programs/cat_mouse.q -- --seed 42 --load-weights results/w.q
+/ PARSE COMMAND LINE ARGUMENTS (flags documented at top of file)
 / ================================================================
 args: .z.x
+KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta")
+/ Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
+badFlags: (args where args like "--*") except KNOWN_FLAGS
+if[count badFlags; -2 "Unknown flag(s): ",", " sv badFlags; exit 1]
+flagVal:{[f] i: first where args like f; $[null i; ""; args i+1]}
+hasFlag:{[f] any args like f}
 / Seed: --seed N (preferred) or first positional arg that is not a flag
-seedIdx: first where args like "--seed"
-userSeed: $[not null seedIdx;
-  "I"$args seedIdx+1;
-  (0<count args) & not (first args) like "--*";
-  "I"$first args;
+userSeed: $[count flagVal "--seed"; "I"$flagVal "--seed";
+  (0<count args) & not (first args) like "--*"; "I"$first args;
   `int$.z.t]
 / Bars override
-barsIdx: first where args like "--bars"
-MAX_BARS_ARG: $[not null barsIdx; "I"$args barsIdx+1; 0Ni]
-loadWeights: any args like "--load-weights"
-noDirectRewards: (any args like "--no-direct-rewards") | any args like "--meta-only"
-weightFile: $[loadWeights; args 1+first where args like "--load-weights"; ""]
-outputDir: $[any args like "--output-dir"; args 1+first where args like "--output-dir"; ""]
-if[(count outputDir)&not last[outputDir]="/"; outputDir,:"/"]
+MAX_BARS_ARG: $[count flagVal "--bars"; "I"$flagVal "--bars"; 0Ni]
+loadWeights: hasFlag "--load-weights"
+weightFile: flagVal "--load-weights"
+noDirectRewards: (hasFlag "--no-direct-rewards") | hasFlag "--meta-only"
+noMetaRewards: hasFlag "--no-meta-rewards"
+ablateMeta: hasFlag "--ablate-meta"
+outputDir: flagVal "--output-dir"
+if[0=count outputDir; outputDir: "results/seed",string userSeed]
+if[not last[outputDir]="/"; outputDir,:"/"]
 
 / ================================================================
 / SIMULATION PARAMETERS (match Fortran exactly)
@@ -102,20 +111,27 @@ catchTs: RATE_WINDOW#-999999i    / circular buffer of bar numbers when catches o
 catchHead: 0i                    / write pointer
 catchCount: 0i                   / number of valid entries in buffer
 
-calcRateCounter:{[bar;catchTs;catchCount;window]
-  / Count how many catch timestamps are within window bars of current bar
-  sum[bar - catchTs[til catchCount] <= window]}
-
 / ================================================================
 / LOAD WEIGHTS (if --load-weights provided)
 / ================================================================
+/ Format (written by SAVE BINARY WEIGHTS at the end of a run):
+/   (prim syns; meta syns; prim br; prim inc0; prim inc1; meta br; meta inc0; meta inc1; hist; histIdx)
+/ Old Fortran .bin files are a different format and are not supported.
+/ Not restored: catch timestamps, so rateCounter starts at 0 on a warm start.
+/ dims: shape of a nested list, following first elements (atom -> empty)
+dims:{$[0>type x; `long$(); (count x),.z.s first x]}
 if[loadWeights;
   show "Loading weights from: ",weightFile;
-  / kdb-x binary read: load from file using get
-  / Format: (syns; meta_syns; br; inc0_combined; meta_br; meta_inc0_combined; hist; histIdx)
-  / Note: Fortran binary format is not directly compatible; placeholder for future work
-  show "WARNING: Fortran binary weight format not yet supported — starting fresh"
-  ]
+  w: get hsym `$weightFile;
+  expect: (prim`syns; metaBr`syns; prim`br; prim`inc0; prim`inc1;
+           metaBr`br; metaBr`inc0; metaBr`inc1; hist; histIdx);
+  if[not (dims each w)~dims each expect;
+    -2 "Weight file shape mismatch: got ",(.Q.s1 dims each w),", want ",.Q.s1 dims each expect;
+    exit 1];
+  prim[`syns`br`inc0`inc1]: w 0 2 3 4;
+  metaBr[`syns`br`inc0`inc1]: w 1 5 6 7;
+  hist: w 8; histIdx: w 9;
+  show "Loaded warm state; primary brain energy: ",string sum raze prim`br]
 
 / ================================================================
 / INITIALIZE POSITIONS
@@ -125,7 +141,7 @@ mousePos: FIELD_SIZE*0.5 0.5
 
 / Cat starts 30-45 units from center in random direction
 dx: (2*(rand 1.0))-1.0; dy: (2*(rand 1.0))-1.0
-d:sqrt[dx*dx+dy*dy]
+d:.vision.norm (dx;dy)
 if[d>0.0; dx:dx%d; dy:dy%d]
 catDist: 30.0 + 15.0*(rand 1.0)
 catPos: (0.0 | FIELD_SIZE & mousePos[0]+dx*catDist;
@@ -175,6 +191,10 @@ show "Max bars: ",string MAX_BARS
 show "Steps per bar: ",string STEPS_PER_BAR
 show "Seed: ",string userSeed
 show "Direct rewards: ",string not noDirectRewards
+show "Strategic (meta) rewards: ",string not noMetaRewards
+show "Meta-brain ablated: ",string ablateMeta
+show "Weights: ",$[loadWeights; weightFile; "fresh"]
+show "Output dir: ",outputDir
 show ""
 
 bar: 1i
@@ -250,7 +270,7 @@ while[bar<=MAX_BARS;
   metaBr[`out]: accMetaOut;
 
   / Save metaBr output as side input for next bar's cross-flow
-  sideMetaInp: accMetaOut;
+  sideMetaInp: $[ablateMeta; `int$META_INPUT_MAP_LEN#0i; accMetaOut];
 
   / ---- PRESSURE & DRAIN ----
   brainPressure: .brain.pressure[prim`br];
@@ -271,20 +291,20 @@ while[bar<=MAX_BARS;
   / magnitude:      output[1] clamped to [1,2]
   temporalScope: `int$ 20i | 120i & (metaBr`out)[0] * 40i;
   magnitude:     `int$ 1i  | (metaBr`out)[1];
+  / --ablate-meta: behave as if meta output were all-zero (the clamps above give 20 and 1)
+  if[ablateMeta; temporalScope: 20i; magnitude: 1i];
 
   if[(noDirectRewards & rateCounter>=1i) | rateCounter>=3i;
     / Reinforce primary brain synapses active during lookback window
     / lookback: bars bar-1, bar-2, ..., bar-temporalScope (clamped to history buffer depth)
-    lookback: `int$bar-1i - til temporalScope;
-    lookback: lookback where (lookback>=1i) & ((bar-lookback)<HISTORY_SIZE);
-    mag: `float$magnitude * 1.1;
+    lookback: $[noMetaRewards; `int$(); .syn.lookbackBars[bar;temporalScope;HISTORY_SIZE]];
+    / Fortran applied x1.1 `magnitude` times (x1.1 or x1.21); the original q port
+    / used magnitude*1.1 (x2.2) — restored to Fortran (REVIVAL_PLAN.md F17)
+    mag: 1.1 xexp magnitude;
     / Fold reinforcement across all lookback bars — must fold to accumulate syns updates
     prim[`syns]: ({[mag;histBuf;hi;barN;syns;b]
-      / 0-indexed history slot for bar b:
-      /   hi is the NEXT write slot, so bar b is at slot (hi - (barN-b)) mod HISTORY_SIZE
-      j: `int$ barN - b;
-      i: `int$(hi - j + HISTORY_SIZE) mod HISTORY_SIZE;
-      hSlice: histBuf[i];
+      / 0-indexed history slot for bar b (hi is the NEXT write slot)
+      hSlice: histBuf .syn.histSlot[hi;barN;b;HISTORY_SIZE];
       / Apply mag*1.0 reinforcement to synapses active (hc=1b) in this bar
       {[sc;hc;m] sc + `int$hc*(.syn.MAX_STRENGTH & `int$`float$sc*m) - `int$hc*sc}
       [;;mag]''[syns;hSlice]
@@ -349,10 +369,11 @@ while[bar<=MAX_BARS;
       show "CATCH #",(string catchesCount)," at bar ",(string bar)," (dist: ",(string closestDist),")";
 
       / SUCCESS PATHWAY BOOST: reinforce last 20 bars in history (fold to accumulate)
-      / Bars ago: 1..20, corresponding to history slots (histIdx-1)..(histIdx-20)
+      / History was already written for this bar, so slots (histIdx-1)..(histIdx-20)
+      / hold the current bar and the 19 before it
       prim[`syns]: ({[histBuf;hi;syns;j]
-        / j is bars-ago (1..20), slot = (hi - j + HISTORY_SIZE) mod HISTORY_SIZE
-        i: `int$(hi - j + HISTORY_SIZE) mod HISTORY_SIZE;
+        / j is slots back from the write head (1 = current bar); q's mod is floored
+        i: `int$(hi-j) mod HISTORY_SIZE;
         hSlice: histBuf[i];
         {[sc;hc] sc + `int$hc*(.syn.MAX_STRENGTH & `int$`float$sc*1.5) - `int$hc*sc}
         ''[syns;hSlice]
@@ -364,7 +385,7 @@ while[bar<=MAX_BARS;
 
       / Respawn mouse 30-45 units from cat
       rdx: (2*(rand 1.0))-1.0; rdy: (2*(rand 1.0))-1.0;
-      rd: sqrt[rdx*rdx+rdy*rdy];
+      rd: .vision.norm (rdx;rdy);
       if[rd>0.0; rdx:rdx%rd; rdy:rdy%rd];
       rDist: 30.0 + 15.0*(rand 1.0);
       mousePos: (0.0 | FIELD_SIZE & newX+rdx*rDist;
@@ -378,10 +399,12 @@ while[bar<=MAX_BARS;
 
     / ---- DIRECTION-BASED REWARD ----
     desX: mousePos[0]-oldCat[0]; desY: mousePos[1]-oldCat[1];
-    desLen: sqrt[desX*desX+desY*desY];
+    desLen: .vision.norm (desX;desY);
     if[desLen>0.001;
       desX: desX%desLen; desY: desY%desLen;
-      dotP: catDx*desX + catDy*desY;
+      / NOTE: move vector is not normalised (length 5-14), so dotP is not a cosine
+      / and adaptThresh is not a real cone — kept as-is in Phase 1 (REVIVAL_PLAN.md F10, task 4.1)
+      dotP: .vision.dot[(catDx;catDy);(desX;desY)];
 
       / Track directionality
       totalMoves+:1i;
@@ -461,11 +484,11 @@ while[bar<=MAX_BARS;
 / ================================================================
 / SAVE FINAL EPOCH
 / ================================================================
-if[catchesThisEpoch>0i;
-  epochCatches[currentEpoch]: catchesThisEpoch;
-  epochTowards[currentEpoch]: towardsEpoch;
-  epochAway[currentEpoch]: awayEpoch;
-  epochPerp[currentEpoch]: perpEpoch];
+/ Always save (previously skipped when the last epoch had 0 catches, losing its move counts)
+epochCatches[currentEpoch]: catchesThisEpoch;
+epochTowards[currentEpoch]: towardsEpoch;
+epochAway[currentEpoch]: awayEpoch;
+epochPerp[currentEpoch]: perpEpoch;
 
 / ================================================================
 / SAVE RESULTS (kdb-x tables → CSV)
@@ -524,20 +547,27 @@ show "Total catches: ",string catchesCount
 show "Catch rate per bar: ",string `float$catchesCount % MAX_BARS
 
 / Epoch breakdown (using kdb-x query!)
-/ numEpochs+1 slots: full epochs 0..numEpochs-1, plus partial final epoch at slot numEpochs
-epochSummary: ([] epoch:1+til numEpochs+1i; catches:epochCatches;
-               towards:epochTowards; away:epochAway; perp:epochPerp)
+/ numEpochs+1 slots: full epochs 0..numEpochs-1, plus partial final epoch at slot numEpochs.
+/ Keep only epochs that actually ran; `bars` is the epoch length (the last may be partial).
+nRun: (MAX_BARS+EPOCH_SIZE-1i) div EPOCH_SIZE
+epochSummary: nRun#([] epoch:1i+til numEpochs+1i;
+               bars:`int$EPOCH_SIZE & MAX_BARS-EPOCH_SIZE*til numEpochs+1i;
+               catches:epochCatches; towards:epochTowards; away:epochAway; perp:epochPerp)
 show "=== TEMPORAL LEARNING (EPOCH BREAKDOWN) ==="
 show epochSummary
+saveCsv[outputDir;"epoch_summary.csv";epochSummary]
 
-/ Learning trend: early third vs late third
-earlyAvg: `float$(sum epochCatches[til numEpochs div 3i]) % numEpochs div 3i
-lateAvg:  `float$(sum epochCatches[(2i*numEpochs div 3i)+til (numEpochs - 2i*numEpochs div 3i)]) % numEpochs - 2i*numEpochs div 3i
-show "Early third avg: ",string earlyAvg
-show "Late third avg:  ",string lateAvg
-show $[lateAvg>earlyAvg*1.2; "TEMPORAL IMPROVEMENT DETECTED";
-       lateAvg>earlyAvg;      "Slight improvement";
-                               "No temporal improvement"]
+/ Learning trend: early third vs late third of the full epochs (needs >= 3 full epochs)
+third: numEpochs div 3i
+earlyAvg: 0n; lateAvg: 0n
+if[third>0i;
+  earlyAvg: avg epochCatches til third;
+  lateAvg:  avg epochCatches (2i*third)+til numEpochs-2i*third;
+  show "Early third avg: ",string earlyAvg;
+  show "Late third avg:  ",string lateAvg;
+  show $[lateAvg>earlyAvg*1.2; "TEMPORAL IMPROVEMENT DETECTED";
+         lateAvg>earlyAvg;      "Slight improvement";
+                                 "No temporal improvement"]]
 
 show ""
 show "=== MOVEMENT DIRECTIONALITY ==="
@@ -551,9 +581,17 @@ if[totalMoves>0i;
 / kdb-x analytics bonus: in-session queries on the log
 show ""
 show "=== kdb-x ANALYTICS (live on simulation_log table) ==="
-/ Catches per epoch
-catchPerEpoch: select catches:max catches - prev catches by epoch:bar div EPOCH_SIZE from simLog
-show "Catch rate acceleration (last epoch vs first):"
-show select first catches, last catches from catchPerEpoch
+/ Catches per epoch: `catches` is cumulative, so sum its per-bar deltas within each epoch
+/ (epoch numbering matches epochSummary: bars 1..EPOCH_SIZE are epoch 1)
+catchPerEpoch: select catches:sum d by epoch:1i+(bar-1i) div EPOCH_SIZE from update d:deltas catches from simLog
+show "Catches per epoch (from simLog):"
+show catchPerEpoch
 / Average pressure
 show "Average brain pressure: ",string avg simLog`pressure
+
+/ One-row machine-readable run summary, read by q/programs/compare.q
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`weightFile`catches`totalMoves`towards`away`perp`meanPressure!
+  (userSeed; MAX_BARS; not noDirectRewards; not noMetaRewards; ablateMeta; `$weightFile;
+   catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure)
+saveCsv[outputDir;"summary.csv";summary]
+show "Summary written to: ",outputDir,"summary.csv"

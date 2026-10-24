@@ -11,7 +11,7 @@ evolved_brain_gui_demo
 targeted_evolution
 create_hunting_brain
 modify_array
-test_*
+# (test_* removed: it silently ignored q/tests/test_*.q — REVIVAL_PLAN.md F4)
 analyze_decay_math
 
 # Ignore executables with compiler suffixes
@@ -26,6 +26,8 @@ analyze_decay_math
 *.out
 *.exe
 *.bin
+# q `set` writes a companion data file for nested lists
+*.bin#
 *.obj
 *.so
 *.a

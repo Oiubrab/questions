@@ -7,6 +7,11 @@
 
 PI: acos -1.0   / 3.14159...
 
+/ Vector helpers. Use these instead of writing a*b+c*d inline: q evaluates
+/ right to left, so dx*dx+dy*dy means dx*(dx+(dy*dy)) (REVIVAL_PLAN.md F1).
+norm:{sqrt sum x*x}       / Euclidean length of a vector
+dot:{sum x*y}             / dot product of two equal-length vectors
+
 / Initialize mouse at random position in field
 initMouse:{[fieldSize] fieldSize * 2?1.0}   / returns (x;y)
 
@@ -27,7 +32,7 @@ moveMouse:{[pos;fieldSize;stepSize]
 visionSlice:{[catPos;mousePos;numSlices]
   dx: mousePos[0] - catPos[0];
   dy: mousePos[1] - catPos[1];
-  if[(abs dx < 0.0001)&(abs dy < 0.0001); :-1i];
+  if[(0.0001>abs dx)&0.0001>abs dy; :-1i];
   angle: atan[dy%dx];                   / atan returns (-PI/2, PI/2)
   / Full atan2 using sign of dx
   angle: $[dx<0.0;
@@ -36,7 +41,9 @@ visionSlice:{[catPos;mousePos;numSlices]
   / Normalize to [0, 2*PI)
   if[angle<0.0; angle+:2.0*PI];
   sliceAngle: 2.0*PI % numSlices;
-  `int$ angle % sliceAngle}               / 0-indexed slice
+  / floor, not `int$ (which rounds: angle near 2*PI would give slice numSlices)
+  / mod: if float error makes angle exactly 2*PI, wrap to slice 0 (same direction)
+  `int$ (floor angle % sliceAngle) mod numSlices}   / 0-indexed slice
 
 / Build an inputter vector of length numSlices (all 0i except active slice = 1i)
 / Corresponds to MEDIUM state in the original (value=1i)
@@ -51,21 +58,17 @@ toroidalDist:{[p1;p2;fieldSize]
   dx: p2[0]-p1[0]; dy: p2[1]-p1[1];
   if[abs[dx]>fieldSize%2.0; dx: dx - (signum dx)*fieldSize];
   if[abs[dy]>fieldSize%2.0; dy: dy - (signum dy)*fieldSize];
-  sqrt[dx*dx + dy*dy]}
+  norm (dx;dy)}
 
 / Line-segment to point distance: check if cat's movement path crossed near mouse.
 / Returns closest distance (< 2.0 → catch).
 / cat moved from oldPos to newPos; mouse is at mousePos.
 pathDist:{[oldPos;newPos;mousePos]
-  pdx: newPos[0]-oldPos[0];
-  pdy: newPos[1]-oldPos[1];
-  pLen: sqrt[pdx*pdx + pdy*pdy];
-  if[pLen<0.0001; :sqrt[(mousePos[0]-oldPos[0]) xexp 2 + (mousePos[1]-oldPos[1]) xexp 2]];
-  / Project mouse onto path segment
-  t: ((mousePos[0]-oldPos[0])*pdx + (mousePos[1]-oldPos[1])*pdy) % (pLen*pLen);
-  t: 0.0 | t & 1.0;
-  cx: oldPos[0] + t*pdx;
-  cy: oldPos[1] + t*pdy;
-  sqrt[(mousePos[0]-cx) xexp 2 + (mousePos[1]-cy) xexp 2]}
+  path: newPos-oldPos;
+  pLen: norm path;
+  if[pLen<0.0001; :norm mousePos-oldPos];
+  / Project mouse onto path segment, clamped to the segment
+  t: 0.0 | 1.0 & dot[mousePos-oldPos;path] % pLen*pLen;
+  norm mousePos-oldPos+t*path}
 
 \d .

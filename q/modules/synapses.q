@@ -24,6 +24,17 @@ initSU:{[nR;nC]
 initHist:{[histSize;nR;nC]
   histSize # enlist nR # enlist nC # enlist 8 8#0b}
 
+/ History buffer slot holding bar b, seen from current bar barN with write head hi
+/ (hi is the NEXT slot to be written, so bar barN-1 is at hi-1). Relies on q's
+/ floored mod: -3 mod 100 is 97.
+histSlot:{[hi;barN;b;histSize] `int$(hi-(barN-b)) mod histSize}
+
+/ Bars to look back over for strategic reinforcement: bar-1, bar-2, ..., bar-scope,
+/ keeping only bars >= 1 that are still in the history buffer (bars-ago < histSize)
+lookbackBars:{[bar;scope;histSize]
+  b: `int$(bar-1i) - til scope;
+  b where (b>=1i) & (bar-b)<histSize}
+
 / Reset synapse usage to all false
 resetSU:{[su] {{8 8#0b} each til count x} each su}
 

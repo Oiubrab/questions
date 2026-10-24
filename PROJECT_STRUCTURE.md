@@ -1,106 +1,70 @@
 # Project Structure
 
-This document describes the directory structure of the ForWhoseAdvantage q/kdb-x brain simulation.
-
-## Directory Layout
-
 ```
 .
-├── q/                            # All q/kdb-x source code
-│   ├── load.q                    # Master loader — \l all modules in dependency order
-│   │
-│   ├── modules/                  # Reusable q modules (loaded via load.q)
-│   │   ├── trinary.q             # .trinary — LOW/MEDIUM/HIGH constants and shift
-│   │   ├── directions.q          # .dirs — direction deltas, opposites, biases
-│   │   ├── synapses.q            # .syn — 4D synapse init, decay, reinforce, punish
-│   │   ├── brain.q               # .brain — propagation fold, pressure, cross-flow
-│   │   ├── brain_engine.q        # .engine — initSystem, runCycle, runCycleSimple
-│   │   └── vision.q              # .vision — atan2 vision, toroidal field, mouse movement
-│   │
-│   ├── programs/                 # Simulation entry points
-│   │   └── cat_mouse.q           # Full dual-brain cat/mouse simulation
-│   │
-│   └── tests/                    # Test programs
-│       ├── test_trinary.q        # Trinary constant and shift tests
-│       └── test_conservation.q   # Energy conservation invariant tests (must pass)
-│
-├── results/                      # Experiment output (gitignored)
-│   └── run_YYYYMMDD_HHMMSS/      # Timestamped run directory
-│       ├── simLog.csv            # Exported simulation log
-│       ├── weights.q             # Saved brain weights (q binary)
-│       └── experiment_report.md  # Auto-generated summary
-│
-├── scripts/                      # Experiment shell scripts
-│   └── META_EXPERIMENT_README.md # Meta-experiment framework documentation
-│
-├── bin/                          # Empty — no compiled artifacts in q
-│
-├── CLAUDE.md                     # Claude Code instructions for this project
-├── README.md                     # Project overview and quick start
-├── BAR_STRUCTURE.md              # Temporal organization and Bar concept
-├── CROSS_FLOW_ARCHITECTURE.md    # Pressure-regulated cross-flow I/O design
-├── OPTIMIZATION_NOTES.md         # Performance notes and design trade-offs
-├── PROJECT_STRUCTURE.md          # This file
-└── LICENSE                       # GNU GPLv3
+├── q/
+│   ├── load.q                   # Loads all modules (for interactive use: \l q/load.q)
+│   ├── modules/
+│   │   ├── trinary.q            # .trinary — LOW/MEDIUM/HIGH constants, shift, initGrid
+│   │   ├── directions.q         # .dirs — direction deltas dr/dc, opposites, vBias (hBias unused)
+│   │   ├── synapses.q           # .syn — synapse init, decay, reinforce/punish, history helpers
+│   │   │                        #        (histSlot, lookbackBars)
+│   │   ├── brain.q              # .brain — stepNeuron/propagate fold, input copy, meta cross-flow,
+│   │   │                        #          overflow capture, pressure, drain
+│   │   ├── vision.q             # .vision — norm/dot helpers, vision slice, toroidal distance,
+│   │   │                        #           path-to-point distance (catch test), mouse walk
+│   │   ├── brain_engine.q       # .engine — initSystem (state dict), runCycle
+│   │   │                        #           (runCycleSimple, used for the meta-brain, is identical)
+│   │   └── substrate.q          # .sub — lab-only configurable copy of propagation (wrap, bias,
+│   │                            #        temperature, order, hebb, sink); not in load.q
+│   ├── programs/
+│   │   ├── cat_mouse.q          # The simulation: flags, main loop, rewards, outputs
+│   │   ├── compare.q            # Paired multi-seed comparison of experiment arms
+│   │   ├── substrate_lab.q      # Substrate lab: the energy rule alone, with dynamics metrics
+│   │   ├── lab_report.q         # Averages a lab sweep's runs per configuration
+│   │   └── theory_checks.q      # Reproduces every verified number in THEORY.md
+│   └── tests/
+│       ├── run_all.sh           # Runs every test_*.q; exit 1 on any failure
+│       ├── harness.q            # Shared assertions (.t.eq / .t.near / .t.ok / .t.done)
+│       ├── test_trinary.q       # Constants and shift
+│       ├── test_geometry.q      # Distances, vision slices, dot sign, history indexing
+│       ├── test_conservation.q  # Energy conservation and direction bookkeeping in propagation
+│       ├── test_substrate.q     # .sub matches .brain bit for bit by default; conserves under all settings
+│       └── test_weights.q       # Save/load round trip, output files, unknown-flag rejection
+├── scripts/
+│   ├── run_trials.sh            # Run many brain ids in parallel → results/<label>/s<id>/
+│   ├── phase3_experiment.sh     # The controlled re-test (train 16 brains, 4 arms, report)
+│   ├── lab_sweep.sh             # Named substrate-lab sweeps → results/lab/<sweep>/
+│   └── META_EXPERIMENT_README.md
+├── results/                     # Run outputs (gitignored)
+├── README.md
+├── REVIVAL_PLAN.md              # Audit findings, task list, results, progress log
+├── THEORY.md                    # Mathematical model, verified results, predictions
+├── BAR_STRUCTURE.md             # One decision cycle step by step
+├── CROSS_FLOW_ARCHITECTURE.md   # Brain edges and pressure mechanisms
+├── OPTIMIZATION_NOTES.md        # Runtimes and implementation notes
+├── PROJECT_STRUCTURE.md         # This file
+├── CLAUDE.md                    # Instructions for AI coding assistants
+└── LICENSE                      # GNU GPLv3
 ```
 
-## Module Dependency Order
+## Module load order
 
-`load.q` loads modules in this order (dependency chain):
+`load.q` and `cat_mouse.q` both load: `trinary → directions → synapses → brain → vision → brain_engine`. Every module uses the `\d .namespace` … `\d .` pattern. Paths are relative, so **run everything from the repository root.**
+
+## Results layout
+
+A single run writes to `results/seed<N>/` by default, or to `--output-dir`:
 
 ```
-trinary.q → directions.q → synapses.q → brain.q → brain_engine.q → vision.q
+summary.csv  epoch_summary.csv  simulation_log.csv
+brain_state.csv  meta_brain_state.csv  synapse_state.csv
+weights_seed<N>.bin  weights_seed<N>.bin#      # full state for --load-weights
 ```
 
-Do not reorder — later modules depend on earlier namespaces (e.g. `.brain` uses `.trinary` and `.dirs`).
+`scripts/run_trials.sh -l LABEL` writes `results/LABEL/s<id>/` (the same files plus `stdout.txt`). `scripts/phase3_experiment.sh` writes `results/p3_train/`, `results/p3_{A,B,C,D}/` and `results/p3_report.txt`.
 
-## Running the Simulation
+## What isn't here
 
-```bash
-# Full simulation
-q q/load.q q/programs/cat_mouse.q -- --seed 42 --bars 20000
-
-# Meta-only mode with pre-trained weights
-q q/load.q q/programs/cat_mouse.q -- --load-weights results/.../weights.q --meta-only
-
-# Interactive module exploration
-q q/load.q
-```
-
-## Running Tests
-
-```bash
-q q/tests/test_trinary.q
-q q/tests/test_conservation.q
-```
-
-`test_conservation.q` is a hard invariant — run it after any changes to `brain.q`.
-
-## Querying Results
-
-`simLog` is a live kdb-x table during simulation. After a run it can be exported:
-
-```q
-/ During simulation (interactive q session):
-select avg catchRate by epochN from simLog
-select bar, catchRate, metaScope from simLog where catchRate > 10
-
-/ Save to CSV:
-`:/results/run_latest/simLog.csv 0: csv 0: simLog
-```
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `q/modules/brain.q` | Core propagation fold — most complex module; touch with care |
-| `q/programs/cat_mouse.q` | Main simulation loop, reward logic, meta-brain strategy |
-| `q/tests/test_conservation.q` | Energy conservation invariant — must always pass |
-| `CLAUDE.md` | Coding conventions and gotchas specific to this q codebase |
-
-## What's Not Here (Intentionally)
-
-- **No Fortran source** — the project was fully ported to q; `src/` is gone
-- **No Makefile** — q needs no compilation
-- **No Python visualization scripts** — the kdb-x `simLog` table replaces CSV-based analysis
-- **No results or weight files** — `results/` is gitignored; weights are saved locally only
+- **Fortran source, the Makefile, Python visualisation tools and the old shell experiment scripts** were removed in the q port (`aab6bff`). They're still in git history.
+- **Old Fortran weight files** (`.bin` from the Fortran build) are a different format and can't be loaded by the q version.
