@@ -1,87 +1,70 @@
-# Performance Optimization Summary
+# Performance Notes
 
-## Date: 2 January 2026
+## Measured runtimes (q/kdb-x, October 2026, 16-core Linux machine)
 
-### Optimizations Implemented
+| Workload | Wall time |
+|---|---|
+| 500 bars, one run, fresh brain | ~2.6 s |
+| 16 parallel training runs × 20,000 bars, from scratch | 781 s |
+| 16 parallel runs × 10,000 bars from trained brains, direct + meta rewards | 430 s |
+| same, meta-only | ~235 s |
+| same, meta-only with strategic rewards off | 47 s |
+| `q/tests/run_all.sh` (all 4 test files) | ~0.4 s |
 
-1. **Module-level buffer caching** - Eliminated repeated allocations in `brain_module.f90`
-   - `brain_next_cache` and `incoming_direction_next_cache` reused across calls
-   - Stack-allocated fixed-size arrays instead of heap allocations
+Cost grows with brain activity: the more neurons are active, the more fold iterations each step takes. That's presumably why the arms differ so much, though the 5× speed-up of the no-strategic-rewards arm hasn't been investigated. Parallel runs share CPU cache and memory bandwidth, so per-run times above are not single-run times.
 
-2. **Direct value access** - Bypassed method call overhead
-   - Changed from `.get()/.set()` to direct `%value` access
-   - Removed `private` attribute from trinary type
+Because results vary a lot from seed to seed, a sound comparison needs ≥8–16 seeds per condition. Plan on tens of minutes per experiment and use `scripts/run_trials.sh`, which runs one process per core.
 
-3. **Precomputed constants** - Module-level parameters
-   - `directions(8,2)`, `direction_opposites(8)`, `direction_bias(8)`
-   - Computed once at compile time instead of runtime
+## Where the time goes (profiled 2026-10-24)
 
-4. **OpenMP parallelization**
-   - `apply_decay()` - 4-nested loop with `collapse(4)`
-   - `apply_adaptive_reinforcement()` - parallelized synapse updates
-   - `apply_adaptive_punishment()` - parallelized synapse updates
-   - `update_brain_state_based_on_synapses()` - parallelized neuron processing with critical sections
+Per-section timers on 1000 bars. Numbers are ms per bar:
 
-5. **Compiler optimizations**
-   - nvfortran: `-O3 -mp -Minfo=mp,vect -fast`
-   - gfortran: `-O3 -fopenmp -ftree-vectorize -ffast-math -march=native`
-   - SIMD vectorization enabled where possible
+| Section | fresh brain | trained brain |
+|---|---|---|
+| Strategic (meta-controlled) reinforcement | 1.7 | **11.6** |
+| Move cat (catch boost + direct-reward reinforce/punish) | 2.5 | **6.4** |
+| Propagation (12 primary + 24 meta steps) | 0.75 | 0.8 |
+| Everything else | ~0.3 | ~0.4 |
+| **Total** | ~5.2 | **~19.2** |
 
-6. **Simplified probability calculation**
-   - Removed heap allocations for cumulative probabilities
-   - Used stack arrays and inline cumulative sum
+- **About 95% of the time on a trained brain goes to applying rewards, not to running the brain.**
+- Each reinforce, punish or decay pass touches all 4,608 synapses through 72 nested lambdas, and a single bar can call reinforce dozens of times.
+- Yet a typical bar uses only about 13 synapses.
+- The strategic block repeats a whole-array pass for each of up to 80 lookback bars.
 
-### Performance Results
+Benchmarks:
+- Flattening the synapse array speeds a reinforce up about 9×, with bit-identical results.
+- Updating only the used synapses speeds it up about 360×. Results are statistically identical but follow a different random stream.
 
-**Test configuration**: 20,000 Bars, seed 789
-- **Single-threaded**: 50.7 seconds (wall clock)
-- **Multi-threaded**: 27.8 seconds (wall clock), 363s CPU time across ~15 cores
-- **Speedup: 1.82x faster**
+The step-by-step speed-up plan, with acceptance tests, is Phase P in [REVIVAL_PLAN.md](REVIVAL_PLAN.md).
 
-**Learning quality maintained**:
-- 1,107 catches (excellent learning)
-- 85%+ directional accuracy
-- Consistent results across multiple seeds
+### Substrate lab (no rewards)
 
-### Compiler Feedback
+In `q/programs/substrate_lab.q`, propagation is ~95–97% of the cost: **~21 µs per active neuron per step**, constant across regimes.
 
-Key optimizations confirmed by compiler:
-- ✅ OpenMP parallel regions created
-- ✅ SIMD vectorization for simple loops
-- ✅ Critical sections for race condition protection
-- ⚠️  Some loops not vectorized due to calls/complexity
+| Grid | active neurons/step | ms per step |
+|---|---|---|
+| 16×16 | ~139 | 2.9 |
+| 32×32 | ~548 | 12 |
 
-### Limitations
+Decay and metrics add only ~2–3% at a sample interval of 50. Larger lab grids are therefore limited by `.sub.step` and `.brain.stepNeuron`. Phase P task P.5 covers propagation speed-ups, and is the priority for lab work.
 
-1. **Critical sections** create contention when multiple threads target same neurons
-2. **Amdahl's Law** - not all code parallelizable (I/O, initialization, etc.)
-3. **Memory bandwidth** becomes bottleneck with 15+ threads
-4. **Random number generation** cannot be easily parallelized
+### Propagation internals
 
-### Future Optimization Opportunities
+After the reward fixes, propagation becomes the main cost in the cat simulation too. `.brain.stepNeuron` is scalar q inside a fold (q's slowest style): it repacks a 6-element state tuple per neuron, which forces copy-on-write, and it recomputes neighbour indices every time.
 
-1. **Atomic operations** - Replace critical sections with lock-free atomics where possible
-2. **Thread-local random generators** - Pre-generate random number buffers per thread
-3. **Memory layout** - Experiment with different array dimension ordering for cache efficiency
-4. **GPU acceleration** - Consider CUDA/OpenACC for massively parallel neuron updates
-5. **Profile-guided optimization** - Use profiling data to guide compiler optimizations
+## Why propagation is a fold
 
-### How to Build
+`f/[acc; activeNeurons]` threads the whole state `(br;syns;su;inc0;inc1;out)` through the active neurons one at a time, so each neuron sees the moves made by the ones before it. That's what makes energy conservation exact: a source loses a unit only if its target actually gained one. `each` would process neurons independently against the same starting state and discard the updates. The Fortran/OpenMP version needed critical sections for the same reason.
 
-```bash
-make clean
-make learning   # Automatically detects nvfortran or gfortran
-```
+A side effect: neurons are processed in row-major order, and only neurons active at the *start* of a step are processed. So energy generally advances about one row per step.
 
-### Environment Variables
+## Data layout
 
-- `OMP_NUM_THREADS=N` - Limit parallel threads (default: all available cores)
-- `OMP_SCHEDULE=type,chunk` - Control loop scheduling (e.g., `dynamic,10`)
-- `OMP_PROC_BIND=true` - Pin threads to cores for better cache locality
+- `syns`: a nested list — rows of columns of 8×8 int matrices. `syns[r;c;inDir;outDir]`.
+- `hist`: 100 × rows × cols × 8 × 8 booleans (about 460k flags), written once per bar.
+- Direction constants (`.dirs.dr/dc/opp/vBias`) are precomputed 8-element vectors.
 
-### Verification
+## Fortran baseline (historical)
 
-All optimizations preserve correctness:
-- Same learning behavior
-- Same catch rates (within random variation)
-- No race conditions or memory corruption detected
+The Fortran implementation, removed in commit `aab6bff` and still in git history, reported 50.7 s single-threaded and 27.8 s with OpenMP on ~15 cores for 20,000 bars. These timings aren't directly comparable with the q numbers above, and the learning results reported alongside them came from code with known bugs (REVIVAL_PLAN.md F6).

@@ -1,167 +1,68 @@
-# Meta-Brain Experiment Framework
+# Running Controlled Experiments
 
-Standardized scripts for testing the meta-brain's ability to maintain pre-trained behavior.
+How to test a change to the learning rules, or a hypothesis about them, without fooling yourself. All commands run from the repository root.
 
-## Quick Start
+## Why the care
 
-### Full Pipeline (Train → Test)
-Run complete experiment: train 30 brains, test best with meta-brain only:
+Outcomes vary enormously between seeds. In the October 2026 re-test, the same condition gave one trained brain 1 catch and another 570. A difference between two single runs, or between a handful of runs, tells you almost nothing. A dry run with 3 seeds per arm showed an apparent **+87.5%** effect whose 95% CI ran from −19 to +42 catches. Small samples, combined with the design problems described under [History](#history-of-the-meta-only-claim), are how the project's earlier "+15%" claim arose.
+
+Rules of thumb:
+- **Pair by brain.** Run every condition from the same trained brains, with the same run seed per brain. Compare within-brain differences, not raw averages.
+- **≥ 16 brains** for effects of the size seen so far.
+- **Compare like with like.** Every arm starts from the same warm state, and arms are compared over the same number of bars. Don't compare a warm-started arm with a from-scratch training run that includes the acquisition phase.
+- **Don't select.** Testing only the best trained brain picks out unusual cases.
+- **Include an ablation.** If a component is supposed to matter, run a condition with it switched off (`--ablate-meta`, `--no-meta-rewards`).
+
+## Tools
+
+**`scripts/run_trials.sh`** — runs many brain ids in parallel.
 ```bash
-./scripts/run_meta_experiment.sh --full
+scripts/run_trials.sh -l LABEL -i "101 102 103" [-o SEED_OFFSET] [-j JOBS] -- [cat_mouse.q flags]
 ```
+- Output goes to `results/LABEL/s<id>/`.
+- The run seed is `id + SEED_OFFSET`. Use the same offset across arms so they share randomness.
+- `{id}` in the flags is replaced by the id, for per-brain weight files: `--load-weights 'results/train/s{id}/weights_seed{id}.bin'`.
+- Exits non-zero if any run failed to write `summary.csv`. Failed runs keep `stdout.txt`.
 
-**Time:** ~10-12 minutes (30 training + 5 testing trials)
-
-### Resume from Checkpoint
-Test meta-brain maintenance using previously trained weights:
+**`q/programs/compare.q`** — paired analysis.
 ```bash
-./scripts/run_meta_experiment.sh --meta-only results/meta_experiments/run_TIMESTAMP/best_weights.bin
+q q/programs/compare.q results/REF results/ARM1 results/ARM2 ... < /dev/null
 ```
+It reports:
+- a per-arm summary (mean, SD, range, catches per 1000 bars, towards %);
+- paired differences vs the first (reference) arm, matched by id, with a t statistic and a bootstrap 95% CI;
+- per-epoch catch rates.
 
-**Time:** ~2 minutes (5 testing trials)
+**`scripts/phase3_experiment.sh [K] [TRAIN_BARS] [ARM_BARS]`** — the full re-test below (defaults 16 / 20000 / 10000). It skips training if `results/p3_train` is complete, and writes `results/p3_report.txt`.
 
-### Baseline Test
-Verify meta-brain cannot learn from scratch (no pre-training):
-```bash
-./scripts/run_meta_experiment.sh --from-scratch
-```
+## The reaction-dissociation re-test (Phase 3)
 
-**Time:** ~2 minutes (5 trials)
+| Arm | Flags (all `--load-weights` from the trained brain) | Question |
+|---|---|---|
+| A | none — direct + meta rewards continue | baseline: keep training |
+| B | `--meta-only` | does removing tactical rewards help? (B vs A) |
+| C | `--meta-only --no-meta-rewards` | does strategic reinforcement do anything? (C vs B) |
+| D | `--meta-only --ablate-meta` | do the meta-brain's outputs matter? (D vs B) |
 
-## Results Directory Structure
+**Results (October 2026, 16 brains):**
 
-All experiments save to timestamped directories:
-```
-results/meta_experiments/
-└── run_YYYYMMDD_HHMMSS/
-    ├── training_results.csv       # Training phase catches per seed
-    ├── meta_only_results.csv      # Meta-only phase detailed results
-    ├── best_weights.bin           # Best performer's brain weights
-    └── weights_seed*.bin          # All training trial weights (full mode)
-```
+| Comparison | Mean paired difference | 95% CI |
+|---|---|---|
+| B − A | −153.7 catches (−49.5%) | −206.7 … −97.1 |
+| C − B | +71.0 (+45%) | −5.4 … +136.1 |
+| D − B | +2.8 (+2%) | −33.3 … +40.1 |
 
-## Experimental Design
+- Removing direct rewards halves performance, which keeps declining over the run.
+- The meta-brain's outputs have no measurable effect.
+- 3 of 16 brains did better in meta-only than with continued training.
 
-### Three Test Modes
+Full tables and caveats are in [REVIVAL_PLAN.md §6](../REVIVAL_PLAN.md#6-results).
 
-#### 1. Full Pipeline (`--full`)
-**Purpose:** Complete acquisition → maintenance test
+## History of the meta-only claim
 
-**Process:**
-1. Train 30 fresh brains with direct + meta rewards
-2. Identify best performer (highest catches)
-3. Load best weights into 5 new trials
-4. Test with meta-brain only (no direct rewards)
+The earlier version of this document reported that "meta-brain alone exceeds training by ~15%" and called the meta-brain a strategic controller. That came from the Fortran version via a script, since deleted, that:
+1. trained 30 brains and picked the best one;
+2. ran it 5 times in meta-only mode, starting warm;
+3. divided the meta-only average by the average of *all 30* training runs from scratch.
 
-**Answers:** "Can meta-brain maintain trained performance?"
-
-#### 2. Resume from Checkpoint (`--meta-only FILE`)
-**Purpose:** Re-test maintenance with different conditions
-
-**Process:**
-1. Load specified weight file
-2. Run 5 trials with meta-brain only
-3. Analyze performance retention
-
-**Answers:** "How robust is meta-brain maintenance?"
-
-#### 3. Baseline Test (`--from-scratch`)
-**Purpose:** Verify bootstrap requirement
-
-**Process:**
-1. Start 5 fresh brains (random weights)
-2. Train with meta-brain only (no direct rewards)
-3. Measure failure to learn
-
-**Answers:** "Does meta-brain need initial pathways?"
-
-## Expected Results
-
-### Full Pipeline
-- **Training best:** 1,400-1,700 catches
-- **Training average:** 1,100-1,200 catches
-- **Meta-only average:** 1,800-2,000 catches (~115% retention!)
-- **Directionality:** 95%+ towards mouse
-
-### From Scratch
-- **Catches:** 0-6 (essentially random)
-- **Directionality:** 2-10% towards (chance level)
-- **Conclusion:** Meta-brain cannot bootstrap
-
-## Key Findings
-
-1. **Meta-brain EXCEEDS training performance** (+15% improvement)
-   - Pre-trained + meta-only: ~1,900 catches
-   - Original training: ~1,700 catches best
-
-2. **Direct rewards may introduce noise**
-   - Meta-brain operates at strategic timescale (20-120 bars)
-   - Direct rewards operate at tactical timescale (1 bar)
-   - Removing tactical noise improves strategic execution
-
-3. **Bootstrap requirement validated**
-   - Meta-brain alone: 0 catches (random walk)
-   - Requires direct rewards to create initial pathways
-
-4. **Two-stage learning architecture**
-   - **Stage 1 (Direct rewards):** Acquisition - build basic pathways
-   - **Stage 2 (Meta-brain):** Mastery - maintain & optimize strategies
-
-## Command-Line Options
-
-```bash
-./scripts/run_meta_experiment.sh [OPTIONS]
-
-Options:
-  --full              Run full experiment: train 30 trials, test best with meta-only
-  --meta-only FILE    Test meta-only mode using specified weight file
-  --from-scratch      Test meta-only from scratch (no pre-training) as baseline
-  --help              Show this help message
-```
-
-## Configuration
-
-Edit script header to customize:
-```bash
-TRAINING_TRIALS=30        # Number of training trials (full mode)
-META_TEST_TRIALS=5        # Number of meta-only test trials
-SCRATCH_TEST_TRIALS=5     # Number of from-scratch baseline trials
-```
-
-## Output Files
-
-### training_results.csv
-```csv
-seed,catches
-1,1123
-2,1456
-...
-```
-
-### meta_only_results.csv
-```csv
-seed,catches,towards_pct,away_pct
-1001,1923,95.3,4.5
-1002,1876,94.8,4.9
-...
-```
-
-### best_weights.bin
-Binary file containing:
-- Primary brain synapses: (6, 12, 8, 8) - 4D directional routing
-- Meta-brain synapses: (7, 7, 8, 8) - 4D directional routing
-
-## Related Scripts
-
-- `run_learning_tests.sh` - Multi-trial learning with statistics
-- `test_meta_only.sh` - Original meta-only experiment (deprecated)
-
-## Biological Analogy
-
-**Direct rewards:** Dopamine-based immediate feedback for basic skill acquisition
-
-**Meta-brain:** Executive function / prefrontal cortex strategy recognition
-
-**Finding:** Can't develop hunting strategy without basic movement skills first, but once acquired, strategic control alone is MORE effective than mixing strategic + tactical feedback.
-
-Similar to how expert performance often becomes "unconscious" - direct feedback during execution can disrupt flow state!
+That design favours meta-only twice over: by selection, and by skipping the acquisition phase. In addition, in that Fortran code the meta-brain's strategic reinforcement only ran during the first 100 bars of a run (REVIVAL_PLAN.md F6). So the meta-brain couldn't have caused the effect. The controlled re-test above replaces those results.
