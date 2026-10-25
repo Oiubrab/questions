@@ -56,7 +56,7 @@ It reports:
 - The meta-brain's outputs have no measurable effect.
 - 3 of 16 brains did better in meta-only than with continued training.
 
-Full tables and caveats are in [REVIVAL_PLAN.md §6](../REVIVAL_PLAN.md#6-results).
+Full tables and caveats are in [REVIVAL_PLAN.md §6](../plans/inProgress/REVIVAL_PLAN.md#6-results).
 
 ## History of the meta-only claim
 

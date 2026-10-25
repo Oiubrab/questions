@@ -11,6 +11,8 @@
 
 \d .brain
 
+hebbEnabled: 1b
+
 / Initialize brain state: nR x nC matrix of 0i, plus zeroed inc0/inc1
 initBrain:{[nR;nC]
   br: .trinary.initGrid[nR;nC];
@@ -108,12 +110,20 @@ initBrain:{[nR;nC]
 
   / Reinforce the synapse (and mark as used)
   rAmt:1000i;
-  syns:.[syns;(r;c;d1-1;chosen);:;.syn.MAX_STRENGTH & rAmt + syns[r;c;d1-1;chosen]];
-  su:.[su;(r;c;d1-1;chosen);:;1b];
+  if[hebbEnabled;
+    syns:.[syns;(r;c;d1-1;chosen);:;.syn.MAX_STRENGTH & rAmt + syns[r;c;d1-1;chosen]]];
+  if[.syn.isSparseUsage su;
+    useIdx:.syn.indexOf[r;c;d1-1;chosen;nC];
+    su:.syn.addSparseUsage[su;useIdx]];
+  if[not .syn.isSparseUsage su; su:.[su;(r;c;d1-1;chosen);:;1b]];
   / HIGH neurons reinforce both incoming direction groups
   if[(srcOrig=2i)&(d2>0i);
-    syns:.[syns;(r;c;d2-1;chosen);:;.syn.MAX_STRENGTH & rAmt + syns[r;c;d2-1;chosen]];
-    su:.[su;(r;c;d2-1;chosen);:;1b]];
+    if[hebbEnabled;
+      syns:.[syns;(r;c;d2-1;chosen);:;.syn.MAX_STRENGTH & rAmt + syns[r;c;d2-1;chosen]]];
+    if[.syn.isSparseUsage su;
+      useIdx:.syn.indexOf[r;c;d2-1;chosen;nC];
+      su:.syn.addSparseUsage[su;useIdx]];
+    if[not .syn.isSparseUsage su; su:.[su;(r;c;d2-1;chosen);:;1b]]];
 
   (br;syns;su;inc0;inc1;out)}
 

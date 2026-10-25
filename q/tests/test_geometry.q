@@ -11,6 +11,9 @@ tol:1e-9;
 / Vector helpers
 .t.near["norm 3-4-5";.vision.norm 3 4f;5f;tol];
 .t.near["dot";.vision.dot[1 2f;3 4f];11f;tol];
+.t.near["alignment toward";.vision.alignment[1 0f;1 0f];1f;tol];
+.t.near["alignment away";.vision.alignment[1 0f;-1 0f];-1f;tol];
+.t.near["alignment perpendicular";.vision.alignment[1 0f;0 1f];0f;tol];
 
 / Toroidal distance
 .t.near["toroidalDist 3-4-5";.vision.toroidalDist[0 0f;3 4f;100f];5f;tol];

@@ -1,9 +1,9 @@
 # Revival Plan — ForWhoseAdvantage / Questions
 
-**Status as of 2026-10-24:**
+**Status as of 2026-10-25:**
 - **North star (§0):** the cat learns to head towards the mouse. **Phase G is the top priority.**
-- **Done:** Phases 0, 1, 2, 3 (except 3.4 and 3.5, which moved to G.1) and 6; S.1–S.3; M.1–M.2.
-- **Next:** G.0 (measure alignment), then G.1 (baselines).
+- **Done:** Phases 0, 1, 2, 3 (except 3.4) and 6; S.1–S.3; M.1–M.2; G.0–G.2 (including 3.5 and P.0–P.4); G.3(a) and G.3(b) (both kept, opt-in flags). **Planned:** Phase G.R (G.R0–G.R6).
+- **Next:** Phase G.R — a principled learning rule from the literature, starting with G.R0 (ceiling tool), then G.R1+G.R2 (reward-prediction-error baseline + policy-gradient update), on top of the current best `--cos-reward --reward-scale 0.25`. Best so far: alignment 0.596, 16/16 acquire; target (§0) not met. Diagnostic: the trained weights themselves encode only ~0.71 of a possible ~0.90 (§6), so the learning rule is the bottleneck.
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -55,7 +55,7 @@ A q/kdb-x simulation of a "cat" learning to hunt a "mouse" on a 100×100 field.
   - `out[0]` → `temporalScope` (20/40/80 bars)
   - `out[1]` → `magnitude` (1 or 2)
   - The whole output vector is also injected into the primary brain's right column ("cross-flow").
-- **Rewards** ([q/programs/cat_mouse.q](q/programs/cat_mouse.q)):
+- **Rewards** ([q/programs/cat_mouse.q](../../q/programs/cat_mouse.q)):
   - *Direct (tactical):* every bar, based on the dot product of the move and the direction to the mouse. Multiplicative ×≈2.2 reinforce, or ×≈0.43 punish, on synapses used this bar (`su`).
   - *Strategic:* if `rateCounter>=3` (or `>=1` in `--meta-only`), multiply the synapses used in each of the last `temporalScope` bars by `1.1*magnitude`, using the 100-deep history buffer `hist`.
   - *Catch boost:* on a catch, ×1.5 on synapses used in the last 20 bars.
@@ -174,6 +174,8 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 - **Why:** the rules form a stochastic, conserved particle system with a downward drift. Systems like that relax towards equilibrium rather than forming persistent moving structures. Game-of-Life-style emergence needs low-noise local rules plus creation and destruction of activity, which strict energy conservation forbids.
 - The scratch scripts used are not in the repo; re-create them from this description if needed.
 
+**F20 — `acquisitionTime` was never recorded** (found 2026-10-25). The check read `(not null acquisitionTime)`, but the value starts null, so it could never be set and every run reported no acquisition. Fixed to `(null acquisitionTime)`: it now records the first crossing only. Reporting only — catches and alignment are unchanged, and the golden test still passes. The G.1 baseline was recomputed from saved logs (§6).
+
 **F18 — The final epoch's move counts were dropped when that epoch had 0 catches** (the save was guarded by `if[catchesThisEpoch>0i; …]`). Fixed in task 2.4.
 
 ---
@@ -247,29 +249,106 @@ The whole protocol is scripted: `scripts/phase3_experiment.sh [K] [TRAIN_BARS] [
 - [x] **3.2** Run arms A–D. *(2026-10-24: 4 × 16 × 10k bars; all completed. Wall time: A 430 s, B 234 s, C 47 s, D 238 s. C being 5× faster is unexplained, and worth a look: presumably much less brain activity.)*
 - [x] **3.3** Analyse with `compare.q`. Write a results table into section 6 of this document. *(2026-10-24: see section 6. Also fixed `compare.q` to pivot epochs when arms have different epoch counts, and widened its console.)*
 - [~] **3.4** Report to the user. The interpretation and next research direction are the user's call (see section 7). *(2026-10-24: reported; decision 4 is awaiting the user's answer.)*
-- [ ] **3.5** No-learning baseline. Run a fresh brain with all learning disabled (no rewards, no Hebbian +1000, no decay) for 16 seeds × 20k bars. This gives the catch rate and towards % of an untrained cat. The README's learning-curve numbers (8 → 37 catches per 1000 bars) have no chance-level reference yet. It needs a new `--no-learning` flag.
+- [x] **3.5** No-learning baseline. Run a fresh brain with all learning disabled (no rewards, no Hebbian +1000, no decay) for 16 seeds × 20k bars. This gives the catch rate and towards % of an untrained cat. The README's learning-curve numbers (8 → 37 catches per 1000 bars) have no chance-level reference yet. It needs a new `--no-learning` flag. *(2026-10-25: all 16 seeds validated at 20k bars; see §6, Phase G.1.)*
 
 ### Phase G — The goal track: the cat learns to head towards the mouse (top priority; §0)
 Work in order. Each change must beat the current baseline in a paired experiment (≥16 seeds, `compare.q`) before it's kept.
-- [ ] **G.0** Measure the goal.
+- [x] **G.0** Measure the goal. *(2026-10-25: alignment helper passes the +1/−1/0 acceptance cases; alignment is logged per bar and summarized per run/epoch; `compare.q` reports arm means and paired differences. Acquisition time is the first 500-bar window with mean alignment >0.6; null means not reached.)*
   - Add per-move alignment, the cosine between the normalised move vector and the true mouse direction, to `simLog`, `summary.csv` and `epoch_summary.csv`.
   - Add acquisition time to `summary.csv`.
   - Extend `compare.q` to report alignment.
   - Acceptance: a test checks alignment = +1 for a move straight at the mouse, −1 for straight away, 0 for perpendicular.
-- [ ] **G.1** Baselines (absorbs task 3.5):
-  - (a) **no learning**: a `--no-learning` flag that turns off all synapse updates;
-  - (b) **current code**: 16 seeds × 20k bars, recording alignment, acquisition time and catches.
+- [x] **G.1** Baselines (absorbs task 3.5): *(2026-10-25: both arms complete and validated; see §6.)*
+  - [x] (a) **no learning**: a `--no-learning` flag that turns off all synapse updates. *(2026-10-25: implemented; same-seed test verifies primary and meta synapses remain identical to initialization through 200 bars, while the ordinary run changes primary weights.)*
+  - [x] (b) **current code**: 16 seeds × 20k bars, recording alignment, acquisition time and catches. *(2026-10-25: all seeds and epoch totals validated; results in §6.)*
   - These are the numbers every later change must beat.
-- [ ] **G.2** Speed, so iteration is fast enough: Phase P tasks P.0–P.4, in that order. The aim is a 20k-bar run in under 1 minute instead of ~6.5; P.0's golden test guards behaviour.
-- [ ] **G.3** Reward fixes suggested by the audit and the theory. Try them one at a time, measured against G.1:
-  - (a) normalise `dotP` so the reward tracks real alignment (F10, Phase 4.1);
-  - (b) bounded log-space reward increments instead of ×2.22 repeated up to ~43 times (THEORY.md §8, P7, Phase 4.3);
+- [x] **G.2** Speed, so iteration is fast enough: Phase P tasks P.0–P.4, in that order. The aim is a 20k-bar run in under 1 minute instead of ~6.5; P.0's golden test guards behaviour. *(2026-10-25: target met. A fresh 20,000-bar run (seed 7, single process) takes 20.8 s.)*
+- [~] **G.3** Reward fixes suggested by the audit and the theory. Try them one at a time, measured against G.1 (from (b) on: against the best configuration so far):
+  - [x] (a) normalise `dotP` so the reward tracks real alignment (F10, Phase 4.1); *(2026-10-25: `--cos-reward`, opt-in. Paired 16 seeds × 20k vs a same-day baseline: catches **+24%** (CI +44.7 to +213.3 per run), alignment +0.035 (CI −0.005 to +0.074), acquired 14/16 vs 11/16. **Kept**: later G.3 steps run with `--cos-reward` on; making it the default is deferred to the end of G.3 because it changes the golden digest. Results in §6.)*
+  - [x] (b) bounded log-space reward increments instead of ×2.22 repeated up to ~43 times (THEORY.md §8, P7, Phase 4.3); *(2026-10-25: `--reward-scale L` multiplies every primary-brain reward log-step by L with identical RNG use. Sweep on top of `--cos-reward`, paired vs L=1: L=0.25 gives catches **+49%** (CI +228 to +451 per run), alignment **+0.149** (CI +0.106 to +0.195), **16/16** acquired, median acquisition 1,200 bars (vs 5,543). L=0.1 and L=0.5 are also significantly better than L=1; L=0.1 vs L=0.25 is indistinguishable (plateau). **Kept at L=0.25.** THEORY.md P7 refuted: weights got sparser, not graded. Results in §6.)*
   - (c) random tie-break in the action choice (F11, Phase 4.2);
   - (d) a meta-brain saturation fix (Phase 4.4);
   - (e) **only with user approval:** angle-ordered output wiring (THEORY.md §3.1, P4, M.4).
 - [ ] **G.4** Reversal learning. Add `--permute-outputs-at BAR` and measure recovery. If recovery is slow or absent, tune decay memory τ_d and the reinforcement number 𝓡 (THEORY.md §7), informed by lab task S.3b.
 - [ ] **G.5** Generalisation checks for the final configuration: other mouse speeds, field sizes and seeds. Then rerun the Phase 3-style meta-brain controls on the improved cat.
 - [ ] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments.
+
+### Phase G.R — A principled learning rule (from the literature; added 2026-10-25 at the user's request)
+
+**Why this phase exists.** The ceiling diagnostic (§6, "Phase G — where the 0.6 ceiling lives") showed that, at the best configuration so far, the weights *alone* predict alignment ≈ 0.71 against a possible ≈ 0.90, and execution loses another ≈ 0.06. So the main gap is in what the learning rule writes into the weights. The user asked for literature-backed changes that (a) improve results, (b) stay general enough to **re-learn** when the reward or world changes, (c) focus learning on the rewards we define, and (d) **keep the core concept**: usage-weighted probabilistic routing of conserved energy, strengthened by experience, plus a hierarchy of same-kind systems (§2 design intent). Everything here satisfies (d): none of it replaces the energy rule. It changes only *how weights are updated* (and, in G.R6, what the meta-brain does).
+
+**The key derivation** (THEORY.md §1/§6 notation; record it in THEORY.md when G.R2 lands):
+- Route choice is $p(o) \propto (b_o W_o)^{\alpha}$. In log-weights $\theta=\ln W$ this is a **softmax policy**: $p(o) = e^{\alpha(\theta_o+\ln b_o)} / \sum_{o'} e^{\alpha(\theta_{o'}+\ln b_{o'})}$, with $\partial \ln p(c)/\partial\theta_o = \alpha(\mathbb 1[o=c]-p(o))$.
+- **REINFORCE** (Williams 1992) for a softmax policy: $\Delta\theta_{s,o} = \eta\,(R-\bar R)\,\alpha\,(\mathbb 1[o=c_s]-p_s(o))$, for every directed state $s$ = (cell, inDir) the energy passed through, with $c_s$ its chosen route. The `su` route record is already that path, so **the existing credit assignment has the right shape**.
+- Compared with that rule, the current update is missing:
+  1. a **baseline** $\bar R$: it rewards absolute success, not better-than-expected;
+  2. the **(1−p) / −p terms**: it pushes the chosen route equally however certain it already is, i.e. rich-get-richer, which is why routes saturate and why gentler rewards (G.3b) helped;
+  3. it adds an **unconditional Hebbian +1000 per use**, whose equilibrium $W^*=h u\tau_d$ tracks *usage*, not *reward*. That's a habit term, and the prime suspect for the ceiling.
+- Each directed state choosing among 8 routes is a textbook **stochastic learning automaton**. The brain is a **team of learning automata sharing one reward** (Narendra & Thathachar 1989; Thathachar & Sastry 2004, *Networks of Learning Automata*). Williams (1992) showed the classic linear reward–inaction scheme is a special case of REINFORCE, so convergence results from that literature apply here.
+- **Possibly novel** (check under M.5 before claiming): a team of learning automata *physically coupled through a conserved energy lattice* (direction memory, capacity-2 exclusion), whose credit assignment falls out of the energy path; and an actor–critic built from two systems of the same kind (G.R6).
+
+**Rules for every G.R task:**
+- Opt-in flag; the default stays bit-identical (golden test).
+- Unit tests for the update arithmetic.
+- Paired 16 seeds × 20k bars against the **best configuration so far**, currently `--cos-reward --reward-scale 0.25`.
+- Report alignment, acquired count and median bars, seeds with alignment ≥ 0.7 by 10k bars (the §0 target), catches, and the **weights-only predicted E[cos]** from G.R0, to see whether the change lifts the ceiling in the weights.
+- Keep a change only if alignment or the target count improves with a CI excluding 0, and nothing else gets significantly worse.
+
+**Order:** G.R0 → G.R1+G.R2 (one combined arm, plus each alone if the combination wins) → G.R3 → G.3(c)/(d) (cheap execution fixes for the ≈0.06 loss) → G.4 reversal, with G.R4/G.R5 as the relearning fixes → G.R6.
+
+- [ ] **G.R0** Promote the ceiling diagnostic to a tool: `q/programs/policy_ceiling.q results/<arm> [...]`.
+  - Per seed, it computes the weights-only policy (`chain`/`policy`/`stats` from `theory_checks.q`: the vision unit only, a 12-step bar, T=1, saturation ignored) from `weights_seed<N>.bin`. It prints predicted E[cos], P(exit within the bar) and MI next to the measured last-epoch alignment, plus their per-arm means and correlation.
+  - Factor the shared chain/policy code into one place (e.g. `q/modules/theory.q`) rather than copy it.
+  - Acceptance: it reproduces §6's numbers (L=1: predicted 0.540 vs measured 0.510; L=0.25: 0.709 vs 0.646).
+  - Note: `chain` uses `.dirs.vBias` and T=1. If a task changes either, pass them in.
+- [ ] **G.R1** **Reward-prediction error** (REINFORCE baseline; the dopamine reward-prediction-error account, Schultz, Dayan & Montague 1997).
+  - Define the per-move reward $R$ = the move's cosine to the mouse (the `--cos-reward` dotP). Keep a running average $\bar R \leftarrow \bar R + \beta(R-\bar R)$ (flag `--rpe`, rate `--rpe-rate β`, default ≈ 0.01, i.e. ~100 moves).
+  - The direct reward becomes $\delta = R-\bar R$: reinforce if δ > 0 and punish if δ < 0, with log-step ∝ |δ| (replacing the adaptive threshold and the count-of-calls rule).
+  - Why it should help **re-learning**: when the world or the reward changes, $\bar R$ is suddenly too high, δ goes negative for the old habits, and unlearning starts by itself.
+  - Tests: δ arithmetic; $\bar R$ converges to a constant input; flag off is bit-identical.
+- [ ] **G.R2** **Policy-gradient-shaped update in log space** (REINFORCE; learning-automata reward–penalty schemes).
+  - For each used directed state $s$ with chosen route $c$: $\Delta\theta_{s,o} = \eta\,\delta\,\alpha\,(\mathbb 1[o=c]-p_s(o))$ for **all 8** routes $o$. Here $p_s$ comes from the current row of `syns` × `vBias` (unmasked, T=1). For a HIGH cell, use the row of the label that was used. Apply $W \leftarrow \mathrm{clamp}(W e^{\Delta\theta})$.
+  - Flag `--pg-update`, step `--pg-eta η` (sweep e.g. 0.05, 0.1, 0.2, 0.4). Updates then shrink automatically as a route becomes certain, which is the principled version of `--reward-scale`.
+  - Scope of the first arm: replace the **direct** reinforce/punish only. Keep the catch boost and strategic lookback at the current best scale, then test removing them.
+  - Tests:
+    - $\sum_o \Delta\theta_{s,o}$ weighted correctly. Unweighted $\sum_o(\mathbb 1[o=c]-p_o)=0$, so the row's total log-change is zero when the clamps aren't hit.
+    - The gradient matches a finite-difference derivative of $\ln p_s(c)$.
+    - Unused states are untouched.
+    - Flag off is bit-identical.
+  - Run G.R1+G.R2 as one arm (δ is the third factor in G.R2), then each alone if the combination wins.
+- [ ] **G.R3** **Reward-gated Hebbian, a three-factor rule** (Izhikevich 2007, "distal reward"; Frémaux & Gerstner 2016).
+  - Replace the unconditional +1000-per-use with an **eligibility trace**: a use adds to $e_{s,o}$, which decays with time constant $\tau_e$ (flag `--three-factor`, `--elig-tau` in bars, sweep e.g. 5, 20, 80). Weights change *only* by $\eta\,\delta\,e$ (with the G.R2 shape).
+  - This should also subsume the 100-bar history buffer, the 20-bar catch boost and the strategic lookback: a catch is just a large δ applied to the current eligibilities. Keep those behind the flag until the trace version is shown equal or better.
+  - Tests: δ = 0 gives no weight change apart from decay; the trace decays by the stated factor per bar; flag off is bit-identical.
+  - **Don't touch `.sub` / the substrate lab:** its channels come from unconditional Hebbian strengthening (S.3), and that's a separate result.
+  - Hypothesis: removing the habit term lifts the weights-only ceiling (G.R0) materially.
+- [ ] **G.R4** **Bounded probabilities for re-learning** (MAX–MIN Ant System, Stützle & Hoos 2000).
+  - The current cap/floor ratio is 2,000,000 / 25 = 80,000. A floor route next to a capped one has p ≈ 25/(7·25+2·10⁶) ≈ 1.2×10⁻⁵, so it's never tried again. **Prediction:** reversal (G.4) will be very slow with the current bounds. Undoing a capped route at reward scale 0.25 needs ≈ 11.3/0.21 ≈ 54 punish calls *per route on the path*.
+  - Add `--weight-ratio ρ` (W_max/W_min, e.g. 100, 1000, 10⁴) so every route keeps p ≥ p_min.
+  - Measure the trade-off: steady-state alignment (it may drop slightly from forced exploration) vs reversal recovery time (G.4). Test as part of G.4.
+- [ ] **G.R5** **Two-timescale synapses** (synaptic consolidation; Fusi, Drew & Abbott 2005; Benna & Fusi 2016).
+  - Each weight is $\theta = \theta_{fast} + \theta_{slow}$. Rewards update $\theta_{fast}$, which decays with a short $\tau_f$. A fraction κ of $\theta_{fast}$ consolidates into $\theta_{slow}$ each period, and $\theta_{slow}$ decays with a long $\tau_s$.
+  - Rationale (THEORY.md §7): a single forgetting time $\tau_d$ can't be both short for re-learning and long for retention. Two can.
+  - Flags `--two-timescale`, `--tau-fast`, `--tau-slow`, `--consolidate κ`. Weight files must save both parts; extend `test_weights.q`.
+  - Test in G.4: retention, and recovery after reversal.
+- [ ] **G.R6** **Hierarchy as actor–critic plus neuromodulation** (Barto, Sutton & Anderson 1983, adaptive critic; Doya 2002, "Metalearning and neuromodulation").
+  - The meta-brain becomes the **critic**. It learns to *predict* the primary's reward from its own input (catch-rate code, optionally the vision slice). That prediction replaces G.R1's running average as $\bar R$, and the critic's own prediction error is its **basic reward**.
+  - Optionally, the critic also sets the primary's inverse temperature α (exploration) and learning rate η, which are Doya's noradrenaline and acetylcholine roles. Today's scope and magnitude outputs are the existing hook.
+  - This is exactly the user's hierarchy (§2, point 5): a system of the same kind sets the other's reward, and has its own more basic reward. It realises Phase 5 in literature-backed form.
+  - Needs G.3(d) (meta saturation fix) first.
+  - **Control:** it must beat the plain running-average baseline (G.R1) and its own ablation (`--ablate-meta`), paired, with ≥ 16 seeds. Otherwise report a null.
+
+**References** (check details before citing externally):
+- Williams 1992, *Machine Learning* 8 (REINFORCE)
+- Narendra & Thathachar 1989, *Learning Automata: An Introduction*
+- Thathachar & Sastry 2004, *Networks of Learning Automata*
+- Schultz, Dayan & Montague 1997, *Science* (reward prediction error)
+- Izhikevich 2007, *Cerebral Cortex* (distal reward and eligibility)
+- Frémaux & Gerstner 2016, *Frontiers in Neural Circuits* (three-factor rules)
+- Stützle & Hoos 2000, *Future Generation Computer Systems* (MAX–MIN Ant System)
+- Fusi, Drew & Abbott 2005, *Neuron*; Benna & Fusi 2016, *Nature Neuroscience* (synaptic consolidation)
+- Barto, Sutton & Anderson 1983, *IEEE Trans. SMC* (actor–critic)
+- Doya 2002, *Neural Networks* (metalearning and neuromodulation)
 
 ### Phase 4 — Reward-dynamics hygiene
 These are behavioural changes. Measure each one against the Phase 3 arm A baseline, with ≥8 seeds.
@@ -280,6 +359,7 @@ These are behavioural changes. Measure each one against the Phase 3 arm A baseli
 - [ ] **4.5** Make the world consistent (F12): either fully toroidal (cat wraps; vision uses toroidal dx/dy) or fully bounded. **User decision (section 7).**
 
 ### Phase 5 — Meta-brain redesign so it *can* learn (needs Phase 4)
+*Superseded in approach by G.R6 (actor–critic). Keep these tasks as the fallback if G.R6 doesn't beat its controls.*
 - [ ] **5.1** Output-contingent credit. Record the meta-brain's synapse usage when it emits a decision. Some bars later, reward or punish those synapses by `Δrate` = (catch rate after) − (running-average baseline).
 - [ ] **5.2** Gate output. One meta output decides *whether* strategic reinforcement fires, replacing the hard-coded `rateCounter>=3`.
 - [ ] **5.3** Evaluation. The redesigned meta-brain must beat its own ablation (arm D style), paired, with ≥16 seeds and a CI excluding 0. Otherwise report a null result.
@@ -318,7 +398,7 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
 - [ ] **S.7** **User decision:** what to port back into `cat_mouse.q`, then re-run Phase 3-style controls.
 
 ### Phase M — Mathematical theory (user request, 2026-10-24)
-[THEORY.md](THEORY.md) is the reference. Every claim in it is tagged Derived / Verified / Consistent / Prediction / Conjecture. `q/programs/theory_checks.q` reproduces every Verified number.
+[THEORY.md](../../researchNotes/THEORY.md) is the reference. Every claim in it is tagged Derived / Verified / Consistent / Prediction / Conjecture. `q/programs/theory_checks.q` reproduces every Verified number.
 - [x] **M.1** Write the theory. *(2026-10-24.)*
   - It models the brain as an absorbing Markov chain on (cell, inDir) states, with the policy as the within-bar absorption matrix. It covers drift, diffusion and residence time; crowding as a capacity-2 exclusion process; Little's law; learning as a generalised Pólya urn with exponent α=1/T; decay memory τ_d and the reinforcement number 𝓡; log-space reward arithmetic; hierarchy as control of 𝓡; and predictions P1–P7.
   - **Key verified results:**
@@ -375,11 +455,11 @@ Other facts from the benchmark:
 - **q gotcha:** `@[x;indices;f]` applies `f` to *each item separately*. For a whole-sub-list function, use `x[i]: f x i`.
 
 **Techniques, in order** (estimated total: ~19 ms → ~1–1.5 ms per bar, **~15×**, for P.1–P.4):
-- [ ] **P.0** Golden-run regression test. Store the md5 of `-8!` (the serialised bytes) of the final state of a seeded 300-bar run. Tier-1 changes must keep it identical. Tier-2 changes update it *and* must pass a statistical equivalence check: ≥16 seeds, paired `compare.q`, with a CI on catches that includes 0.
-- [ ] **P.1** *(tier 1, bit-identical)* Flat synapse storage: one int vector of length `nR*nC*64`, index `((r*nC+c)*8+inDir)*8+outDir`, kept alongside or replacing the nested `syns`. `applyReinforce/Punish/Decay` become single vector expressions using one `n?1.0` draw (~9× on those ops).
-- [ ] **P.2** *(tier 2)* Sparse usage. Record `su` as a list of used flat indices per bar, not a 4,608-boolean array, and make `hist` a 100-slot list of index lists. Reinforce/punish then touch only the used indices.
-- [ ] **P.3** *(tier 2)* Strategic lookback in one shot: `cnt: count each group raze hist slots`, then `syns[k]: MAX & `int$syns[k]*mag xexp cnt`, instead of 80 sequential whole-array passes. The difference from sequential ×1.1 with truncation each time is only rounding.
-- [ ] **P.4** *(tier 2)* Collapse `do[k; applyReinforce]` loops (direct reward, momentum, `do[rateCounter;…]` on the meta-brain) into one update with multiplier `m^k` times the product of k noise draws. Or just keep the loop: once sparse, it's cheap anyway.
+- [x] **P.0** Golden-run regression test. Store the md5 of `-8!` (the serialised bytes) of the final state of a seeded 300-bar run. Tier-1 changes must keep it identical. Tier-2 changes update it *and* must pass a statistical equivalence check: ≥16 seeds, paired `compare.q`, with a CI on catches that includes 0. *(2026-10-25: `test_golden.q` reruns seed 42 for 300 bars and verifies MD5 `1148f06d98253588dc05ffa60b97c918`. This q build lacks a built-in md5 function, so it hashes the exact `-8!` byte vector with system `md5sum`.)*
+- [x] **P.1** *(tier 1, bit-identical)* Flat synapse updates. Reward/decay updates flatten the nested synapse state to one int vector per operation, apply one vector expression, then restore the original nested shape; public brain/weight interfaces remain unchanged. *(2026-10-25: exact `test_golden.q` digest preserved; `test_synapses.q` verifies all three operations match the nested reference, including identical RNG continuation. A 20-call microbenchmark on 6×12 measured 4.5× faster reinforcement and 2.9× faster decay.)*
+- [x] **P.2** *(tier 2)* Sparse usage. Record `su` as a list of used flat indices per bar, not a 4,608-boolean array, and make `hist` a 100-slot list of index lists. Reinforce/punish then touch only the used indices. *(2026-10-25: integrated sorted sparse usage/history in the simulation; dense propagation remains available to the substrate lab and saved weight files retain dense history. Dense/sparse propagation is equivalent in a seeded step; save/load with populated history and 2,000-bar reward/catch smoke tests pass. Updated tier-2 golden MD5: `4e7d460ae07a59feb626e8dcdcf615f5`. Full suite: 117 assertions pass. Matched 16-seed 20k comparison vs G.1: catches +38.19/run (95% CI −66.5 to +127), alignment −0.00612 (95% CI −0.04653 to +0.02823), both CIs include 0. A 200-call 6×12 reinforcement microbenchmark measured 18.20 ms dense vs 8.16 ms sparse (2.23×).)*
+- [x] **P.3** *(tier 2)* Strategic lookback in one shot: count occurrences of each sparse synapse index across selected history slots, then update each weight once by `mag xexp occurrenceCount`, instead of repeated whole-array passes. Integer truncation may differ slightly from sequential scaling. *(2026-10-25: focused reference/cap tests pass; 2,000-bar smoke and P.0 digest pass; full suite: 112 assertions. Benchmark: 80 slots × 13 used indices, 20 repetitions: 51.40 ms sequential vs 1.11 ms counted (46.2×). Matched 16-seed 20k comparison vs P.2: catches +13.25/run (95% CI −1.5 to +41.25); alignment +0.00742 (95% CI −0.00365 to +0.02590); both intervals include zero.)*
+- [x] **P.4** *(tier 2)* Collapse repeated sparse reward loops into one per-synapse update with multiplier `m^k` times the product of k independent noise draws. *(2026-10-25: batched helpers preserve RNG continuation in focused tests; full suite: 118 assertions. 100-call microbenchmark for eight repeats on 13 used synapses: reinforce 29.39 ms → 4.20 ms (6.99×); punish 28.08 ms → 4.25 ms (6.61×). Matched 16-seed 20k comparison vs P.3: catches −12.125/run (95% CI −30.375 to +1.3125), alignment −0.00020 (95% CI −0.01042 to +0.01004); both intervals include zero.)*
 - [ ] **P.5** Propagation, once it's the bottleneck after P.1–P.4. In order:
   - (a) *tier 1:* avoid copy-on-write in the fold. Unpacking `acc` into locals and repacking a 6-tuple per neuron forces copies. Keep state in globals and amend in place (`.[`.brain.br;…]`), or fold over a flat state.
   - (b) *tier 1:* precompute per-cell neighbour indices and validity masks once, instead of recomputing `nrs/ncs/inBrain8/safeR/safeC` for every neuron at every step.
@@ -405,7 +485,7 @@ Other facts from the benchmark:
 
 ### Phase 7 — Optional
 - [ ] **7.1** ~~Performance: profile `.brain.stepNeuron`.~~ Superseded by Phase P. The profile shows propagation isn't the hot path.
-- [ ] **7.2** Visualisation of `simLog` trajectories (the old Python tools were deleted in `aab6bff`).
+- [x] **7.2** Visualisation of `simLog` trajectories (the old Python tools were deleted in `aab6bff`). *(2026-10-25: superseded by the KX Dashboards viewer, see plans/inProgress/KX_DASHBOARDS_PLAN.md. Phases V0-V2 done.)*
 
 ---
 
@@ -459,6 +539,103 @@ Meta-only doesn't *maintain* behaviour: it degrades steadily (20 → 11 per 1k b
 - `rateCounter` resets to 0 on a warm start, because catch timestamps aren't saved.
 - Arms are 10k bars long.
 - `dotP` is still unnormalised (F10), so "towards %" is a lenient metric.
+
+### Phase G.1 — baselines (2026-10-25)
+
+**Validation:** both arms contain exactly seeds 1–16, with one 20,000-bar summary per seed. Each epoch file has 10 rows totaling 20,000 bars. The no-learning summaries record `noLearning=1`, `directRewards=0`, and `metaRewards=0`.
+
+| Arm | Mean catches | Catches/1k bars | Towards % | Mean alignment | Acquired (fraction) |
+|---|---:|---:|---:|---:|---:|
+| Current code | 513.44 | 25.6719 | 83.76 | 0.4113 | **11/16** (corrected, see F20) |
+| No learning | 1.38 | 0.06875 | 21.57 | 0.01807 | 0/16 (0%) |
+
+Acquisition is the first 500-bar rolling alignment above 0.6. ~~Neither arm reached it in these runs.~~ *Corrected 2026-10-25 (F20): that was a bug — `acquisitionTime` could never be set. Recomputed from the saved per-bar logs with the simulator's exact rule (the method reproduces the fixed simulator on seed 7: bar 18,045): current code acquired in **11/16** seeds, at bars 1619, 2908, 3382, 5704, 6410, 7908, 10250, 13177, 14188, 17478, 17561 (median 7,908 among those that acquired); no learning 0/16.*
+
+**Paired difference (no learning − current, n=16; bootstrap 95% CI):** catches −512.06 (−99.73%, t=−12.88, CI −593.06 to −441.88); mean alignment −0.39319 (t=−23.29, CI −0.42588 to −0.36180).
+
+**Epoch means, catches per 1,000 bars:**
+
+| Arm | e1 | e2 | e3 | e4 | e5 | e6 | e7 | e8 | e9 | e10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Current code | 11.4688 | 19.8125 | 21.1875 | 24.9688 | 26.0625 | 28.1875 | 25.8125 | 30.4063 | 33.5000 | 35.3125 |
+| No learning | 0 | 0 | 0.125 | 0.0625 | 0.1875 | 0.03125 | 0.03125 | 0.09375 | 0.03125 | 0.125 |
+
+**Epoch means, alignment:**
+
+| Arm | e1 | e2 | e3 | e4 | e5 | e6 | e7 | e8 | e9 | e10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Current code | 0.26998 | 0.36124 | 0.35427 | 0.41409 | 0.41104 | 0.43078 | 0.42540 | 0.44553 | 0.48307 | 0.49847 |
+| No learning | 0.01733 | 0.01954 | 0.01508 | 0.01450 | 0.01669 | 0.01835 | 0.01856 | 0.02327 | 0.02374 | 0.01414 |
+
+### Phase G.3(a) — cosine direction reward (2026-10-25)
+
+Both arms are seeds 1–16 × 20,000 bars on the same code (after P.4 and the F20 fix); the only difference is `--cos-reward`. Report: `results/g3a_report.txt`; arms `results/g3a_base_20261025`, `results/g3a_cos_20261025`.
+
+| Arm | Catches/run (sd) | Catches/1k bars | Towards % | Mean alignment | Acquired | Median bars to acquire |
+|---|---|---|---|---|---|---|
+| Baseline | 552.8 (152.7) | 27.6 | 80.4 | 0.412 | 11/16 | 6,927 |
+| `--cos-reward` | **685.6** (105.4) | **34.3** | 73.5 | **0.447** | **14/16** | **5,543** |
+
+**Paired (cos − baseline, bootstrap 95% CI):** catches **+132.8 (+24.0%)**, t = 2.96, CI **+44.7 to +213.3**; alignment +0.0349, t = 1.67, CI −0.0049 to +0.0741.
+
+**By epoch:** the cosine reward helps most early. Epoch 1 catches per 1k bars are 24.1 vs 13.1, and epoch-1 alignment is 0.348 vs 0.254. By epoch 10 the alignment gap is small (0.510 vs 0.501).
+
+**Unexplained:** the lenient towards % falls (80.4 → 73.5) while alignment and catches rise, so the cosine reward produces more strongly aligned moves but also more non-towards ones. Not investigated; a per-move cosine histogram would show it.
+
+**Reading against §0:** the alignment target (≥ 0.7 in ≥ 14/16 seeds by 10k bars) is still far off: mean alignment at epoch 5 is 0.457. The cosine reward makes learning faster and more reliable, but doesn't raise the ceiling much. That points at the saturating ×2.22 reward arithmetic (G.3b) as the next lever.
+
+### Phase G.3(b) — log-scaled rewards (2026-10-25)
+
+All arms: `--cos-reward`, seeds 1–16 × 20,000 bars, differing only in `--reward-scale L`. Report: `results/g3b_report.txt`. The L=1 arm reproduces the G.3(a) cosine arm exactly (685.5625 catches, 0.4472066 alignment), confirming L=1 is bit-identical.
+
+| L | Catches/run (sd) | Catches/1k | Towards % | Mean alignment | Acquired | Median bars to acquire | Seeds with alignment ≥ 0.7 by 10k bars (epoch 5) / by 20k (epoch 10) |
+|---|---|---|---|---|---|---|---|
+| 1 | 685.6 (105.4) | 34.3 | 73.5 | 0.447 | 14/16 | 5,543 | 0/16 / 1/16 |
+| 0.5 | 982.9 (248.0) | 49.1 | 79.7 | 0.549 | 15/16 | 1,935 | 3/16 / 4/16 |
+| **0.25** | **1,021.6** (228.7) | **51.1** | 84.0 | **0.596** | **16/16** | **1,200** | 2/16 / 5/16 |
+| 0.1 | 1,012.9 (336.3) | 50.6 | 80.5 | 0.581 | 15/16 | 1,741 | 6/16 / 7/16 |
+
+**Paired vs L=1 (bootstrap 95% CI):**
+
+| L | Catches | Alignment |
+|---|---|---|
+| 0.5 | +297.3 (+43%), CI +176.3 to +419.1 | +0.102, CI +0.051 to +0.148 |
+| 0.25 | **+336.1 (+49%), CI +228.4 to +451.3** | **+0.149, CI +0.106 to +0.195** |
+| 0.1 | +327.3 (+48%), CI +156.8 to +498.4 | +0.134, CI +0.062 to +0.204 |
+
+L=0.1 vs L=0.25 directly: catches −8.8 (CI −223.7 to +213.7), alignment −0.015 (CI −0.105 to +0.071). A plateau.
+
+**Learning curve (mean alignment by epoch):** L=0.25 reaches 0.568 by epoch 2 and 0.611 by epoch 4; L=1 is at 0.358 and 0.471. Most of the gain is **faster acquisition**. The late plateau is ~0.61–0.65.
+
+**P7 (THEORY.md) refuted.** Final primary weights, as fractions of 4,608, mean over seeds:
+
+| L | ≤ 100 | 100 – 10⁶ (graded) | ≥ 10⁶ (strong) |
+|---|---|---|---|
+| 1 | 0.941 | 0.031 | 0.027 |
+| 0.5 | 0.965 | 0.009 | 0.025 |
+| 0.25 | 0.977 | 0.005 | 0.019 |
+| 0.1 | 0.983 | 0.003 | 0.014 |
+
+Gentler rewards give a sparser skeleton of strong routes, not graded weights, yet much better hunting.
+
+**Against §0:** relative to the original G.1-style baseline (552.8 catches, 0.412 alignment, 11/16 acquired), the G.3(a)+(b) configuration gives **1,021.6 catches (+85%), 0.596 alignment, 16/16 acquired, median 1,200 bars**. The target (alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: best is 6/16 (L=0.1). The ceiling of ~0.6–0.65 is now the main gap.
+
+### Phase G — where the 0.6 ceiling lives (diagnostic, 2026-10-25)
+
+**Method:** for each seed of the G.3(b) arms, the policy is computed from the final saved weights alone (THEORY.md §2–3 linear chain: the vision unit only, a 12-step bar, T=1, saturation ignored). It's compared with the measured mean alignment in the last epoch (bars 18,001–20,000). This was done with a scratch script; G.R0 makes it a tool.
+
+| Arm (with `--cos-reward`) | Predicted E[cos] from weights | Measured last-epoch alignment | Predicted P(vision unit exits within the bar) | corr(predicted, measured), n=16 |
+|---|---|---|---|---|
+| `--reward-scale 1` | 0.540 | 0.510 | 0.875 | 0.69 |
+| `--reward-scale 0.25` | **0.709** | **0.646** | 0.974 | 0.07 |
+
+Best achievable with 8 slices × 8 directions ≈ 0.90.
+
+**Reading:**
+- **Most of the gap is in the weights** (0.71 vs 0.90): that's the learning rule's job, and Phase G.R exists for it.
+- About 0.06 is lost in **execution** (weights → actual moves). Likely sources, untested: meta-brain energy entering the right column and driving moves, the NW tie-break (G.3c), and several units in flight per bar.
+- At the best arm, the weights-only prediction no longer explains seed-to-seed differences (r = 0.07), so at the top end, execution noise dominates between-seed variation.
+- Caveat: predicted E[cos] uses slice-centre angles, so it reads ~2–3% optimistic against true-angle alignment.
 
 ### Phase S — substrate lab, sweep S.3 (2026-10-24)
 
@@ -552,8 +729,61 @@ Meta-only doesn't *maintain* behaviour: it degrades steadily (20 → 11 per 1k b
 - **The user asked for mathematical rigour → Phase M.** THEORY.md and `q/programs/theory_checks.q` were written; M.1 and M.2 are done.
   - Two hypotheses of mine were wrong and were corrected before writing: the untrained policy isn't "straight down" but a blurred diagonal; and weights aren't "pinned at the cap" but bimodal, with decay pulling them back down after saturation.
 - **The user set the north star:** the cat must actually learn to head towards the mouse, and all other work serves that. Added §0 (goal metrics and targets) and **Phase G** (the goal track), and reprioritised: G first, P as its enabler, S and M only where they feed G. The user also approved committing all work so far.
-- **Next session should:**
+- **At that point, the next session should:**
   0. **Start Phase G at G.0**, unless the user has redirected.
   1. Check section 7 for the user's answers.
   2. If none, ask decision 4 before starting Phase 4/5.
   3. Task 3.5 can proceed regardless.
+
+### 2026-10-25 — Session 2 (G.0 alignment measurement)
+- Added `.vision.alignment`, with tests for straight toward (+1), straight away (−1), and perpendicular (0).
+- Added actual, clamped movement alignment against the mouse position from before the move/catch respawn to `simLog`; non-moves and undefined zero-vector cases are null.
+- Added mean alignment to run and epoch CSVs. Acquisition time records the first bar where the rolling 500-bar mean over valid moves exceeds 0.6; it remains null when not reached.
+- Extended `compare.q` with per-arm means, paired alignment differences and epoch means. A two-seed, 600-bar smoke comparison loaded both new CSV schemas successfully; acquisition was not reached in either arm.
+- Validation: `q/tests/run_all.sh` passed (73 assertions); `q/tests/test_weights.q` passed; geometry acceptance cases passed. Two matched 600-bar arms loaded and compared with the expanded summary schema; this was plumbing validation, not a performance experiment.
+- G.1(a): added `--no-learning`; propagation remains active, but Hebbian changes, all reward/catch updates and decay are disabled. Focused same-seed weight-freeze checks pass for both brains.
+
+### 2026-10-25 — G.1 baseline batch
+- Resumed the already-started no-learning batch after confirming no trial processes were active and no completed summaries existed. The runner completed seeds 1–16 in 33 seconds; no duplicate completed runs were launched.
+- Validated both arms: each has one 20,000-bar summary per seed and 10 epoch rows totaling 20,000 bars per seed. No-learning flags were verified in every baseline summary.
+- Ran `compare.q` for `g1_current_20261025` vs `g1_no_learning_20261025`. The no-learning arm averaged 1.375 catches and 0.01807 alignment, versus 513.4375 catches and 0.41126 alignment for current code; paired CIs and epoch means are recorded in §6. Neither arm acquired (0/16).
+- `q/tests/run_all.sh`: all tests passed. No later phase was started.
+
+### 2026-10-25 — P.0 golden regression
+- Added `q/tests/test_golden.q`, which reruns seed 42 for 300 bars, writes the exact `-8!` final-state bytes, and checks their MD5 against `1148f06d98253588dc05ffa60b97c918`.
+- The installed q runtime does not expose a built-in `md5` or `.Q.md5`, so the test hashes the unchanged serialized byte vector with `md5sum`.
+- Focused acceptance: 3/3 passed (byte-for-byte serialization round-trip, md5sum output, golden digest). Next: P.1 flat synapse storage.
+
+### 2026-10-25 — P.1 vectorized synapse updates
+- Updated `.syn.applyReinforce`, `.syn.applyPunish`, and `.syn.applyDecay` to flatten each nested synapse array once, perform the arithmetic over a single vector, and reshape to the original 4D structure.
+- Preserved bit identity: P.0's 300-bar digest is unchanged. Added `test_synapses.q` to compare old nested reference implementations and post-operation RNG values; all seven assertions pass.
+- Microbenchmark (20 calls, 6×12): reinforcement 7.49 ms → 1.68 ms (4.5×); decay 3.59 ms → 1.24 ms (2.9×). Timing includes flatten/reshape overhead.
+- Full test suite: 83 assertions pass. Next: P.2 sparse usage/history; it is tier 2 and needs the planned ≥16-seed paired equivalence check.
+- User reminder: keep the plan checkboxes and progress log current as each acceptance passes. The open copy under `plans/inProgress/REVIVAL_PLAN.md` was behind; its G.0, G.1, 3.5, P.0 and P.1 status/results are now synced. P.2 prototype is still in progress, not complete.
+- P.2 complete: integrated sparse usage/history into the simulation; dense propagation remains available to the substrate lab. One-step dense/sparse equivalence, populated-history save/load, and a 2,000-bar strategic/catch smoke run pass. Tier-2 golden MD5 is `4e7d460ae07a59feb626e8dcdcf615f5`. Full suite: 117 assertions pass. Paired 16-seed results: catches +38.19/run (CI −66.5 to +127); alignment −0.00612 (CI −0.04653 to +0.02823); both intervals include zero. Sparse reinforcement is 2.23× faster in the 6×12 microbenchmark (200 calls, 18.20 ms dense vs 8.16 ms sparse). Next: P.3 strategic lookback batching.
+- P.3 implementation milestone: strategic lookback now combines sparse route counts and scales each used weight once. Focused sequential-reference/cap tests pass, the 2,000-bar seed-42 smoke and golden digest are unchanged, and the full suite passes 112 assertions. An 80-slot / 13-index microbenchmark measured 51.40 ms sequential vs 1.11 ms counted over 20 repetitions (46.2×). P.3 remains in progress until paired 16-seed equivalence completes.
+- P.3 complete: paired 16-seed 20k comparison vs P.2 gives catches +13.25/run (95% CI −1.5 to +41.25) and alignment +0.00742 (95% CI −0.00365 to +0.02590); both include zero. G.2's next item is P.4 reward-loop batching.
+- P.4 implementation milestone: repeated sparse reinforce/punish calls now batch per-synapse noise products. Focused RNG-stream and bounded-rounding checks pass; full suite: 118 assertions. 100-call benchmark (8 repeats, 13 used indices): reinforce 29.39 ms → 4.20 ms (6.99×), punish 28.08 ms → 4.25 ms (6.61×). Paired equivalence vs P.3 is pending; P.4 remains in progress.
+- P.4 complete: batched repeated sparse reinforce/punish loops using per-synapse products of independent noise draws. Focused tests verify RNG continuation and bounded rounding; the full suite passes 118 assertions. Microbenchmark (100 repetitions of eight calls, 13 used indices): reinforce 29.39 ms → 4.20 ms (6.99×); punish 28.08 ms → 4.25 ms (6.61×). Paired 16-seed 20k comparison vs P.3 passes: catches −12.125/run (CI −30.375 to +1.3125), alignment −0.00020 (CI −0.01042 to +0.01004); both include zero. No later task started.
+
+### 2026-10-25 — KX Dashboards viewer (7.2)
+- Added opt-in `--viz-port`/`--viz-delay-ms`, `q/modules/viz.q`, `q/programs/viz_server.q`, `dashboards/` and `q/tests/test_viz.q` (18 assertions). With viz on, seed 42 x 2000 bars gives a byte-identical `simulation_log.csv`; publishing costs about 11% wall time.
+- `scripts/e2e_dashboards.sh` drives the dashboard in Firefox with Playwright against the real sim. No learning or performance claims were made.
+
+### 2026-10-25 — Session 3 (doc consolidation, G.2 close-out, F20)
+- **Docs consolidated.** The user's restructure left two copies of the plan and of five research notes; the plan copies had diverged (root had the G.1 tables and session logs, `plans/inProgress/` had the current P.3/P.4 status). Merged into one canonical `plans/inProgress/REVIVAL_PLAN.md`, kept the newer BAR_STRUCTURE (root, with the `--no-learning` and alignment notes), moved all research notes to `researchNotes/`, removed the root duplicates, and rewrote every relative markdown link for the new locations (script-checked: no broken links). CLAUDE.md now documents the layout and that work happens on `main`.
+- **G.2 done:** a fresh 20,000-bar run takes 20.8 s (target < 60 s).
+- **F20 fixed:** acquisition time was never recorded. Corrected G.1 baseline: current code acquires in 11/16 seeds (median 7,908 bars among those), not 0/16.
+- Next: G.3(a), normalised direction reward.
+- **G.3(a) done and kept:** `--cos-reward` (opt-in; default unchanged, golden test passes; `test_weights.q` checks the flag is recorded and changes learning). Paired 16 seeds × 20k: catches +24% (CI +44.7 to +213.3), alignment +0.035 (CI includes 0), acquired 14/16 vs 11/16. Results in §6. Supporting changes: `compare.q` now types summary columns by name (old and new summaries load together; arms are union-joined) and reports seeds acquired and median bars to acquire; `summary.csv` gains a `cosReward` column. BAR_STRUCTURE.md and CLAUDE.md document the flag. Full suite: 129 assertions pass.
+- Next: G.3(b), bounded log-space reward increments, on top of `--cos-reward`. Needs a choice of step size η (THEORY.md §8 suggests η ≪ 11.3, the floor-to-cap range in log space); plan to sweep a few values in the lab-style paired setup.
+- **G.3(b) done and kept:** `--reward-scale L` (opt-in, default 1, bit-identical; RNG use unchanged). Sweep with `--cos-reward`: L=0.25 gives catches +49% and alignment +0.149 vs L=1 (both CIs exclude 0), 16/16 acquired, median 1,200 bars. 0.1–0.5 all beat L=1; 0.1 vs 0.25 is a plateau. Kept at 0.25. THEORY.md P7 was refuted (weights got sparser, not graded) and is re-tagged there. Tests: `test_sparse_synapses.q` +7 (L=1 identity, same RNG draws, log-change scales by L, unused untouched, scaleMult); `test_weights.q` +4 (recorded in summary, changes learning, L ≤ 0 aborts); full suite 140 assertions pass, golden unchanged. `compare.q` and `test_weights.q` now type summary columns by name.
+- North star: best configuration is now `--cos-reward --reward-scale 0.25`: alignment 0.596 (from 0.412), catches +85%, 16/16 acquire. Target not met (≥ 0.7 in ≥ 14/16 by 10k: best 6/16). Next: G.3(c) random tie-break, then (d) meta saturation, each on top of the best configuration.
+
+### 2026-10-25 — Session 3 (continued): literature-backed learning-rule plan
+- The user asked whether the maths points to existing theory that could improve results while staying general (able to re-learn), reward-focused and true to the core concept.
+- Ran a ceiling diagnostic (§6): at the best configuration the weights alone predict alignment 0.71 (max ≈ 0.90), and execution loses ≈ 0.06. So the learning rule is the main bottleneck.
+- Derived that the route choice is a softmax policy in log-weights, so REINFORCE gives the principled update, and the existing `su` path credit already has its shape. Missing: a reward-prediction-error baseline, the (1−p)/−p terms, and reward-gating of the Hebbian term.
+- Added **Phase G.R** (G.R0–G.R6) with designs, flags, tests, acceptance rules and references. Phase 5 is marked as superseded in approach by G.R6.
+- The user approved adding these to the plan. Nothing implemented yet. Nothing committed yet: the working tree holds this session's and the other chat's work.
+- Next: G.R0, then G.R1+G.R2.

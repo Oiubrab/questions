@@ -1,14 +1,16 @@
 # CLAUDE.md — ForWhoseAdvantage / Questions
 
-> **North star: the cat must actually learn to head towards the mouse.** Every change should be justified by progress on that goal, measured as in REVIVAL_PLAN.md §0. The lab, the theory and the speed work are means to it, not ends in themselves.
+> **North star: the cat must actually learn to head towards the mouse.** Every change should be justified by progress on that goal, measured as in [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md) §0. The lab, the theory and the speed work are means to it, not ends in themselves.
 >
-> **Read [REVIVAL_PLAN.md](REVIVAL_PLAN.md) before starting work.** It is the active plan: audit findings (F1–F18), checkboxed tasks, results and a progress log. Continue its unchecked tasks. Tick each one only after its acceptance check passes, and append what you did to its Progress Log. Decisions in its §7 belong to the user, so ask rather than choose.
+> **Read [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md) before starting work.** It is the active plan: audit findings (F1–F20), checkboxed tasks, results and a progress log. Continue its unchecked tasks. Tick each one only after its acceptance check passes, and append what you did to its Progress Log. Decisions in its §7 belong to the user, so ask rather than choose.
 
 ## Project overview
 
 A **q/kdb-x** simulation: a cat learns to hunt a mouse with a 6×12 grid of trinary neurons, using direction-dependent ("4D") synapses, energy-conserving propagation and reward-modulated route strengthening. A 3×5 **meta-brain** reads the recent catch rate and modulates a "strategic" reinforcement of past routes.
 
-**Current branch:** `reaction-dissaccociation` (spelt that way in git). It tests whether tactical (per-move) rewards interfere with strategic (meta-brain) reinforcement.
+**Branch:** work happens on `main`. The `reaction-dissaccociation` branch (spelt that way in git) was merged in PR #4; it tested whether tactical (per-move) rewards interfere with strategic (meta-brain) reinforcement.
+
+**Docs layout:** active plans live in `plans/inProgress/` (`REVIVAL_PLAN.md`, the master plan; `KX_DASHBOARDS_PLAN.md`, the live viewer). Reference notes live in `researchNotes/` (THEORY, BAR_STRUCTURE, CROSS_FLOW_ARCHITECTURE, OPTIMIZATION_NOTES, PROJECT_STRUCTURE). Only README.md and CLAUDE.md stay at the root. Keep one copy of each doc; don't duplicate.
 
 **Status:** a controlled re-test (Oct 2026, REVIVAL_PLAN.md §6) found that:
 - removing tactical rewards **halves** performance (−49%);
@@ -31,13 +33,13 @@ scripts/lab_sweep.sh s3                                             # named lab 
 The substrate lab (`q/modules/substrate.q`, `.sub`) is a configurable copy of the propagation rule, used for Phase S experiments. With `.sub.defaults` it must stay bit-identical to `.brain.propagate`; `test_substrate.q` checks this. If you change `.brain.stepNeuron`, mirror the change in `.sub.step`.
 
 - Without `< /dev/null`, q stays at its prompt after the run, with the `simLog` table available to query.
-- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta`. They're documented at the top of `cat_mouse.q`.
+- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta --no-learning --cos-reward --reward-scale --viz-port --viz-delay-ms`. `--cos-reward` (G.3a) makes the direction reward use the true cosine of the move angle; `--reward-scale L` (G.3b) multiplies every primary-brain reward's log-step by L. `--no-learning` disables Hebbian updates, rewards and decay while leaving propagation active. They're documented at the top of `cat_mouse.q`.
 - An unknown `--` flag aborts the run.
 - Interactive: `\l q/load.q`.
 
-Theory: [THEORY.md](THEORY.md) models the brain as an absorbing Markov chain and learning as a reinforced urn. Its claims are tagged by evidence level, and `q q/programs/theory_checks.q < /dev/null` reproduces the verified numbers. When an experiment confirms or refutes one of its predictions (P1–P7), update the tag there.
+Theory: [THEORY.md](researchNotes/THEORY.md) models the brain as an absorbing Markov chain and learning as a reinforced urn. Its claims are tagged by evidence level, and `q q/programs/theory_checks.q < /dev/null` reproduces the verified numbers. When an experiment confirms or refutes one of its predictions (P1–P7), update the tag there.
 
-Layout: see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md). The exact per-bar sequence and every reward rule: see [BAR_STRUCTURE.md](BAR_STRUCTURE.md).
+Layout: see [PROJECT_STRUCTURE.md](researchNotes/PROJECT_STRUCTURE.md). The exact per-bar sequence and every reward rule: see [BAR_STRUCTURE.md](researchNotes/BAR_STRUCTURE.md).
 
 ## Architecture quick reference
 

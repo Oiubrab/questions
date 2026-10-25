@@ -12,6 +12,11 @@
 /   --no-direct-rewards
 /   --no-meta-rewards     disable strategic (meta-controlled) reinforcement of the primary brain
 /   --ablate-meta         treat meta-brain output as all-zero: no cross-flow, minimum scope/magnitude
+/   --no-learning        disable Hebbian updates, rewards, and decay
+/   --cos-reward          direction reward uses the cosine of the move angle (REVIVAL_PLAN.md G.3a)
+/   --reward-scale L      multiply every primary-brain reward's log-step by L (default 1; G.3b)
+/   --viz-port N          publish energy/cat/mouse frames to q/programs/viz_server.q on port N (off by default)
+/   --viz-delay-ms N      sleep N ms after each step so the energy flow is watchable (only with --viz-port)
 / Headless: append < /dev/null so q exits when the run ends instead of staying in the REPL.
 
 / Load all modules first
@@ -21,13 +26,15 @@
 \l q/modules/brain.q
 \l q/modules/vision.q
 \l q/modules/brain_engine.q
+\l q/modules/viz.q
 
 / ================================================================
 / PARSE COMMAND LINE ARGUMENTS (flags documented at top of file)
 / ================================================================
 args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
-              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta")
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";
+              "--viz-port";"--viz-delay-ms")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
 if[count badFlags; -2 "Unknown flag(s): ",", " sv badFlags; exit 1]
@@ -44,6 +51,15 @@ weightFile: flagVal "--load-weights"
 noDirectRewards: (hasFlag "--no-direct-rewards") | hasFlag "--meta-only"
 noMetaRewards: hasFlag "--no-meta-rewards"
 ablateMeta: hasFlag "--ablate-meta"
+noLearning: hasFlag "--no-learning"
+cosReward: hasFlag "--cos-reward"
+/ G.3(b): rewards multiply weights, so they are steps in log space (reinforce +0.80, punish -0.84,
+/ catch boost +0.41 per bar, strategic +0.095*m per lookback bar). REWARD_SCALE multiplies every
+/ primary-brain step by L, keeping the same RNG draws; 1 is the original behaviour exactly.
+REWARD_SCALE: $[count flagVal "--reward-scale"; "F"$flagVal "--reward-scale"; 1f]
+if[(null REWARD_SCALE)|REWARD_SCALE<=0f; -2 "--reward-scale must be a positive number"; exit 1]
+CATCH_MULT: .syn.scaleMult[1.5;REWARD_SCALE]   / catch boost per history bar
+.brain.hebbEnabled: not noLearning
 outputDir: flagVal "--output-dir"
 if[0=count outputDir; outputDir: "results/seed",string userSeed]
 if[not last[outputDir]="/"; outputDir,:"/"]
@@ -87,17 +103,22 @@ moveDirCol: `int$-1 0 1 -1 1 -1 0 1
 / ================================================================
 system "S ",string userSeed
 
+if[count flagVal "--viz-port";
+  .viz.init["I"$flagVal "--viz-port"; $[count flagVal "--viz-delay-ms"; "I"$flagVal "--viz-delay-ms"; 0i]]]
+
 / ================================================================
 / INITIALIZE BRAIN SYSTEMS
 / ================================================================
 / Primary brain (6x12)
 prim: .engine.initSystem[ROWS;COLS;IN_LEN;OUT_LEN;IN_OFF;OUT_OFF]
+prim[`su]: .syn.emptySparseUsage[]
 
 / Meta-brain (3x5)
 metaBr: .engine.initSystem[META_ROWS;META_COLS;META_IN_LEN;META_OUT_LEN;META_IN_OFF;META_OUT_OFF]
+metaBr[`su]: .syn.emptySparseUsage[]
 
-/ Synapse history: HISTORY_SIZE x rows x cols x 8 x 8 boolean
-hist: .syn.initHist[HISTORY_SIZE;ROWS;COLS]
+/ Sparse synapse history: one tagged flat-index set per bar
+hist: .syn.initSparseHist HISTORY_SIZE
 histIdx: 0i    / write pointer into circular buffer (0-indexed)
 
 / Side I/O: metaBr-brain output will be stored here between bars
@@ -123,14 +144,15 @@ dims:{$[0>type x; `long$(); (count x),.z.s first x]}
 if[loadWeights;
   show "Loading weights from: ",weightFile;
   w: get hsym `$weightFile;
+  denseHistShape: .syn.initHist[HISTORY_SIZE;ROWS;COLS];
   expect: (prim`syns; metaBr`syns; prim`br; prim`inc0; prim`inc1;
-           metaBr`br; metaBr`inc0; metaBr`inc1; hist; histIdx);
+           metaBr`br; metaBr`inc0; metaBr`inc1; denseHistShape; histIdx);
   if[not (dims each w)~dims each expect;
     -2 "Weight file shape mismatch: got ",(.Q.s1 dims each w),", want ",.Q.s1 dims each expect;
     exit 1];
   prim[`syns`br`inc0`inc1]: w 0 2 3 4;
   metaBr[`syns`br`inc0`inc1]: w 1 5 6 7;
-  hist: w 8; histIdx: w 9;
+  hist: .syn.denseHistToSparse w 8; histIdx: w 9;
   show "Loaded warm state; primary brain energy: ",string sum raze prim`br]
 
 / ================================================================
@@ -169,8 +191,13 @@ epochCatches: `int$(numEpochs+1i)#0i
 epochTowards: `int$(numEpochs+1i)#0i
 epochAway:    `int$(numEpochs+1i)#0i
 epochPerp:    `int$(numEpochs+1i)#0i
+epochAlignSum: (numEpochs+1i)#0f
+epochAlignCount: `int$(numEpochs+1i)#0i
 catchesThisEpoch: 0i; towardsEpoch: 0i; awayEpoch: 0i; perpEpoch: 0i
 currentEpoch: 0i    / 0-indexed
+alignmentWindow: 500#0n
+alignmentWindowSum: 0f; alignmentWindowCount: 0i
+acquisitionTime: 0Ni
 
 brainPressure: 0.0
 
@@ -179,8 +206,8 @@ brainPressure: 0.0
 / ================================================================
 / Simulation log as a kdb-x table — this is the killer feature vs Fortran
 / We build it incrementally and can query it in real time
-simLog: flip `bar`mouseX`mouseY`catX`catY`visionSlice`brainEnergy`outEnergy`outAction`moveDist`catches`pressure`overflow!
-  (`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`float$();`int$())
+simLog: flip `bar`mouseX`mouseY`catX`catY`visionSlice`brainEnergy`outEnergy`outAction`moveDist`alignment`catches`pressure`overflow!
+  (`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`int$();`float$();`int$();`float$();`int$())
 / Note: we append each bar's data; at end we write CSV
 
 / ================================================================
@@ -190,9 +217,12 @@ show "=== CAT & MOUSE CONTINUOUS HUNTING SIMULATION (q/kdb-x) ==="
 show "Max bars: ",string MAX_BARS
 show "Steps per bar: ",string STEPS_PER_BAR
 show "Seed: ",string userSeed
-show "Direct rewards: ",string not noDirectRewards
-show "Strategic (meta) rewards: ",string not noMetaRewards
+show "Learning enabled: ",string not noLearning
+show "Direct rewards: ",string (not noDirectRewards)&(not noLearning)
+show "Strategic (meta) rewards: ",string (not noMetaRewards)&(not noLearning)
 show "Meta-brain ablated: ",string ablateMeta
+show "Cosine direction reward: ",string cosReward
+show "Reward scale (log-step multiplier): ",string REWARD_SCALE
 show "Weights: ",$[loadWeights; weightFile; "fresh"]
 show "Output dir: ",outputDir
 show ""
@@ -231,8 +261,8 @@ while[bar<=MAX_BARS;
   prevDist: .vision.toroidalDist[catPos;mousePos;FIELD_SIZE];
 
   / ---- RESET SYNAPSE USAGE ----
-  prim[`su]: .syn.resetSU[prim`su];
-  metaBr[`su]: .syn.resetSU[metaBr`su];
+  prim[`su]: .syn.emptySparseUsage[];
+  metaBr[`su]: .syn.emptySparseUsage[];
 
   / ---- MOUSE MOVEMENT (every MOUSE_MOVE_INTERVAL bars) ----
   if[0i=bar mod MOUSE_MOVE_INTERVAL;
@@ -262,6 +292,7 @@ while[bar<=MAX_BARS;
     metaBr: .engine.runCycleSimple[metaBr];
     metaBr: .engine.runCycleSimple[metaBr];
     accMetaOut: accMetaOut | metaBr`out;
+    if[.viz.enabled; .viz.pubStep[bar;step;prim`br;metaBr`br]];
 
     step+:1i];
 
@@ -294,37 +325,31 @@ while[bar<=MAX_BARS;
   / --ablate-meta: behave as if meta output were all-zero (the clamps above give 20 and 1)
   if[ablateMeta; temporalScope: 20i; magnitude: 1i];
 
-  if[(noDirectRewards & rateCounter>=1i) | rateCounter>=3i;
+  if[(not noLearning)&((noDirectRewards & rateCounter>=1i) | rateCounter>=3i);
     / Reinforce primary brain synapses active during lookback window
     / lookback: bars bar-1, bar-2, ..., bar-temporalScope (clamped to history buffer depth)
     lookback: $[noMetaRewards; `int$(); .syn.lookbackBars[bar;temporalScope;HISTORY_SIZE]];
     / Fortran applied x1.1 `magnitude` times (x1.1 or x1.21); the original q port
     / used magnitude*1.1 (x2.2) — restored to Fortran (REVIVAL_PLAN.md F17)
     mag: 1.1 xexp magnitude;
-    / Fold reinforcement across all lookback bars — must fold to accumulate syns updates
-    prim[`syns]: ({[mag;histBuf;hi;barN;syns;b]
-      / 0-indexed history slot for bar b (hi is the NEXT write slot)
-      hSlice: histBuf .syn.histSlot[hi;barN;b;HISTORY_SIZE];
-      / Apply mag*1.0 reinforcement to synapses active (hc=1b) in this bar
-      {[sc;hc;m] sc + `int$hc*(.syn.MAX_STRENGTH & `int$`float$sc*m) - `int$hc*sc}
-      [;;mag]''[syns;hSlice]
-    }[mag;hist;histIdx;bar]/) [prim`syns; lookback];
+    lookbackSlots: .syn.histSlot[histIdx;bar;lookback;HISTORY_SIZE];
+    prim[`syns]: .syn.applySparseLookbackScale[prim`syns;hist[lookbackSlots];.syn.scaleMult[mag;REWARD_SCALE]];
 
     / Reward metaBr-brain for triggering successful strategy reinforcement
-    do[rateCounter;
-      metaBr[`syns]: .syn.applyReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]]];
+    metaBr[`syns]: .syn.applySparseReinforceN[metaBr`syns;metaBr`su;STEPS_PER_BAR;rateCounter]];
 
   / ---- META-BRAIN INPUT-BASED REWARD (every bar) ----
-  $[rateCounter>=3i;
-    [do[2; metaBr[`syns]: .syn.applyReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]]];
-    rateCounter>=1i;
-    [metaBr[`syns]: .syn.applyReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
-    not noDirectRewards;
-    [metaBr[`syns]: .syn.applyPunish[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
-    0];
+  if[not noLearning;
+    $[rateCounter>=3i;
+      [metaBr[`syns]: .syn.applySparseReinforceN[metaBr`syns;metaBr`su;STEPS_PER_BAR;2i]];
+      rateCounter>=1i;
+      [metaBr[`syns]: .syn.applySparseReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
+      not noDirectRewards;
+      [metaBr[`syns]: .syn.applySparsePunish[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
+      0]];
 
   / ---- DECAY (every 5 bars) ----
-  if[0i=bar mod 5i;
+  if[(not noLearning)&(0i=bar mod 5i);
     prim[`syns]: .syn.applyDecay[prim`syns];
     metaBr[`syns]: .syn.applyDecay[metaBr`syns]];
 
@@ -341,9 +366,11 @@ while[bar<=MAX_BARS;
 
   / ---- MOVE CAT ----
   currDist: prevDist;
+  moveAlignment: 0n;
   if[moveDist>0i;
     / Store old position for path check
     oldCat: catPos;
+    targetPos: mousePos;
     / Record movement direction in history
     movHist[movHistIdx mod 10i]: outAction;
     movHistIdx+:1i;
@@ -353,6 +380,12 @@ while[bar<=MAX_BARS;
     catDy: `float$moveDirRow[outAction] * moveDist * 5.0;
     newX: 0.0 | FIELD_SIZE & catPos[0]+catDx;
     newY: 0.0 | FIELD_SIZE & catPos[1]+catDy;
+    actualMove: (newX-oldCat[0];newY-oldCat[1]);
+    targetMove: (targetPos[0]-oldCat[0];targetPos[1]-oldCat[1]);
+    if[((.vision.norm actualMove)>0.001)&((.vision.norm targetMove)>0.001);
+      moveAlignment: .vision.alignment[actualMove;targetMove];
+      epochAlignSum[currentEpoch]+:moveAlignment;
+      epochAlignCount[currentEpoch]+:1i];
 
     / ---- CATCH CHECK: path to point distance ----
     closestDist: .vision.pathDist[oldCat;(newX;newY);mousePos];
@@ -374,14 +407,12 @@ while[bar<=MAX_BARS;
       prim[`syns]: ({[histBuf;hi;syns;j]
         / j is slots back from the write head (1 = current bar); q's mod is floored
         i: `int$(hi-j) mod HISTORY_SIZE;
-        hSlice: histBuf[i];
-        {[sc;hc] sc + `int$hc*(.syn.MAX_STRENGTH & `int$`float$sc*1.5) - `int$hc*sc}
-        ''[syns;hSlice]
-      }[hist;histIdx]/) [prim`syns; 1i+til 20i];
+        .syn.applySparseScale[syns;histBuf[i];CATCH_MULT]
+      }[hist;histIdx]/)[prim`syns;1i+til 20i];
 
       / Extra metaBr reward on hunting streak
-      if[rateCounter>=5i;
-        do[3; metaBr[`syns]: .syn.applyReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]]];
+      if[(not noLearning)&(rateCounter>=5i);
+        metaBr[`syns]: .syn.applySparseReinforceN[metaBr`syns;metaBr`su;STEPS_PER_BAR;3i]];
 
       / Respawn mouse 30-45 units from cat
       rdx: (2*(rand 1.0))-1.0; rdy: (2*(rand 1.0))-1.0;
@@ -402,9 +433,13 @@ while[bar<=MAX_BARS;
     desLen: .vision.norm (desX;desY);
     if[desLen>0.001;
       desX: desX%desLen; desY: desY%desLen;
-      / NOTE: move vector is not normalised (length 5-14), so dotP is not a cosine
-      / and adaptThresh is not a real cone — kept as-is in Phase 1 (REVIVAL_PLAN.md F10, task 4.1)
-      dotP: .vision.dot[(catDx;catDy);(desX;desY)];
+      / Default: the move vector is not normalised (length 5-14), so dotP is not a cosine,
+      / adaptThresh (0.6-0.85) is not a real cone, and one good move fires ~15 reinforce calls
+      / (F10). --cos-reward normalises the move, so dotP is the cosine of the angle to the mouse:
+      / adaptThresh becomes a true cone and round(1+3*dotP) gives 1-4 calls.
+      dotP: $[cosReward;
+              .vision.dot[(catDx;catDy)%.vision.norm (catDx;catDy);(desX;desY)];
+              .vision.dot[(catDx;catDy);(desX;desY)]];
 
       / Track directionality
       totalMoves+:1i;
@@ -433,33 +468,49 @@ while[bar<=MAX_BARS;
       / Progressive punishment epoch scaling
       epochProg: `float$currentEpoch % numEpochs;
 
-      if[not noDirectRewards;
+      if[(not noLearning)&not noDirectRewards;
         / Reward: accurate direction; Punish: wrong/perpendicular direction
         $[dotP>adaptThresh;
-          [do[`int$`float$dirMult*2.0;
-             prim[`syns]: .syn.applyReinforce[prim`syns;prim`su;STEPS_PER_BAR]];
+          [reinforceCalls:`int$`float$dirMult*2.0;
+           reinforceCalls+:momBonus-1i;
+           prim[`syns]: .syn.applySparseReinforceNL[prim`syns;prim`su;STEPS_PER_BAR;reinforceCalls;REWARD_SCALE];
            lastRewDir: outAction;
-           do[momBonus-1i;
-             prim[`syns]: .syn.applyReinforce[prim`syns;prim`su;STEPS_PER_BAR]]];
+           ];
           dotP<-0.01;
-          [do[`int$1.0+epochProg*2.0;
-             prim[`syns]: .syn.applyPunish[prim`syns;prim`su;STEPS_PER_BAR]];
+          [punishCalls:`int$1.0+epochProg*2.0;
+           prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;punishCalls;REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
           currentEpoch>0i;
-          [prim[`syns]: .syn.applyPunish[prim`syns;prim`su;STEPS_PER_BAR];
+          [prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;1i;REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
           0]]]];
 
   / ---- APPEND TO LOG TABLE ----
-  simLog,:flip `bar`mouseX`mouseY`catX`catY`visionSlice`brainEnergy`outEnergy`outAction`moveDist`catches`pressure`overflow!
+  alignSlot: (bar-1i) mod 500i;
+  if[not null alignmentWindow[alignSlot];
+    alignmentWindowSum-:alignmentWindow[alignSlot];
+    alignmentWindowCount-:1i];
+  alignmentWindow[alignSlot]:moveAlignment;
+  if[not null moveAlignment;
+    alignmentWindowSum+:moveAlignment;
+    alignmentWindowCount+:1i];
+  / Record only the first crossing (acquisitionTime starts null)
+  if[(bar>=500i)&(null acquisitionTime)&(alignmentWindowCount>0i)&((alignmentWindowSum%alignmentWindowCount)>0.6);
+    acquisitionTime:bar];
+
+  simLog,:flip `bar`mouseX`mouseY`catX`catY`visionSlice`brainEnergy`outEnergy`outAction`moveDist`alignment`catches`pressure`overflow!
     (enlist bar; enlist `int$mousePos[0]; enlist `int$mousePos[1];
      enlist `int$catPos[0]; enlist `int$catPos[1];
      enlist visionSlice;
      enlist brainEnergy; enlist outEnergy;
      enlist outAction; enlist moveDist;
+     enlist moveAlignment;
      enlist catchesCount;
      enlist `float$brainPressure;
      enlist `int$sum overflow);
+
+  if[.viz.enabled;
+    .viz.pubBar[bar;mousePos;catPos;(visionSlice;brainEnergy;outAction;catchesCount;moveAlignment;`float$brainPressure)]];
 
   / ---- PERIODIC SNAPSHOT ----
   if[0i=bar mod SNAPSHOT_INTERVAL;
@@ -480,6 +531,8 @@ while[bar<=MAX_BARS;
   if[0i=bar mod 1000i; show "Progress: ",(string bar),"/",(string MAX_BARS)];
 
   bar+:1i];
+
+.viz.close[]
 
 / ================================================================
 / SAVE FINAL EPOCH
@@ -535,8 +588,9 @@ saveCsv[outputDir;"meta_brain_state.csv";metaBrState]
 / SAVE BINARY WEIGHTS (kdb-x serialization — loads with get)
 / ================================================================
 weightPath: hsym `$":",outputDir,"weights_seed",(string userSeed),".bin"
+histDisk: .syn.sparseHistToDense[hist;ROWS;COLS];
 weightPath set (prim`syns; metaBr`syns; prim`br; prim`inc0; prim`inc1;
-                metaBr`br; metaBr`inc0; metaBr`inc1; hist; histIdx)
+                metaBr`br; metaBr`inc0; metaBr`inc1; histDisk; histIdx)
 show "Binary weights saved to: ",string weightPath
 
 / ================================================================
@@ -552,7 +606,8 @@ show "Catch rate per bar: ",string `float$catchesCount % MAX_BARS
 nRun: (MAX_BARS+EPOCH_SIZE-1i) div EPOCH_SIZE
 epochSummary: nRun#([] epoch:1i+til numEpochs+1i;
                bars:`int$EPOCH_SIZE & MAX_BARS-EPOCH_SIZE*til numEpochs+1i;
-               catches:epochCatches; towards:epochTowards; away:epochAway; perp:epochPerp)
+               catches:epochCatches; towards:epochTowards; away:epochAway; perp:epochPerp;
+               meanAlignment:epochAlignSum%epochAlignCount)
 show "=== TEMPORAL LEARNING (EPOCH BREAKDOWN) ==="
 show epochSummary
 saveCsv[outputDir;"epoch_summary.csv";epochSummary]
@@ -590,8 +645,8 @@ show catchPerEpoch
 show "Average brain pressure: ",string avg simLog`pressure
 
 / One-row machine-readable run summary, read by q/programs/compare.q
-summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`weightFile`catches`totalMoves`towards`away`perp`meanPressure!
-  (userSeed; MAX_BARS; not noDirectRewards; not noMetaRewards; ablateMeta; `$weightFile;
-   catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure)
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale!
+  (userSeed; MAX_BARS; (not noDirectRewards)&(not noLearning); (not noMetaRewards)&(not noLearning); ablateMeta; noLearning; `$weightFile;
+  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE)
 saveCsv[outputDir;"summary.csv";summary]
 show "Summary written to: ",outputDir,"summary.csv"

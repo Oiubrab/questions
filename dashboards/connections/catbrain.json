@@ -1,0 +1,10 @@
+{
+  "name": "catbrain",
+  "dbtype": "q",
+  "tls": "off",
+  "host": "localhost",
+  "port": "6814",
+  "user": "",
+  "pass": "",
+  "database": ""
+}

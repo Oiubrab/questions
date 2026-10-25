@@ -27,7 +27,7 @@ The primary brain (6×12) has four edges. Two carry signals *in* and two carry s
 | Left | out | `.brain.captureOverflow` | Rows 1–4 of the left column are read and summed into `simLog.overflow`. **Nothing is removed or fed back;** this is a logging hook only. |
 
 Notes:
-- The top and right inputs **overwrite** cells rather than adding to them. So they can create or destroy energy (finding F16 in [REVIVAL_PLAN.md](REVIVAL_PLAN.md)). Conservation is guaranteed only inside propagation.
+- The top and right inputs **overwrite** cells rather than adding to them. So they can create or destroy energy (finding F16 in [REVIVAL_PLAN.md](../plans/inProgress/REVIVAL_PLAN.md)). Conservation is guaranteed only inside propagation.
 - The incoming-direction labels (7 = S, 8 = SE in `.dirs` numbering) only choose which row of a neuron's 8×8 synapse matrix is used next. They don't mean "came from above" or "came from the right" geometrically. The system is consistent, so this doesn't break anything.
 - Propagation always uses the downward bias `.dirs.vBias`. The horizontal bias `.dirs.hBias` is defined but unused.
 

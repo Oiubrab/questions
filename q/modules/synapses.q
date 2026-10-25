@@ -20,9 +20,129 @@ init:{[nR;nC]
 initSU:{[nR;nC]
   nR # enlist nC # enlist 8 8#0b}
 
+/ Sparse usage is tagged so empty index lists remain distinguishable from dense masks.
+emptySparseUsage:{[](1b;`int$())}
+isSparseUsage:{[usage]
+  if[2<>count usage; :0b];
+  if[-1h<>type first usage; :0b];
+  first usage}
+sparseUsage:{[indices](1b;`int$distinct indices)}
+addSparseUsage:{[usage;idx] (1b;asc distinct (usage 1),enlist `int$idx)}
+usageIndices:{[usage] `int$distinct (usage 1)}
+indexOf:{[r;c;inDir;outDir;nC]
+  cellIndex:((r*nC)+c);
+  dirIndex:((inDir*8i)+outDir);
+  `int$((cellIndex*64i)+dirIndex)}
+
+/ Update only indices in tagged sparse usage; dense APIs remain available to the lab.
+applySparseReinforce:{[syns;usage;numSteps]
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: `float$1.2%0.95 xexp numSteps;
+  noise: 0.9 + 0.2*(count idx)?1.0;
+  flat:@[flat;idx;:;.syn.MAX_STRENGTH & `int$`float$old*mult*noise];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+applySparseReinforceN:{[syns;usage;numSteps;calls]
+  if[calls<=0i; :syns];
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: (`float$1.2%0.95 xexp numSteps) xexp calls;
+  noise: 0.9 + 0.2*(calls*count idx)?1.0;
+  noiseShape:`int$(calls;count idx);
+  noise:prd each flip noiseShape#noise;
+  updated: .syn.MAX_STRENGTH & `int$`float$old*mult*noise;
+  flat:@[flat;idx;:;updated];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+applySparsePunish:{[syns;usage;numSteps]
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: `float$0.8*0.95 xexp numSteps;
+  noise: 0.9 + 0.2*(count idx)?1.0;
+  flat:@[flat;idx;:;.syn.MIN_STRENGTH | `int$`float$old*mult*noise];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+applySparsePunishN:{[syns;usage;numSteps;calls]
+  if[calls<=0i; :syns];
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: (`float$0.8*0.95 xexp numSteps) xexp calls;
+  noise: 0.9 + 0.2*(calls*count idx)?1.0;
+  noiseShape:`int$(calls;count idx);
+  noise:prd each flip noiseShape#noise;
+  updated: .syn.MIN_STRENGTH | `int$`float$old*mult*noise;
+  flat:@[flat;idx;:;updated];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+/ G.3(b) bounded log-space rewards: the same update as applySparseReinforceN/PunishN, with the
+/ same RNG draws, but each synapse's total log-change is multiplied by lam. So lam=0.25 makes a
+/ reward a quarter as large in log space. lam=1 calls the original update (bit-identical).
+applySparseReinforceNL:{[syns;usage;numSteps;calls;lam]
+  if[1f=lam; :applySparseReinforceN[syns;usage;numSteps;calls]];
+  if[calls<=0i; :syns];
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: (`float$1.2%0.95 xexp numSteps) xexp calls;
+  noise: 0.9 + 0.2*(calls*count idx)?1.0;
+  noise:prd each flip (`int$(calls;count idx))#noise;
+  updated: .syn.MAX_STRENGTH & `int$`float$old*(mult*noise) xexp lam;
+  flat:@[flat;idx;:;updated];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+applySparsePunishNL:{[syns;usage;numSteps;calls;lam]
+  if[1f=lam; :applySparsePunishN[syns;usage;numSteps;calls]];
+  if[calls<=0i; :syns];
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  old: flat[idx];
+  mult: (`float$0.8*0.95 xexp numSteps) xexp calls;
+  noise: 0.9 + 0.2*(calls*count idx)?1.0;
+  noise:prd each flip (`int$(calls;count idx))#noise;
+  updated: .syn.MIN_STRENGTH | `int$`float$old*(mult*noise) xexp lam;
+  flat:@[flat;idx;:;updated];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+/ Deterministic multiplier m scaled in log space by lam (lam=1 returns m unchanged)
+scaleMult:{[m;lam] $[1f=lam; m; m xexp lam]}
+
+applySparseScale:{[syns;usage;mult]
+  flat: raze raze raze syns;
+  idx: usageIndices usage;
+  flat:@[flat;idx;:;.syn.MAX_STRENGTH & `int$`float$flat[idx]*mult];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+applySparseLookbackScale:{[syns;usages;mult]
+  allIdx:raze usageIndices each usages;
+  grouped:group allIdx;
+  idx:key grouped;
+  nUsed:count each value grouped;
+  flat:raze raze raze syns;
+  scaled:.syn.MAX_STRENGTH & `int$`float$flat[idx]*mult xexp nUsed;
+  flat:@[flat;idx;:;scaled];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+
 / Initialize 5D synapse history buffer (histSize x nR x nC x 8 x 8 boolean)
 initHist:{[histSize;nR;nC]
   histSize # enlist nR # enlist nC # enlist 8 8#0b}
+
+initSparseHist:{[histSize] histSize#enlist emptySparseUsage[]}
+denseHistToSparse:{[hist]
+  sparseUsage each {where raze raze raze x} each hist}
+sparseHistToDense:{[hist;nR;nC]
+  {[usage;nR;nC]
+    flat:(nR*nC*64)#0b;
+    idx:usageIndices usage;
+    flat:@[flat;idx;:;(count idx)#1b];
+    shape:`int$(nR;nC;8i;8i);
+    shape#flat
+  }'[hist;count[hist]#nR;count[hist]#nC]}
 
 / History buffer slot holding bar b, seen from current bar barN with write head hi
 / (hi is the NEXT slot to be written, so bar barN-1 is at hi-1). Relies on q's
@@ -46,7 +166,11 @@ decayCell:{[sc]
 
 / Apply decay to entire synapse array
 applyDecay:{[syns]
-  {decayCell each x} each syns}
+  flat: raze raze raze syns;
+  noise: 0.98 + 0.015*(count flat)?1.0;
+  updated: MIN_STRENGTH | `int$`float$flat*noise;
+  shape: `int$(count syns;count first syns;8i;8i);
+  shape#updated}
 
 / Module-level helpers for reinforce/punish — defined at namespace scope to avoid
 / kdb-x v5 closure limitation (inner lambdas cannot capture outer local variables).
@@ -68,14 +192,23 @@ punishCell:{[mult;sc;uc]
 / Mirrors apply_adaptive_reinforcement in synapses_module.f90
 applyReinforce:{[syns;su;numSteps]
   mult: `float$1.2 % 0.95 xexp numSteps;
-  / Pass mult via projection to avoid kdb-x v5 closure limitation
-  {[mult;x;y] reinforceCell[mult]'[x;y]}[mult]'[syns;su]}
+  flat: raze raze raze syns;
+  used: raze raze raze su;
+  noise: 0.9 + 0.2*(count flat)?1.0;
+  updated: MAX_STRENGTH & `int$`float$flat*mult*noise;
+  shape: `int$(count syns;count first syns;8i;8i);
+  shape#(flat + used*(updated-flat))}
 
 / Apply adaptive punishment (weakens used synapses)
 / Multiplier = 0.8 * (0.95^numSteps), scaled by random noise 0.9-1.1
 / Mirrors apply_adaptive_punishment in synapses_module.f90
 applyPunish:{[syns;su;numSteps]
   mult: `float$0.8 * 0.95 xexp numSteps;
-  {[mult;x;y] punishCell[mult]'[x;y]}[mult]'[syns;su]}
+  flat: raze raze raze syns;
+  used: raze raze raze su;
+  noise: 0.9 + 0.2*(count flat)?1.0;
+  updated: MIN_STRENGTH | `int$`float$flat*mult*noise;
+  shape: `int$(count syns;count first syns;8i;8i);
+  shape#(flat + used*(updated-flat))}
 
 \d .

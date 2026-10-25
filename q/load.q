@@ -8,3 +8,4 @@
 \l q/modules/brain.q
 \l q/modules/vision.q
 \l q/modules/brain_engine.q
+\l q/modules/viz.q

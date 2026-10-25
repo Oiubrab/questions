@@ -36,7 +36,7 @@ Benchmarks:
 - Flattening the synapse array speeds a reinforce up about 9×, with bit-identical results.
 - Updating only the used synapses speeds it up about 360×. Results are statistically identical but follow a different random stream.
 
-The step-by-step speed-up plan, with acceptance tests, is Phase P in [REVIVAL_PLAN.md](REVIVAL_PLAN.md).
+The step-by-step speed-up plan, with acceptance tests, is Phase P in [REVIVAL_PLAN.md](../plans/inProgress/REVIVAL_PLAN.md).
 
 ### Substrate lab (no rewards)
 

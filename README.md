@@ -4,9 +4,9 @@ A **q/kdb-x** neural simulation in which an artificial cat learns to hunt a mous
 
 The project also asks a research question about *how* rewards should be delivered (see [Research status](#research-status)).
 
-> **Goal:** the cat reliably learns to head towards the mouse. That's the foundation for generalising the system to richer inputs, outputs and rewards. Current trained cats move towards the mouse 74–95% of the time, but how well their moves line up with the mouse varies a lot between brains. Making that learning reliable, fast and able to re-learn is the active work.
+> **Goal:** the cat reliably learns to head towards the mouse. That's the foundation for generalising the system to richer inputs, outputs and rewards. Progress so far (16 seeds × 20,000 decisions each): with `--cos-reward --reward-scale 0.25`, mean move alignment with the mouse direction is **0.60** (0 is random, ~0.90 is the best possible), up from 0.41 with the original rewards. Every seed learns, typically within ~1,200 decisions, and catches are up 85%. The target, alignment ≥ 0.7 in 14 of 16 seeds by 10,000 decisions, isn't met yet. See [the plan](plans/inProgress/REVIVAL_PLAN.md) §0 and §6.
 >
-> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs, and re-ran the project's main experiment under controlled conditions. The headline result in earlier versions of this README did not hold up. Work in progress is tracked in [REVIVAL_PLAN.md](REVIVAL_PLAN.md).
+> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs, and re-ran the project's main experiment under controlled conditions. The headline result in earlier versions of this README did not hold up. Work in progress is tracked in [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md).
 
 ---
 
@@ -58,7 +58,7 @@ What this shows:
 - **The meta-brain contributes nothing measurable:** zeroing its output changes nothing.
 - **A minority of brains (3 of 16) do better without direct rewards,** while others collapse. Testing only the best trained brain, as the old experiment did, will tend to pick out exactly these cases.
 
-The open question now is what lets some brains sustain hunting on their own while most decay. Full numbers and caveats are in [REVIVAL_PLAN.md §6](REVIVAL_PLAN.md#6-results).
+The open question now is what lets some brains sustain hunting on their own while most decay. Full numbers and caveats are in [REVIVAL_PLAN.md §6](plans/inProgress/REVIVAL_PLAN.md#6-results).
 
 ---
 
@@ -126,12 +126,12 @@ See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md).
 
 | Document | Covers |
 |---|---|
-| [REVIVAL_PLAN.md](REVIVAL_PLAN.md) | Audit findings, fixes, results, and the task list for ongoing work |
-| [THEORY.md](THEORY.md) | The mathematics: the brain as a Markov chain, learning as a reinforced urn, memory and reward arithmetic, testable predictions |
-| [BAR_STRUCTURE.md](BAR_STRUCTURE.md) | What happens in one decision cycle ("bar"), step by step, including every reward |
-| [CROSS_FLOW_ARCHITECTURE.md](CROSS_FLOW_ARCHITECTURE.md) | The brain's four input/output edges and the pressure mechanisms (mostly inactive in practice) |
-| [OPTIMIZATION_NOTES.md](OPTIMIZATION_NOTES.md) | Runtime costs, why propagation is a fold, Fortran-era history |
-| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Directory layout |
+| [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md) | Audit findings, fixes, results, and the task list for ongoing work |
+| [THEORY.md](researchNotes/THEORY.md) | The mathematics: the brain as a Markov chain, learning as a reinforced urn, memory and reward arithmetic, testable predictions |
+| [BAR_STRUCTURE.md](researchNotes/BAR_STRUCTURE.md) | What happens in one decision cycle ("bar"), step by step, including every reward |
+| [CROSS_FLOW_ARCHITECTURE.md](researchNotes/CROSS_FLOW_ARCHITECTURE.md) | The brain's four input/output edges and the pressure mechanisms (mostly inactive in practice) |
+| [OPTIMIZATION_NOTES.md](researchNotes/OPTIMIZATION_NOTES.md) | Runtime costs, why propagation is a fold, Fortran-era history |
+| [PROJECT_STRUCTURE.md](researchNotes/PROJECT_STRUCTURE.md) | Directory layout |
 | [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) | How to run and analyse controlled experiments |
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI coding assistants working in this repo |
 

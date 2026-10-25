@@ -7,7 +7,7 @@ Each claim carries a status:
 | Tag | Meaning |
 |---|---|
 | **Derived** | follows from the rules as coded; no experiment needed |
-| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](REVIVAL_PLAN.md) §6 |
+| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](../plans/inProgress/REVIVAL_PLAN.md) §6 |
 | **Consistent** | explains existing results after the fact (weaker than a prediction made beforehand) |
 | **Prediction** | not yet tested; each has a test proposed in §11 |
 | **Conjecture** | a proposed principle that needs more work to make precise |
@@ -222,7 +222,7 @@ Rewards multiply weights, so it's natural to track $\ln W$ (Derived from the cod
 - **Undoing it takes about 9–10 punish calls,** i.e. 3–10 away-moves.
 - **The learning rule is effectively binary:** a route is either "used and rewarded" or "forgotten". The bimodal weight distribution in §7 confirms this. Graded probability learning, which is the point of a probability-matrix brain, is lost at the cat level.
 - **Suggestion:** make each reward a bounded increment in log space, e.g. $\ln W \mathrel{+}= \eta\cdot\text{reward}$ with $\eta \ll 11.3$. Then many experiences shape a weight, not just the first one.
-- **Prediction P7:** with bounded log-rewards, the bimodality disappears and policies become graded. Whether hunting improves is an open question.
+- ~~**Prediction P7:** with bounded log-rewards, the bimodality disappears and policies become graded.~~ **Refuted (2026-10-25, REVIVAL_PLAN.md §6, G.3b).** Scaling every primary reward's log-step by λ made weights *more* concentrated, not graded: weights between 100 and 10⁶ fell from 3.1% (λ=1) to 0.5% (λ=0.25) and 0.3% (λ=0.1), and strong weights (≥10⁶) fell from 2.7% to 1.9% and 1.4%. Hunting improved strongly anyway (alignment +0.149 at λ=0.25). A likely reason, not yet tested: the reward was never the only force on a weight. Hebbian +1000 per use (§7, $W^*=hu\tau_d$) still saturates routes the cat uses, and gentler rewards let fewer wrong routes get promoted, which leaves a sparser, more accurate skeleton. So the benefit comes from *fewer wrong routes*, not from graded weights.
 
 ---
 
@@ -259,7 +259,7 @@ The design intent (REVIVAL_PLAN.md §2) is that a higher system sets how much re
 | P4 | Angle-ordered output wiring makes an untrained cat lean towards the mouse (towards 0.66 vs 0.36) and speeds acquisition | policy matrix + paired training runs | M.4 |
 | P5 | The weights-only $E[\cos]$ predicts catches for *other* conditions too (meta-only, new seeds) | rerun §3.2 on arms B–D | M.3 |
 | P6 | Pressure reaches 0.1 only when inflow ≳ 11 units per bar | open-system lab with controlled injection | S.5 |
-| P7 | Bounded log-space rewards remove weight bimodality and give graded policies | weight histogram + policy MI after training | Phase 4 |
+| P7 | Bounded log-space rewards remove weight bimodality and give graded policies | weight histogram + policy MI after training | **Refuted** (G.3b): weights became sparser, while hunting improved |
 
 ## 12. Reproducing the numbers
 

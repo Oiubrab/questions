@@ -11,6 +11,10 @@ PI: acos -1.0   / 3.14159...
 / right to left, so dx*dx+dy*dy means dx*(dx+(dy*dy)) (REVIVAL_PLAN.md F1).
 norm:{sqrt sum x*x}       / Euclidean length of a vector
 dot:{sum x*y}             / dot product of two equal-length vectors
+alignment:{[move;target]
+  moveLen: norm move; targetLen: norm target;
+  if[(moveLen=0f)|targetLen=0f; :0n];
+  (dot[move;target]) % (moveLen*targetLen)}
 
 / Initialize mouse at random position in field
 initMouse:{[fieldSize] fieldSize * 2?1.0}   / returns (x;y)

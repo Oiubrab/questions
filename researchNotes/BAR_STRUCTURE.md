@@ -1,8 +1,8 @@
 # Bar Structure — one decision cycle, step by step
 
-A **bar** is one decision by the cat. Everything below happens once per bar, in this order, in the main loop of [q/programs/cat_mouse.q](q/programs/cat_mouse.q). An **epoch** is 2000 bars and is used only for reporting.
+A **bar** is one decision by the cat. Everything below happens once per bar, in this order, in the main loop of [q/programs/cat_mouse.q](../q/programs/cat_mouse.q). An **epoch** is 2000 bars and is used only for reporting.
 
-Parameter values are the current defaults in `cat_mouse.q`. Known oddities are marked ⚠, with the finding ID from [REVIVAL_PLAN.md](REVIVAL_PLAN.md).
+Parameter values are the current defaults in `cat_mouse.q`. Known oddities are marked ⚠, with the finding ID from [REVIVAL_PLAN.md](../plans/inProgress/REVIVAL_PLAN.md).
 
 ---
 
@@ -43,7 +43,9 @@ For each of `STEPS_PER_BAR` = 12 steps:
 3. Zero the weights of targets that are off-grid or already HIGH. A bottom-row neuron can also move energy into the outputter.
 4. Pick a direction at random, in proportion to the weights. Move one energy unit: the target goes +1, and the source goes −1 only if the move succeeded.
 5. Set the target's incoming direction, and clear the source's directions if it emptied.
-6. **Hebbian strengthening:** the synapse used gets +1000 (cap 2,000,000) and is flagged in `su`.
+6. **Hebbian strengthening:** when learning is enabled, the synapse used gets +1000 (cap 2,000,000) and is flagged in `su`.
+
+`--no-learning` leaves propagation and movement active but disables Hebbian weight changes, all reward/catch reinforcement and punishment, and decay. Synapse-use flags are still recorded.
 
 `q/tests/test_conservation.q` checks that the energy in the brain plus the energy in the outputter never changes during propagation.
 
@@ -89,6 +91,8 @@ For each of `STEPS_PER_BAR` = 12 steps:
 ## 10. Direct (tactical) reward — skipped with `--meta-only`
 - `dotP` = (cat's move vector) · (unit vector from the cat's old position to the mouse).
   - ⚠ The move vector is not normalised (length 5–14), so `dotP` is not a cosine. The "cone" below is therefore about 170° wide (F10).
+  - With `--cos-reward` (G.3a, opt-in) the move vector is normalised first, so `dotP` is the cosine of the angle between the move and the mouse. `adaptThresh` (0.6–0.85) is then a real cone of about ±32°–53°, and a rewarded move fires `round(1+3·dotP)` = 1–4 reinforce calls instead of up to ~43.
+- **`--reward-scale L`** (G.3b, default 1): every primary-brain reward is a multiplication, so a step in log space: reinforce +0.80, punish −0.84, catch boost +0.41 per history bar, strategic +0.095·m per lookback bar. `L` multiplies all of those log-steps (the same random draws are used, so L = 1 is the original update exactly). Meta-brain rewards are not scaled.
 - The move counts as *towards* if `dotP > 0.01`, *away* if `< −0.01`, and *perpendicular* otherwise. These counts are the reported "towards %".
 - **Adaptive threshold** `adaptThresh` (0.6–0.85): every 50 bars, it rises by 0.03 if distance improved by 10%. After 100 bars without progress, it falls by 0.02.
 - **The reward or punishment:**
@@ -97,7 +101,7 @@ For each of `STEPS_PER_BAR` = 12 steps:
   - Otherwise, after the first epoch: punish once.
 
 ## 11. Logging
-- Append one row to the `simLog` table: `bar mouseX mouseY catX catY visionSlice brainEnergy outEnergy outAction moveDist catches pressure overflow`. `catches` is cumulative; positions are rounded to integers.
+- Append one row to the `simLog` table: `bar mouseX mouseY catX catY visionSlice brainEnergy outEnergy outAction moveDist alignment catches pressure overflow`. `alignment` is the cosine of actual movement and the pre-move direction to the mouse, null when undefined or when there was no movement. `catches` is cumulative; positions are rounded to integers.
 - Every 1000 bars, print a snapshot.
 
 ---
