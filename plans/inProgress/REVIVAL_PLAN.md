@@ -3,7 +3,7 @@
 **Status as of 2026-10-25:**
 - **North star (§0):** the cat learns to head towards the mouse. **Phase G is the top priority.**
 - **Done:** Phases 0, 1, 2, 3 (except 3.4) and 6; S.1–S.3; M.1–M.2; G.0–G.2 (including 3.5 and P.0–P.4); G.3(a) and G.3(b) (both kept, opt-in flags). **Planned:** Phase G.R (G.R0–G.R6).
-- **Next:** G.4 reversal learning. It's needed to judge G.R3's ratio on the user's retooling criterion, and it's where G.R4/G.R5 apply. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`. On 32 fresh seeds: alignment 0.652, 16/32 seeds ≥ 0.7 by 10k bars; the §0 target (≥ 14/16, i.e. ≥ 28/32) is not met. Weights-only ceiling ≈ 0.72; execution loss is now ≈ 0.02.
+- **Next:** G.R4 (narrow the weight range) and G.R5 (fast + slow weights), judged on the G.4 re-learning test. Its problems are interference (re-learning 1.0–2.2× slower than fresh learning at hebb 250) and no savings with practice. Also needed: the user's decision on world geometry (§7 decision 1), because FLEE is confounded by the walls. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`.
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -177,6 +177,8 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 
 **F20 — `acquisitionTime` was never recorded** (found 2026-10-25). The check read `(not null acquisitionTime)`, but the value starts null, so it could never be set and every run reported no acquisition. Fixed to `(null acquisitionTime)`: it now records the first crossing only. Reporting only — catches and alignment are unchanged, and the golden test still passes. The G.1 baseline was recomputed from saved logs (§6).
 
+**F21 — The catch boost ran even with `--no-learning`** (found 2026-10-27 while building G.4). The 20-bar ×1.5 catch boost wasn't gated, so in the G.1 "no learning" baseline, its ~1.4 catches per run still strengthened weights. The effect on that baseline is negligible (alignment 0.018), but it's wrong. Fixed: the boost is now gated by `not noLearning` (and off in a FLEE world).
+
 **F18 — The final epoch's move counts were dropped when that epoch had 0 catches** (the save was guarded by `if[catchesThisEpoch>0i; …]`). Fixed in task 2.4.
 
 ---
@@ -270,7 +272,44 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - (c) random tie-break in the action choice (F11, Phase 4.2);
   - (d) a meta-brain saturation fix (Phase 4.4);
   - (e) **only with user approval:** angle-ordered output wiring (THEORY.md §3.1, P4, M.4).
-- [ ] **G.4** Reversal learning. Add `--permute-outputs-at BAR` and measure recovery. If recovery is slow or absent, tune decay memory τ_d and the reinforcement number 𝓡 (THEORY.md §7), informed by lab task S.3b.
+- [x] **G.4** **Re-learning: how well, and especially how fast, does the brain re-learn when its world changes?** *(Redesigned 2026-10-27 with the user: every kind of change is part of the test, flicking between them; speed of re-learning is the main question, and every metric below is reported, not just speed.)*
+  - **Worlds.** Each changes one thing and keeps everything else as-is:
+
+    | World | What changes | What it tests |
+    |---|---|---|
+    | `A` | nothing: normal mapping, goal = chase | the baseline world |
+    | `L180` | **legs**: output slot s moves in the *opposite* direction (index `7−s`) | retooling the action routes; the old policy is maximally wrong |
+    | `L90` | **legs**: every move rotated 90° (two steps in angle order E, SE, S, SW, W, NW, N, NE) | partial retooling |
+    | `E180` | **eyes**: vision slice s enters the top row at slice `(s+4) mod 8`'s column | re-routing from new entry points |
+    | `FLEE` | **goal**: reward moving *away* from the mouse | reward-driven re-learning, with the world unchanged |
+
+    In `FLEE` the direction reward uses the negated cosine. The catch boost and strategic lookback are off, because both reward catching. Mouse respawn on a catch is unchanged. The adaptive threshold still keys on distance progress; that's a known imperfection, documented and not fixed.
+  - **Schedule.** `--relearn-schedule "A:10000,L180:5000,A:5000,E180:5000,A:5000,FLEE:5000,A:5000,L90:5000,A:5000"` (world:bars, in order). Total = 50,000 bars, i.e. 8 switches per run, 4 of them back to `A`. Without the flag, behaviour is bit-identical (golden test).
+  - **Goal alignment.** Each move's cosine to the mouse, times the world's goal sign (+1 chase, −1 flee). It's logged per bar to `relearn_log.csv` (`bar, world, goalAlignment`); `simulation_log.csv` is unchanged.
+  - **Metrics for every switch** (`switches.csv`, one row per switch). All are first-class; t½ is the headline speed number.
+    1. **Pre-switch level:** mean goal alignment over the last 1,000 bars of the previous block (the cat's own competence before the change).
+    2. **Crash / trough:** mean goal alignment over the first 200 bars after the switch, measured against the *new* world's goal.
+    3. **Drop** = pre − trough. Small drops (< 0.1) are flagged, since recovery time is meaningless when the switch barely hurt.
+    4. **Half-recovery time t½:** bars after the switch until the rolling 100-bar goal alignment first reaches trough + ½·drop. The **primary speed measure**: a short window, so fast recovery isn't blurred, and it's rarely censored.
+    5. **Time to threshold t₀.₆:** bars until the rolling 500-bar goal alignment reaches 0.6, the same rule as acquisition from scratch (G.0), so it's directly comparable with first learning. Censored (null) if not reached within the block.
+    6. **Recovered level:** mean goal alignment over the last 1,000 bars of the block, and **recovery fraction** = (recovered − trough) / drop.
+    7. **Re-learning ratio** = t₀.₆ after a switch ÷ t₀.₆ of a **fresh** brain learning that world from scratch (control arms, below). Above 1 means old habits interfere; below 1 means the brain re-uses what it knows.
+    8. **Savings across returns to `A`:** t½ and t₀.₆ for the 1st, 2nd, 3rd and 4th returns to `A`, against first acquisition. Does re-learning get *faster with practice*? This is the motivating case for G.R5 (two-timescale weights).
+  - **Controls.** Fresh-brain arms for each world on its own (`--relearn-schedule "L180:10000"` etc., plus plain `A`), same seeds, giving the denominators for the re-learning ratio. The output wiring isn't symmetric (THEORY.md §3.1), so `L180` from scratch isn't the same problem as `A` from scratch.
+  - **Configurations compared** (paired by seed, ≥ 16 seeds): the working configuration (`--cos-reward --reward-scale 0.25`) at `--hebb 250` vs `--hebb 1000`. This is G.R3's open retooling question; then G.R4 (`--weight-ratio`) and G.R5 (two-timescale) as they land.
+  - **Predictions to test** (THEORY.md §7–8):
+    - Re-learning after `L180` will be **slow** with the current 80,000:1 weight range, needing dozens of punishments to bring down each strong route (G.R4).
+    - **hebb 1000 will re-learn faster than hebb 250.** One use lifts a floor route 25 → 1,025 at hebb 1000 but only 25 → 275 at hebb 250. If that holds, the ratio is a **steady-state-vs-adaptability trade-off**, and the user decides where to sit on it.
+  - **Tests:** schedule parsing (good and bad specs); each world's mapping (L180 sends slot s opposite; L90 rotates exactly 90°; E180 shifts the input column; FLEE flips the reward sign); no schedule gives a bit-identical run; the metric code gives the right t½ / t₀.₆ / censoring on synthetic series.
+  - Later: the live dashboard (KX plan) can show a switch and the recovery as it happens. Useful for intuition, but never evidence on its own.
+  - *Implementation (2026-10-27):*
+    - `q/modules/relearn.q` (`.relearn`): worlds, `parseSchedule`, `blockMetrics`, `switchTable`.
+    - `cat_mouse.q --relearn-schedule SPEC`: sets the run length (and `--bars` must agree), writes `relearn_log.csv` and `switches.csv`, and adds a `relearnSchedule` summary column. Worlds only take effect with the flag, so the default is bit-identical (golden).
+    - `q/programs/relearn_report.q`: groups separated by `+`, because q rejects a bare `--`.
+    - `scripts/relearn_experiment.sh [K] [TAG]`.
+    - Tests: `test_relearn.q` (22: world mappings, parsing, metrics on synthetic series with hand-computed t½=350 and t₀.₆=759, censoring, small-drop flag) and `test_weights.q` +6 (run length, outputs, row counts, bad world, `--bars` mismatch). Full suite: 188 assertions.
+    - **Design lesson from the smoke run:** E180 straight after FLEE barely hurt (flee policy + reversed eyes ≈ chase), which is why every perturbation is preceded by an `A` block.
+    - **Known confound:** in FLEE the cat is clamped to the box while the mouse wraps (F12), so a fleeing cat can get pinned against a wall. The smoke run learned to flee (t₀.₆ = 564) and then lost it. Note this when reading FLEE numbers.
 - [ ] **G.5** Generalisation checks for the final configuration: other mouse speeds, field sizes and seeds. Then rerun the Phase 3-style meta-brain controls on the improved cat.
 - [ ] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments.
 
@@ -317,7 +356,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
     - Unused states are untouched.
     - Flag off is bit-identical.
   - Run G.R1+G.R2 as one arm (δ is the third factor in G.R2), then each alone if the combination wins.
-- [~] **G.R3** **Ratio of unconditional (usage) to directed (reward) reinforcement.** *(2026-10-25: `--hebb N` implemented as `.brain.HEBB`, default 1000 (golden unchanged); exact-increment unit test; `--hebb 0` aborts. Steady-state result: an exploratory sweep (seeds 1–16) favoured h=250, and a **pre-registered confirmation on fresh seeds 17–48 (n=32) holds**: alignment +0.043 (CI +0.002 to +0.083); catches +8.6% (CI −3 to +183); target count 16/32 vs 9/32 (McNemar p=0.17). **Working value h=250 for steady state.** Still open: the retooling side. h=250 lowers the unconditional share, so it must be re-judged in G.4 (reversal) before G.R3 is ticked.)* *(Revised 2026-10-25 at the user's direction: the unconditional term stays, §2 point 7. An earlier draft proposed removing it.)*
+- [x] **G.R3** **Ratio of unconditional (usage) to directed (reward) reinforcement.** *(2026-10-25: `--hebb N` implemented as `.brain.HEBB`, default 1000 (golden unchanged); exact-increment unit test; `--hebb 0` aborts. Steady-state result: an exploratory sweep (seeds 1–16) favoured h=250, and a **pre-registered confirmation on fresh seeds 17–48 (n=32) holds**: alignment +0.043 (CI +0.002 to +0.083); catches +8.6% (CI −3 to +183); target count 16/32 vs 9/32 (McNemar p=0.17). **Working value h=250 for steady state.** Retooling side (G.4, 2026-10-27): h=250 re-learns **as fast or faster** than h=1000 and to a **higher level**; the predicted trade-off did not appear. **Decision: h=250.** The unconditional term stays (§2 point 7); more of it just doesn't speed retooling here.)* *(Revised 2026-10-25 at the user's direction: the unconditional term stays, §2 point 7. An earlier draft proposed removing it.)*
   - **Parametrise both terms.** The unconditional term is the per-use Hebbian amount $h$, currently a hard-coded `rAmt:1000i` in `.brain.stepNeuron`. Make it a module setting `.brain.HEBB`, defaulting to 1000 (bit-identical), set by a flag `--hebb N`. The directed term is already `--reward-scale λ` (and `--pg-eta` once G.R2 lands).
   - **The meaningful knob is their ratio.** In log space:
     - one use adds $\ln(1+h/W)$: large for weak routes, tiny for strong ones;
@@ -626,6 +665,62 @@ Gentler rewards give a sparser skeleton of strong routes, not graded weights, ye
 
 **Against §0:** relative to the original G.1-style baseline (552.8 catches, 0.412 alignment, 11/16 acquired), the G.3(a)+(b) configuration gives **1,021.6 catches (+85%), 0.596 alignment, 16/16 acquired, median 1,200 bars**. The target (alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: best is 6/16 (L=0.1). The ceiling of ~0.6–0.65 is now the main gap.
 
+### Phase G.4 — re-learning: how well and how fast (2026-10-27)
+
+**Setup.** Seeds 1–16, both configurations `--cos-reward --reward-scale 0.25`, hebb 1000 vs hebb 250.
+- **Schedule arm:** `A:10000,L180:5000,A:5000,E180:5000,A:5000,FLEE:5000,A:5000,L90:5000,A:5000` (50,000 bars, 8 switches).
+- **Fresh controls:** each world learned from scratch for 5,000 bars (row 0 of the schedule arm also counts for A).
+- **Reproduce:** `scripts/relearn_experiment.sh 16 20261027`. Report: `results/rl_report_20261027.txt`.
+- **Definitions:** t½ = bars to win back half the drop (rolling 100, resolution floor 100); t₀.₆ = bars to rolling-500 ≥ 0.6; ratio = median post-switch t₀.₆ / median fresh t₀.₆ for that world. Times are medians over seeds; levels are means.
+
+**hebb 1000 (default):**
+
+| # | Switch | pre | trough | drop | t½ | t₀.₆ (censored) | recovered | fresh t₀.₆ | ratio |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | (fresh) → A | — | −0.003 | — | — | 1,143 (2) | 0.600 | — | — |
+| 1 | A → L180 | 0.600 | −0.449 | 1.048 | 201 | 1,652 (3) | 0.611 | 566 | **2.92** |
+| 2 | L180 → A | 0.611 | −0.119 | 0.730 | 173 | 1,883 (2) | 0.624 | 1,199 | 1.57 |
+| 3 | A → E180 | 0.624 | −0.208 | 0.832 | 172 | 1,174 (3) | 0.601 | 500 | **2.35** |
+| 4 | E180 → A | 0.601 | −0.140 | 0.741 | 174 | 2,091 (2) | 0.610 | 1,199 | 1.74 |
+| 5 | A → FLEE | 0.610 | −0.221 | 0.831 | 166 | 1,155 (2) | **0.165** | 697 | 1.66 |
+| 6 | FLEE → A | 0.165 | 0.114 | 0.096 (4 small) | 2,410 | 1,794 (2) | 0.675 | 1,199 | 1.50 |
+| 7 | A → L90 | 0.675 | 0.019 | 0.655 | 432 | 1,260 (3) | 0.615 | 1,050 | 1.20 |
+| 8 | L90 → A | 0.615 | 0.249 | 0.365 (4 small) | 472 | 1,652 (1) | 0.601 | 1,199 | 1.38 |
+
+**hebb 250 (working value):**
+
+| # | Switch | pre | trough | drop | t½ | t₀.₆ (censored) | recovered | fresh t₀.₆ | ratio |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | (fresh) → A | — | −0.005 | — | — | 1,443 (2) | 0.642 | — | — |
+| 1 | A → L180 | 0.642 | −0.405 | 1.047 | 211 | 1,268 (0) | 0.697 | 575 | **2.21** |
+| 2 | L180 → A | 0.697 | −0.250 | 0.948 | 192 | 1,548 (0) | 0.672 | 1,619 | 0.96 |
+| 3 | A → E180 | 0.672 | −0.253 | 0.925 | 187 | 970 (1) | 0.675 | 596 | 1.63 |
+| 4 | E180 → A | 0.675 | −0.371 | 1.046 | 190 | 1,698 (0) | 0.706 | 1,619 | 1.05 |
+| 5 | A → FLEE | 0.706 | −0.348 | 1.054 | 147 | 812 (4) | **0.127** | 691 | 1.18 |
+| 6 | FLEE → A | 0.127 | 0.130 | 0.003 (2 small) | 352 | 1,434 (0) | 0.717 | 1,619 | 0.89 |
+| 7 | A → L90 | 0.717 | 0.093 | 0.625 | 287 | 1,147 (1) | 0.652 | 1,151 | 1.00 |
+| 8 | L90 → A | 0.652 | 0.278 | 0.375 (4 small) | 262 | 1,425 (2) | 0.623 | 1,619 | 0.88 |
+
+**Savings (returns to A), t₀.₆:**
+- hebb 1000: 1,883 → 2,091 → 1,794 → 1,652, against a first acquisition of 1,143. Every return is *slower* than first learning.
+- hebb 250: 1,548 → 1,698 → 1,434 → 1,425, against a first acquisition of 1,443, so about equal.
+- **Neither speeds up with practice.**
+
+**Paired hebb 250 − hebb 1000** (matched by seed and switch; bootstrap 95% CI; only pairs where both are defined):
+- **t₀.₆ (negative = 250 faster):** negative in 7/8 switches. The CI excludes 0 for A→L180 (−482 bars, CI −1,010 to −28) and for the return to A after FLEE (−713, CI −1,262 to −201). The others include 0. E180 is the exception (+139, CI −433 to +790).
+- **t½:** mixed. 250 is faster after FLEE (−35, CI −72 to −5) and L90 (−135, CI −249 to −15); the others are ns.
+- **Recovered level (positive = 250 better):** positive in **8/8** switches (sign test p ≈ 0.008). The CI excludes 0 for A→L180 (+0.087) and for the second return to A (+0.096).
+- Many comparisons were made (8 switches × 3 metrics), so read the consistent *direction* as the evidence rather than any single CI.
+
+**Reading:**
+1. **The brain re-learns every remap** (legs 180°/90°, eyes 180°), back to about pre-switch levels (recovery fraction ≈ 0.9–1.3).
+   - **Speed:** half the loss is won back in ~150–300 bars, and 0.6 is regained in ~1,000–2,000 bars.
+   - **Comparison with fresh learning:** at hebb 1000 that's **1.2–2.9× slower** than learning the same world fresh, i.e. old habits interfere, most for L180 and E180. At hebb 250 it's 0.9–2.2×: less interference.
+2. **No savings.** Re-learning A for the 2nd, 3rd and 4th time is no faster than the 1st. Nothing about A is retained in a re-usable way. That's the motivating case for G.R5 (two-timescale weights).
+3. **The predicted trade-off was refuted.** More unconditional reinforcement (1000) did *not* re-learn faster; hebb 250 is at least as fast and recovers higher. A likely reason, untested: at h=1000 the habit term entrenches the old routes, and that outweighs its faster growth of new routes. **hebb 250 is now justified on both steady state and re-learning.** The unconditional term itself stays (§2 point 7); h=0 was never a candidate.
+4. **FLEE is barely learned,** fresh or after chasing: recovered 0.13–0.17 after a switch, 0.28–0.52 fresh, 4/16 censored. Confound: the cat is clamped to the box while the mouse wraps (F12), so a fleeing cat ends up pinned against walls. Also, two of the three reward channels (catch boost, strategic) are off in FLEE. A clean flee test needs §7 decision 1 (world geometry) first.
+5. **The first prediction was consistent:** re-learning after L180 is slower than fresh learning (ratio 2.2–2.9). This fits the "dozens of punishments per strong route" estimate (G.R4).
+
 ### Phase G.R3 — ratio of unconditional to directed reinforcement (2026-10-25)
 
 **Exploratory sweep.** All arms: `--cos-reward --reward-scale 0.25`, seeds 1–16 × 20,000 bars, varying only `--hebb` (the per-use unconditional reinforcement; reference = 1000, arm `g3b_L0.25_20261025`). Report: `results/gr3_report.txt`.
@@ -856,3 +951,17 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - **G.R1/G.R2 analysed: not kept** (negative result, §6). Swept PG η ∈ {0.1, 0.3, 1, 2, 4} with RPE, plus PG alone at η 0.3 and 1. Best (η≈1–2) ties the reference and is never better; some seeds collapse; RPE has no effect. The η trend supports the user's ratio principle. The flags and `.syn.applySparsePG` stay in the code. Next: G.R3, the ratio sweep, on the reference rule.
 - **G.R3 steady state:** an exploratory `--hebb` sweep (seeds 1–16) favoured h=250, then a pre-registered 32-seed confirmation on fresh seeds held on alignment (+0.043, CI +0.002 to +0.083). The gain is a smaller execution loss (0.053 → 0.016); the weights ceiling is unchanged (≈0.72). Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`. Because this lowers the unconditional share the user values for retooling, G.R3 stays open until G.4 measures reversal. Tests: exact-increment test in `test_conservation.q`; `--hebb` recorded, changes learning, rejects 0; full suite 160 assertions pass, golden unchanged.
 - Next: G.4 reversal (`--permute-outputs-at BAR`), then judge h ∈ {250, 1000} and G.R4/G.R5 on recovery.
+
+### 2026-10-27 — Session 4: re-learning test design
+- Committed G.R0–G.R3 work as `7399e95` (the user had committed earlier work as `e340945`).
+- With the user, redesigned G.4. All kinds of change are included and the cat is flicked between them (legs 180°/90°, eyes 180°, goal flip), with returns to `A` between each. The key question is **how fast** re-learning happens, but all the metrics are reported: pre-switch level, crash, drop, t½, t₀.₆, recovered level and fraction, re-learning ratio against fresh-brain controls, and savings across repeated returns.
+
+### 2026-10-27 — G.4 run and analysed
+- Built the re-learning test: `q/modules/relearn.q`, `cat_mouse.q --relearn-schedule`, `relearn_report.q` and `scripts/relearn_experiment.sh`. Tests: 188 assertions pass; default bit-identical.
+- Fixed F21 (the catch boost ran even with `--no-learning`).
+- Ran 2 configurations × (schedule + 5 fresh controls) × 16 seeds. Results are in §6.
+  - **Speed:** t½ ≈ 150–300 bars; t₀.₆ ≈ 1,000–2,000 bars. Re-learning is 1.2–2.9× slower than fresh learning at hebb 1000 and 0.9–2.2× at hebb 250.
+  - **No savings** across repeated returns.
+  - **FLEE is barely learned** (wall confound).
+  - **hebb 250 is better than 1000 on re-learning too,** which refutes the predicted trade-off. G.R3 is ticked with h=250.
+- Next: G.R4/G.R5 against this test, plus the user's decision on world geometry so FLEE can be tested cleanly.

@@ -18,7 +18,8 @@
 │   │   ├── substrate.q          # .sub — lab-only configurable copy of propagation (wrap, bias,
 │   │   │                        #        temperature, order, hebb, sink); not in load.q
 │   │   ├── viz.q                # .viz — opt-in async publisher for the live viewer (--viz-port)
-│   │   └── theory.q             # .theory — absorbing-chain maths (chain, policy, stats); analysis only
+│   │   ├── theory.q             # .theory — absorbing-chain maths (chain, policy, stats); analysis only
+│   │   └── relearn.q            # .relearn — re-learning worlds, schedule parsing, switch metrics (G.4)
 │   ├── programs/
 │   │   ├── cat_mouse.q          # The simulation: flags, main loop, rewards, outputs
 │   │   ├── compare.q            # Paired multi-seed comparison of experiment arms
@@ -26,6 +27,7 @@
 │   │   ├── lab_report.q         # Averages a lab sweep's runs per configuration
 │   │   ├── theory_checks.q      # Reproduces every verified number in THEORY.md
 │   │   ├── policy_ceiling.q     # Weights-only predicted alignment vs measured, per arm (G.R0)
+│   │   ├── relearn_report.q     # Re-learning speed report: every switch metric, ratios, savings (G.4)
 │   │   ├── viz_server.q         # Viewer process: latest frame, ring buffers, replay (KX Dashboards)
 │   │   └── viz_spike.q          # Dashboards feasibility spike (synthetic data)
 │   └── tests/
@@ -35,6 +37,7 @@
 │       ├── test_geometry.q      # Distances, vision slices, dot sign, history indexing
 │       ├── test_conservation.q  # Energy conservation and direction bookkeeping in propagation
 │       ├── test_golden.q        # P.0 golden run: seed 42 x 300 bars, MD5 of the serialised final state
+│       ├── test_relearn.q       # Re-learning worlds, schedule parsing, switch metrics on synthetic series
 │       ├── test_synapses.q      # Flat synapse updates match the nested reference, incl. RNG stream
 │       ├── test_sparse_synapses.q  # Sparse usage/history, lookback batching, batched reward loops
 │       ├── test_substrate.q     # .sub matches .brain bit for bit by default; conserves under all settings
@@ -45,6 +48,7 @@
 │   ├── phase3_experiment.sh     # The controlled re-test (train 16 brains, 4 arms, report)
 │   ├── lab_sweep.sh             # Named substrate-lab sweeps → results/lab/<sweep>/
 │   ├── e2e_dashboards.sh        # Playwright/Firefox end-to-end check of the live dashboard
+│   ├── relearn_experiment.sh    # G.4 re-learning experiment (schedule + fresh controls + report)
 │   └── META_EXPERIMENT_README.md
 ├── dashboards/                  # KX Dashboards definition, connection, builder, install script, e2e test
 ├── results/                     # Run outputs (gitignored)

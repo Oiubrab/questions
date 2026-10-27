@@ -16,6 +16,7 @@ Parameter values are the current defaults in `cat_mouse.q`. Known oddities are m
   - rate 0 → no input
 
 ## 2. World update and vision
+- **Re-learning worlds** (G.4, only with `--relearn-schedule`): at the start of each bar the current world sets the cat's *eyes* (which input column a vision slice lights), its *legs* (which direction each output slot moves) and its *goal* (chase or flee). In a FLEE world the direct reward is negated and the catch boost and strategic lookback are off. See `q/modules/relearn.q`.
 - Clear synapse-usage flags (`su`) for both brains. They record which synapses fire during *this* bar, for credit assignment.
 - Every 10 bars, the mouse takes a 2-unit random step and wraps around the field edges.
 - **Vision:** the angle from cat to mouse, split into 8 slices of 45°. Slice k covers angles [45k°, 45(k+1)°), measured from the +x axis turning towards +y. The active slice becomes MEDIUM in the primary brain's input vector.

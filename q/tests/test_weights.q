@@ -27,7 +27,7 @@ wf: get hsym `$dir,"frozen/weights_seed5.bin";
 
 / --cos-reward is accepted, recorded in summary.csv, and changes learning (same seed, same bars)
 run "--seed 5 --bars 200 --cos-reward --output-dir ",dir,"cos";
-SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb!"IIBBBBSIIIIIFFIBFBFBFI"
+SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule!"IIBBBBSIIIIIFFIBFBFBFIS"
 sumOf:{[d;c] f:hsym `$dir,d,"/summary.csv"; first ((SUM_TYPES `$"," vs first read0 f;enlist ",") 0: f) c}
 .t.eq["summary records cosReward=0 by default";sumOf["a";`cosReward];0b];
 .t.eq["summary records cosReward=1 with --cos-reward";sumOf["cos";`cosReward];1b];
@@ -55,6 +55,15 @@ run "--seed 5 --bars 200 --hebb 250 --output-dir ",dir,"hebb";
 .t.eq["summary records --hebb 250";sumOf["hebb";`hebb];250i];
 .t.ok["--hebb 250 changes primary synapses vs default";not (wa 0)~(get hsym `$dir,"hebb/weights_seed5.bin") 0];
 .t.ok["--hebb 0 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --hebb 0 --output-dir ",dir,"h0";{`failed}]];
+
+/ --relearn-schedule (G.4) sets the run length, writes its outputs, and validates the schedule
+run "--seed 5 --relearn-schedule A:150,L180:100 --output-dir ",dir,"rl";
+.t.eq["schedule sets the run length";sumOf["rl";`bars];250i];
+.t.ok["switches.csv and relearn_log.csv written";all `switches.csv`relearn_log.csv in key hsym `$dir,"rl"];
+.t.eq["switches.csv has one row per block";count read0 hsym `$dir,"rl/switches.csv";3];
+.t.eq["relearn_log.csv has one row per bar";count read0 hsym `$dir,"rl/relearn_log.csv";251];
+.t.ok["unknown world exits non-zero";`failed~@[run;"--seed 5 --relearn-schedule A:10,XYZ:10 --output-dir ",dir,"rlb";{`failed}]];
+.t.ok["--bars disagreeing with the schedule exits non-zero";`failed~@[run;"--seed 5 --bars 99 --relearn-schedule A:10 --output-dir ",dir,"rlc";{`failed}]];
 
 / A misspelt flag must abort, not silently run the control condition
 .t.ok["unknown flag exits non-zero";`failed~@[run;"--seed 5 --bars 1 --output-dir ",dir,"c --ablate_meta";{`failed}]];

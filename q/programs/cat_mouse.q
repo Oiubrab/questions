@@ -20,6 +20,9 @@
 /   --rpe                 with --pg-update: reward = cosine minus its running average (G.R1)
 /   --rpe-rate B          running-average rate for --rpe (default 0.01, ~100 moves)
 /   --hebb N              unconditional per-use reinforcement of a route (default 1000; G.R3)
+/   --relearn-schedule S  re-learning test (G.4): flick between worlds, e.g. "A:10000,L180:5000,A:5000"
+/                         (A normal, L180/L90 legs rotated, E180 eyes rotated, FLEE goal flipped).
+/                         Sets the run length; writes relearn_log.csv and switches.csv
 /   --viz-port N          publish energy/cat/mouse frames to q/programs/viz_server.q on port N (off by default)
 /   --viz-delay-ms N      sleep N ms after each step so the energy flow is watchable (only with --viz-port)
 / Headless: append < /dev/null so q exits when the run ends instead of staying in the REPL.
@@ -32,13 +35,14 @@
 \l q/modules/vision.q
 \l q/modules/brain_engine.q
 \l q/modules/viz.q
+\l q/modules/relearn.q
 
 / ================================================================
 / PARSE COMMAND LINE ARGUMENTS (flags documented at top of file)
 / ================================================================
 args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
-              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";
               "--viz-port";"--viz-delay-ms")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
@@ -91,6 +95,20 @@ ROWS: 6i; COLS: 12i
 IN_OFF: 2i; IN_LEN: 8i      / inputter offset (0-indexed) and length
 OUT_OFF: 2i; OUT_LEN: 8i    / outputter offset and length
 MAX_BARS: $[not null MAX_BARS_ARG; MAX_BARS_ARG; 20000i]
+/ G.4 re-learning schedule: the run is a sequence of worlds (q/modules/relearn.q). Each world
+/ changes the cat's legs (output slot -> move direction), its eyes (vision slice -> input column)
+/ or its goal (chase or flee). Off by default; then behaviour is unchanged.
+relearnSpec: flagVal "--relearn-schedule"
+relearn: 0<count relearnSpec
+if[relearn;
+  relearnSched: @[.relearn.parseSchedule;relearnSpec;{-2 "--relearn-schedule: ",x; exit 1}];
+  relearnEnds: sums relearnSched 1;
+  if[(not null MAX_BARS_ARG)&MAX_BARS_ARG<>last relearnEnds;
+    -2 "--bars must equal the schedule total (",(string last relearnEnds),") or be omitted"; exit 1];
+  MAX_BARS: last relearnEnds;
+  relearnGA: MAX_BARS#0n]                     / goal alignment per bar (null = no move)
+/ Current world's legs, eyes and goal sign (identity / chase when no schedule)
+legPerm: `int$til 8; eyePerm: `int$til 8; goalSign: 1f; fleeNow: 0b; worldNow: `A
 STEPS_PER_BAR: 12i
 SNAPSHOT_INTERVAL: 1000i
 MOUSE_MOVE_INTERVAL: 10i
@@ -244,6 +262,7 @@ show "Meta-brain ablated: ",string ablateMeta
 show "Cosine direction reward: ",string cosReward
 show "Reward scale (log-step multiplier): ",string REWARD_SCALE
 show "Unconditional usage reinforcement (hebb): ",string .brain.HEBB
+show "Re-learning schedule: ",$[relearn; relearnSpec; "none"]
 show "Policy-gradient direct reward: ",(string pgUpdate),$[pgUpdate; " (eta ",(string PG_ETA),"; rpe ",(string rpe),$[rpe; ", rate ",string RPE_RATE; ""],")"; ""]
 show "Weights: ",$[loadWeights; weightFile; "fresh"]
 show "Output dir: ",outputDir
@@ -251,6 +270,12 @@ show ""
 
 bar: 1i
 while[bar<=MAX_BARS;
+
+  / ---- RE-LEARNING WORLD (G.4) ----
+  if[relearn;
+    worldNow: (relearnSched 0) relearnEnds binr bar;
+    wd: .relearn.WORLDS worldNow;
+    legPerm: wd 0; eyePerm: wd 1; goalSign: wd 2; fleeNow: goalSign<0f];
 
   / ---- EPOCH BOUNDARY ----
   if[(bar>1i)&0i=(`int$bar-1i) mod EPOCH_SIZE;
@@ -293,7 +318,8 @@ while[bar<=MAX_BARS;
   / ---- VISION: compute and set primary brain inputter ----
   visionSlice: .vision.visionSlice[catPos;mousePos;IN_LEN];
   inp: `int$IN_LEN#0i;
-  if[visionSlice>=0i; inp[visionSlice]: 1i];   / MEDIUM = 1i
+  / Eyes: in a remapped world the true slice lights a different input column
+  if[visionSlice>=0i; inp[$[relearn; eyePerm visionSlice; visionSlice]]: 1i];   / MEDIUM = 1i
   prim[`inp]: inp;
 
   / ---- META-BRAIN CROSS-FLOW: apply previous bar's metaBr output to right column ----
@@ -347,7 +373,8 @@ while[bar<=MAX_BARS;
   / --ablate-meta: behave as if meta output were all-zero (the clamps above give 20 and 1)
   if[ablateMeta; temporalScope: 20i; magnitude: 1i];
 
-  if[(not noLearning)&((noDirectRewards & rateCounter>=1i) | rateCounter>=3i);
+  / Strategic reinforcement rewards catching, so it is off in a FLEE world (G.4)
+  if[(not noLearning)&(not fleeNow)&((noDirectRewards & rateCounter>=1i) | rateCounter>=3i);
     / Reinforce primary brain synapses active during lookback window
     / lookback: bars bar-1, bar-2, ..., bar-temporalScope (clamped to history buffer depth)
     lookback: $[noMetaRewards; `int$(); .syn.lookbackBars[bar;temporalScope;HISTORY_SIZE]];
@@ -398,8 +425,10 @@ while[bar<=MAX_BARS;
     movHistIdx+:1i;
 
     / Compute movement vector
-    catDx: `float$moveDirCol[outAction] * moveDist * 5.0;
-    catDy: `float$moveDirRow[outAction] * moveDist * 5.0;
+    / Legs: in a remapped world the output slot drives a different move direction
+    moveDir: $[relearn; legPerm outAction; outAction];
+    catDx: `float$moveDirCol[moveDir] * moveDist * 5.0;
+    catDy: `float$moveDirRow[moveDir] * moveDist * 5.0;
     newX: 0.0 | FIELD_SIZE & catPos[0]+catDx;
     newY: 0.0 | FIELD_SIZE & catPos[1]+catDy;
     actualMove: (newX-oldCat[0];newY-oldCat[1]);
@@ -425,12 +454,14 @@ while[bar<=MAX_BARS;
 
       / SUCCESS PATHWAY BOOST: reinforce last 20 bars in history (fold to accumulate)
       / History was already written for this bar, so slots (histIdx-1)..(histIdx-20)
-      / hold the current bar and the 19 before it
-      prim[`syns]: ({[histBuf;hi;syns;j]
-        / j is slots back from the write head (1 = current bar); q's mod is floored
-        i: `int$(hi-j) mod HISTORY_SIZE;
-        .syn.applySparseScale[syns;histBuf[i];CATCH_MULT]
-      }[hist;histIdx]/)[prim`syns;1i+til 20i];
+      / hold the current bar and the 19 before it. Off with --no-learning (F21: it used to
+      / run anyway) and in a FLEE world, where catching is the opposite of the goal (G.4).
+      if[(not noLearning)&not fleeNow;
+        prim[`syns]: ({[histBuf;hi;syns;j]
+          / j is slots back from the write head (1 = current bar); q's mod is floored
+          i: `int$(hi-j) mod HISTORY_SIZE;
+          .syn.applySparseScale[syns;histBuf[i];CATCH_MULT]
+        }[hist;histIdx]/)[prim`syns;1i+til 20i]];
 
       / Extra metaBr reward on hunting streak
       if[(not noLearning)&(rateCounter>=5i);
@@ -485,7 +516,9 @@ while[bar<=MAX_BARS;
       momBonus: `int$ 4i & momStreak+1i;
 
       / Direction multiplier
-      dirMult: $[dotP>adaptThresh; 0.5+1.5*dotP; 1.0];
+      / Goal-relative direction score: equals dotP when chasing; negated in a FLEE world (G.4)
+      goalDot: $[relearn; goalSign*dotP; dotP];
+      dirMult: $[goalDot>adaptThresh; 0.5+1.5*goalDot; 1.0];
 
       / Progressive punishment epoch scaling
       epochProg: `float$currentEpoch % numEpochs;
@@ -493,19 +526,20 @@ while[bar<=MAX_BARS;
       / G.R2 policy-gradient direct reward (replaces the threshold/count rule below when on)
       if[(not noLearning)&(not noDirectRewards)&pgUpdate;
         pgR: .vision.dot[(catDx;catDy)%.vision.norm (catDx;catDy);(desX;desY)];   / move cosine
+        if[relearn; pgR*: goalSign];                                               / G.4 goal
         pgDelta: $[rpe; pgR-rBar; pgR];
         prim[`syns]: .syn.applySparsePG[prim`syns;prim`su;.dirs.vBias;PG_ETA;pgDelta];
         if[rpe; rBar+: RPE_RATE*pgR-rBar]];
 
       if[(not noLearning)&(not noDirectRewards)&not pgUpdate;
         / Reward: accurate direction; Punish: wrong/perpendicular direction
-        $[dotP>adaptThresh;
+        $[goalDot>adaptThresh;
           [reinforceCalls:`int$`float$dirMult*2.0;
            reinforceCalls+:momBonus-1i;
            prim[`syns]: .syn.applySparseReinforceNL[prim`syns;prim`su;STEPS_PER_BAR;reinforceCalls;REWARD_SCALE];
            lastRewDir: outAction;
            ];
-          dotP<-0.01;
+          goalDot<-0.01;
           [punishCalls:`int$1.0+epochProg*2.0;
            prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;punishCalls;REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
@@ -513,6 +547,9 @@ while[bar<=MAX_BARS;
           [prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;1i;REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
           0]]]];
+
+  / G.4: goal alignment this bar (null if no move) = move cosine x goal sign
+  if[relearn; relearnGA[bar-1]: goalSign*moveAlignment];
 
   / ---- APPEND TO LOG TABLE ----
   alignSlot: (bar-1i) mod 500i;
@@ -674,8 +711,18 @@ show catchPerEpoch
 show "Average brain pressure: ",string avg simLog`pressure
 
 / One-row machine-readable run summary, read by q/programs/compare.q
-summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb!
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule!
   (userSeed; MAX_BARS; (not noDirectRewards)&(not noLearning); (not noMetaRewards)&(not noLearning); ablateMeta; noLearning; `$weightFile;
-  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB)
+  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB; `$relearnSpec)
 saveCsv[outputDir;"summary.csv";summary]
+
+/ G.4 re-learning outputs: the per-bar goal-alignment log and one metrics row per block
+/ (row 0 = learning the first world from scratch; later rows = each switch)
+if[relearn;
+  relearnLog: ([] bar:1i+til MAX_BARS; world:(relearnSched 0) relearnEnds binr 1i+til MAX_BARS; goalAlignment:relearnGA);
+  saveCsv[outputDir;"relearn_log.csv";relearnLog];
+  switchesT: .relearn.switchTable[relearnGA;relearnSched];
+  saveCsv[outputDir;"switches.csv";switchesT];
+  -1 "=== RE-LEARNING SWITCHES (G.4) ===";
+  show switchesT]
 show "Summary written to: ",outputDir,"summary.csv"

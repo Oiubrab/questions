@@ -210,6 +210,11 @@ is the ratio of experience-driven weight to innate weight at equilibrium, with $
 
 ---
 
+**Tested 2026-10-27 (REVIVAL_PLAN.md §6, G.4).**
+- **The reorganisation timescale matters (consistent).** Re-learning after reversing the legs or eyes is 1.2–2.9× slower than learning fresh at the default h=1000, and old routes interfere.
+- **Refuted: the plan's prediction that a larger unconditional increment $h$ speeds re-learning** (because one use lifts a floor route further). h=250 re-learned as fast or faster than h=1000, and to a higher level. Untested reading: a larger $h$ also entrenches the *old* routes (larger $\mathcal R$), and in this regime that costs more than faster growth of new routes gains.
+- **No savings:** re-learning a world a second, third or fourth time is no faster than the first. A single weight timescale keeps nothing re-usable, which fits the case for two timescales (Benna & Fusi; REVIVAL_PLAN.md G.R5).
+
 ## 8. The cat's rewards in log space
 
 Rewards multiply weights, so it's natural to track $\ln W$ (Derived from the code):
