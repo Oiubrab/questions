@@ -56,4 +56,13 @@ dr: .brain.drain[0.5;st 0;st 1;st 2];
 .t.ok["drain does not add energy";(sum raze dr 0)<=sum raze st 0];
 .t.ok["drain clears directions of neurons it empties";all 0=(raze dr 1) where 0=raze dr 0];
 
+/ G.R3: .brain.HEBB sets the unconditional per-use increment exactly
+hebbStep:{[h] .brain.HEBB:h; system "S 9"; sy:.syn.init[6;12];
+  br:6 12#0i; br[2;5]:1i; i0:6 12#0i; i0[2;5]:2i;
+  acc:.brain.propagate[(6;12;2;8;2;8);br;sy;.syn.initSU[6;12];i0;6 12#0i;8#0i];
+  d:(raze raze raze acc 1)-raze raze raze sy; .brain.HEBB:1000i; d where d<>0}
+.t.eq["HEBB 1000: one used route gains exactly 1000";hebbStep 1000i;enlist 1000i];
+.t.eq["HEBB 250: one used route gains exactly 250";hebbStep 250i;enlist 250i];
+.t.eq["HEBB restored to the default";.brain.HEBB;1000i];
+
 .t.done[];

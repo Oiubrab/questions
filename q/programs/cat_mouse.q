@@ -15,6 +15,11 @@
 /   --no-learning        disable Hebbian updates, rewards, and decay
 /   --cos-reward          direction reward uses the cosine of the move angle (REVIVAL_PLAN.md G.3a)
 /   --reward-scale L      multiply every primary-brain reward's log-step by L (default 1; G.3b)
+/   --pg-update           direct reward becomes a policy-gradient update in log space (G.R2)
+/   --pg-eta E            step size for --pg-update (default 0.3)
+/   --rpe                 with --pg-update: reward = cosine minus its running average (G.R1)
+/   --rpe-rate B          running-average rate for --rpe (default 0.01, ~100 moves)
+/   --hebb N              unconditional per-use reinforcement of a route (default 1000; G.R3)
 /   --viz-port N          publish energy/cat/mouse frames to q/programs/viz_server.q on port N (off by default)
 /   --viz-delay-ms N      sleep N ms after each step so the energy flow is watchable (only with --viz-port)
 / Headless: append < /dev/null so q exits when the run ends instead of staying in the REPL.
@@ -33,7 +38,7 @@
 / ================================================================
 args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
-              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";
               "--viz-port";"--viz-delay-ms")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
@@ -59,6 +64,21 @@ cosReward: hasFlag "--cos-reward"
 REWARD_SCALE: $[count flagVal "--reward-scale"; "F"$flagVal "--reward-scale"; 1f]
 if[(null REWARD_SCALE)|REWARD_SCALE<=0f; -2 "--reward-scale must be a positive number"; exit 1]
 CATCH_MULT: .syn.scaleMult[1.5;REWARD_SCALE]   / catch boost per history bar
+/ G.R1/G.R2: the route choice is a softmax over ln W, so REINFORCE gives the principled update:
+/ every used (cell, inDir) moves its 8 routes by PG_ETA*delta*(used - p). delta is the move's
+/ cosine to the mouse (R), or with --rpe, R minus its running average rBar (better than expected).
+pgUpdate: hasFlag "--pg-update"
+PG_ETA: $[count flagVal "--pg-eta"; "F"$flagVal "--pg-eta"; 0.3]
+rpe: hasFlag "--rpe"
+RPE_RATE: $[count flagVal "--rpe-rate"; "F"$flagVal "--rpe-rate"; 0.01]
+if[rpe & not pgUpdate; -2 "--rpe needs --pg-update (the baseline only applies to the policy-gradient update)"; exit 1]
+if[(null PG_ETA)|PG_ETA<=0f; -2 "--pg-eta must be a positive number"; exit 1]
+if[(null RPE_RATE)|(RPE_RATE<=0f)|RPE_RATE>1f; -2 "--rpe-rate must be in (0,1]"; exit 1]
+rBar: 0f                                      / running average of the move cosine (--rpe)
+/ G.R3: unconditional usage reinforcement per route use. It must stay > 0 (REVIVAL_PLAN.md §2
+/ point 7); the tunable is its ratio to the directed reward reinforcement (--reward-scale).
+.brain.HEBB: $[count flagVal "--hebb"; "I"$flagVal "--hebb"; 1000i]
+if[(null .brain.HEBB)|.brain.HEBB<=0i; -2 "--hebb must be a positive integer (unconditional reinforcement is never removed)"; exit 1]
 .brain.hebbEnabled: not noLearning
 outputDir: flagVal "--output-dir"
 if[0=count outputDir; outputDir: "results/seed",string userSeed]
@@ -223,6 +243,8 @@ show "Strategic (meta) rewards: ",string (not noMetaRewards)&(not noLearning)
 show "Meta-brain ablated: ",string ablateMeta
 show "Cosine direction reward: ",string cosReward
 show "Reward scale (log-step multiplier): ",string REWARD_SCALE
+show "Unconditional usage reinforcement (hebb): ",string .brain.HEBB
+show "Policy-gradient direct reward: ",(string pgUpdate),$[pgUpdate; " (eta ",(string PG_ETA),"; rpe ",(string rpe),$[rpe; ", rate ",string RPE_RATE; ""],")"; ""]
 show "Weights: ",$[loadWeights; weightFile; "fresh"]
 show "Output dir: ",outputDir
 show ""
@@ -468,7 +490,14 @@ while[bar<=MAX_BARS;
       / Progressive punishment epoch scaling
       epochProg: `float$currentEpoch % numEpochs;
 
-      if[(not noLearning)&not noDirectRewards;
+      / G.R2 policy-gradient direct reward (replaces the threshold/count rule below when on)
+      if[(not noLearning)&(not noDirectRewards)&pgUpdate;
+        pgR: .vision.dot[(catDx;catDy)%.vision.norm (catDx;catDy);(desX;desY)];   / move cosine
+        pgDelta: $[rpe; pgR-rBar; pgR];
+        prim[`syns]: .syn.applySparsePG[prim`syns;prim`su;.dirs.vBias;PG_ETA;pgDelta];
+        if[rpe; rBar+: RPE_RATE*pgR-rBar]];
+
+      if[(not noLearning)&(not noDirectRewards)&not pgUpdate;
         / Reward: accurate direction; Punish: wrong/perpendicular direction
         $[dotP>adaptThresh;
           [reinforceCalls:`int$`float$dirMult*2.0;
@@ -645,8 +674,8 @@ show catchPerEpoch
 show "Average brain pressure: ",string avg simLog`pressure
 
 / One-row machine-readable run summary, read by q/programs/compare.q
-summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale!
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb!
   (userSeed; MAX_BARS; (not noDirectRewards)&(not noLearning); (not noMetaRewards)&(not noLearning); ablateMeta; noLearning; `$weightFile;
-  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE)
+  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB)
 saveCsv[outputDir;"summary.csv";summary]
 show "Summary written to: ",outputDir,"summary.csv"

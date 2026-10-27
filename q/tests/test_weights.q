@@ -27,7 +27,7 @@ wf: get hsym `$dir,"frozen/weights_seed5.bin";
 
 / --cos-reward is accepted, recorded in summary.csv, and changes learning (same seed, same bars)
 run "--seed 5 --bars 200 --cos-reward --output-dir ",dir,"cos";
-SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale!"IIBBBBSIIIIIFFIBF"
+SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb!"IIBBBBSIIIIIFFIBFBFBFI"
 sumOf:{[d;c] f:hsym `$dir,d,"/summary.csv"; first ((SUM_TYPES `$"," vs first read0 f;enlist ",") 0: f) c}
 .t.eq["summary records cosReward=0 by default";sumOf["a";`cosReward];0b];
 .t.eq["summary records cosReward=1 with --cos-reward";sumOf["cos";`cosReward];1b];
@@ -39,6 +39,22 @@ run "--seed 5 --bars 200 --reward-scale 0.25 --output-dir ",dir,"rs";
 .t.eq["summary records --reward-scale 0.25";sumOf["rs";`rewardScale];0.25];
 .t.ok["--reward-scale 0.25 changes primary synapses vs default";not (wa 0)~(get hsym `$dir,"rs/weights_seed5.bin") 0];
 .t.ok["--reward-scale 0 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --reward-scale 0 --output-dir ",dir,"rs0";{`failed}]];
+
+/ --pg-update / --rpe (G.R1/G.R2) are recorded, change learning, and validate their arguments
+run "--seed 5 --bars 200 --pg-update --pg-eta 0.2 --rpe --rpe-rate 0.05 --output-dir ",dir,"pg";
+.t.eq["summary records pgUpdate=0 by default";sumOf["a";`pgUpdate];0b];
+.t.eq["summary records --pg-update";sumOf["pg";`pgUpdate];1b];
+.t.eq["summary records --pg-eta";sumOf["pg";`pgEta];0.2];
+.t.eq["summary records --rpe and its rate";(sumOf["pg";`rpe];sumOf["pg";`rpeRate]);(1b;0.05)];
+.t.ok["--pg-update changes primary synapses vs default";not (wa 0)~(get hsym `$dir,"pg/weights_seed5.bin") 0];
+.t.ok["--rpe without --pg-update exits non-zero";`failed~@[run;"--seed 5 --bars 1 --rpe --output-dir ",dir,"rpe0";{`failed}]];
+
+/ --hebb (G.R3) is recorded and changes learning; it can't be zero (unconditional reinforcement stays)
+run "--seed 5 --bars 200 --hebb 250 --output-dir ",dir,"hebb";
+.t.eq["summary records hebb=1000 by default";sumOf["a";`hebb];1000i];
+.t.eq["summary records --hebb 250";sumOf["hebb";`hebb];250i];
+.t.ok["--hebb 250 changes primary synapses vs default";not (wa 0)~(get hsym `$dir,"hebb/weights_seed5.bin") 0];
+.t.ok["--hebb 0 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --hebb 0 --output-dir ",dir,"h0";{`failed}]];
 
 / A misspelt flag must abort, not silently run the control condition
 .t.ok["unknown flag exits non-zero";`failed~@[run;"--seed 5 --bars 1 --output-dir ",dir,"c --ablate_meta";{`failed}]];

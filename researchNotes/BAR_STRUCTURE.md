@@ -43,7 +43,7 @@ For each of `STEPS_PER_BAR` = 12 steps:
 3. Zero the weights of targets that are off-grid or already HIGH. A bottom-row neuron can also move energy into the outputter.
 4. Pick a direction at random, in proportion to the weights. Move one energy unit: the target goes +1, and the source goes −1 only if the move succeeded.
 5. Set the target's incoming direction, and clear the source's directions if it emptied.
-6. **Hebbian strengthening:** when learning is enabled, the synapse used gets +1000 (cap 2,000,000) and is flagged in `su`.
+6. **Hebbian strengthening (unconditional usage reinforcement):** when learning is enabled, the synapse used gets +`.brain.HEBB` (default 1000, set by `--hebb N`; cap 2,000,000) and is flagged in `su`. This term is deliberate and is never removed: it lets the brain retool and explore. Only its ratio to the reward reinforcement is tuned (G.R3).
 
 `--no-learning` leaves propagation and movement active but disables Hebbian weight changes, all reward/catch reinforcement and punishment, and decay. Synapse-use flags are still recorded.
 
@@ -92,6 +92,7 @@ For each of `STEPS_PER_BAR` = 12 steps:
 - `dotP` = (cat's move vector) · (unit vector from the cat's old position to the mouse).
   - ⚠ The move vector is not normalised (length 5–14), so `dotP` is not a cosine. The "cone" below is therefore about 170° wide (F10).
   - With `--cos-reward` (G.3a, opt-in) the move vector is normalised first, so `dotP` is the cosine of the angle between the move and the mouse. `adaptThresh` (0.6–0.85) is then a real cone of about ±32°–53°, and a rewarded move fires `round(1+3·dotP)` = 1–4 reinforce calls instead of up to ~43.
+- **`--pg-update`** (G.R2, opt-in) replaces the whole threshold/count rule above with a policy-gradient update. Each move's reward is its cosine R to the mouse (or, with `--rpe`, R minus a running average with rate `--rpe-rate`, default 0.01). Every used (cell, inDir) then moves all 8 of its routes in log space by `η·δ·(used − p)`, with `--pg-eta` η (default 0.3): chosen routes by +(1−p), siblings by −p. No random draws. The catch boost and strategic lookback are unchanged.
 - **`--reward-scale L`** (G.3b, default 1): every primary-brain reward is a multiplication, so a step in log space: reinforce +0.80, punish −0.84, catch boost +0.41 per history bar, strategic +0.095·m per lookback bar. `L` multiplies all of those log-steps (the same random draws are used, so L = 1 is the original update exactly). Meta-brain rewards are not scaled.
 - The move counts as *towards* if `dotP > 0.01`, *away* if `< −0.01`, and *perpendicular* otherwise. These counts are the reported "towards %".
 - **Adaptive threshold** `adaptThresh` (0.6–0.85): every 50 bars, it rises by 0.03 if distance improved by 10%. After 100 bars without progress, it falls by 0.02.

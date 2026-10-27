@@ -33,7 +33,7 @@ scripts/lab_sweep.sh s3                                             # named lab 
 The substrate lab (`q/modules/substrate.q`, `.sub`) is a configurable copy of the propagation rule, used for Phase S experiments. With `.sub.defaults` it must stay bit-identical to `.brain.propagate`; `test_substrate.q` checks this. If you change `.brain.stepNeuron`, mirror the change in `.sub.step`.
 
 - Without `< /dev/null`, q stays at its prompt after the run, with the `simLog` table available to query.
-- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta --no-learning --cos-reward --reward-scale --viz-port --viz-delay-ms`. `--cos-reward` (G.3a) makes the direction reward use the true cosine of the move angle; `--reward-scale L` (G.3b) multiplies every primary-brain reward's log-step by L. `--no-learning` disables Hebbian updates, rewards and decay while leaving propagation active. They're documented at the top of `cat_mouse.q`.
+- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta --no-learning --cos-reward --reward-scale --pg-update --pg-eta --rpe --rpe-rate --hebb --viz-port --viz-delay-ms`. `--hebb N` (G.R3) sets the unconditional per-use reinforcement (default 1000; must be > 0). `--pg-update` (G.R2) makes the direct reward a policy-gradient update in log space; `--rpe` (G.R1) subtracts a running-average baseline. `--cos-reward` (G.3a) makes the direction reward use the true cosine of the move angle; `--reward-scale L` (G.3b) multiplies every primary-brain reward's log-step by L. `--no-learning` disables Hebbian updates, rewards and decay while leaving propagation active. They're documented at the top of `cat_mouse.q`.
 - An unknown `--` flag aborts the run.
 - Interactive: `\l q/load.q`.
 
@@ -133,6 +133,7 @@ MOUSE_MOVE_INTERVAL:10i        / mouse steps 2.0 units every 10 bars (STEP_SIZE:
 ## What NOT to do
 
 - **Don't trust or repeat performance claims** that aren't backed by REVIVAL_PLAN.md §6.
+- **Don't remove the unconditional usage reinforcement** (the per-use Hebbian increment). It's deliberate: it lets the system retool when conditions change and be creative. Tune its *ratio* to the directed (reward) reinforcement instead (REVIVAL_PLAN.md §2 point 7, task G.R3).
 - **Don't resize the meta-brain casually.** Fortran-era notes blamed sizes above 3×5 for energy accumulation. Propagation itself conserves energy at larger sizes (tested), so any accumulation would come from the overwriting inputs (F16). Run the tests and watch `brainEnergy` if you resize.
 - **Don't use a bare `/` on its own line**, and don't wrap `$[...]` conditions in `[]`.
 - **Don't use `each` where a fold is needed.**

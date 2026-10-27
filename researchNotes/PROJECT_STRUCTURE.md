@@ -17,13 +17,15 @@
 │   │   │                        #           (runCycleSimple, used for the meta-brain, is identical)
 │   │   ├── substrate.q          # .sub — lab-only configurable copy of propagation (wrap, bias,
 │   │   │                        #        temperature, order, hebb, sink); not in load.q
-│   │   └── viz.q                # .viz — opt-in async publisher for the live viewer (--viz-port)
+│   │   ├── viz.q                # .viz — opt-in async publisher for the live viewer (--viz-port)
+│   │   └── theory.q             # .theory — absorbing-chain maths (chain, policy, stats); analysis only
 │   ├── programs/
 │   │   ├── cat_mouse.q          # The simulation: flags, main loop, rewards, outputs
 │   │   ├── compare.q            # Paired multi-seed comparison of experiment arms
 │   │   ├── substrate_lab.q      # Substrate lab: the energy rule alone, with dynamics metrics
 │   │   ├── lab_report.q         # Averages a lab sweep's runs per configuration
 │   │   ├── theory_checks.q      # Reproduces every verified number in THEORY.md
+│   │   ├── policy_ceiling.q     # Weights-only predicted alignment vs measured, per arm (G.R0)
 │   │   ├── viz_server.q         # Viewer process: latest frame, ring buffers, replay (KX Dashboards)
 │   │   └── viz_spike.q          # Dashboards feasibility spike (synthetic data)
 │   └── tests/

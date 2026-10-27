@@ -111,6 +111,31 @@ applySparsePunishNL:{[syns;usage;numSteps;calls;lam]
 / Deterministic multiplier m scaled in log space by lam (lam=1 returns m unchanged)
 scaleMult:{[m;lam] $[1f=lam; m; m xexp lam]}
 
+/ G.R2 policy-gradient update in log space (REINFORCE for the softmax route choice at T=1).
+/ Route choice is p_s(o) = bias_o*W_s,o / sum bias*W_s for a directed state s = (cell, inDir),
+/ i.e. a softmax over theta = ln W, so d ln p_s(c) / d theta_s,o = 1[o=c] - p_s(o).
+/ For every used state s (flat index s*8+c records route c taken from s):
+/   dtheta_s,o = eta * delta * (n_s,o - n_s * p_s(o))
+/ where n_s,o = 1 if route o of s was used this bar and n_s = routes used from s. All 8 routes of
+/ a used state move: chosen ones by (1-p), siblings by -p. So the row's total log-change is zero
+/ (before clamping) and updates shrink as a route becomes certain. Unused states are untouched.
+/ No RNG is used.
+applySparsePG:{[syns;usage;bias;eta;delta]
+  idx: usageIndices usage;
+  if[(0=count idx)|0f=delta; :syns];
+  flat: raze raze raze syns;
+  st: distinct idx div 8i;                      / used directed states
+  rowsIdx: (8i*st) +\: til 8i;                  / states x 8 flat indices
+  W: `float$flat rowsIdx;
+  bw: W *\: bias;
+  p: bw % sum each bw;
+  used: `float$rowsIdx in idx;                  / n_s,o
+  dth: eta*delta*used - p*sum each used;
+  new: .syn.MIN_STRENGTH | .syn.MAX_STRENGTH & `int$W*exp dth;
+  flat: @[flat; raze rowsIdx; :; raze new];
+  shape:`int$(count syns;count first syns;8i;8i);
+  shape#flat}
+
 applySparseScale:{[syns;usage;mult]
   flat: raze raze raze syns;
   idx: usageIndices usage;

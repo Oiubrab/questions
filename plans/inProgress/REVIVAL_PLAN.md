@@ -3,7 +3,7 @@
 **Status as of 2026-10-25:**
 - **North star (§0):** the cat learns to head towards the mouse. **Phase G is the top priority.**
 - **Done:** Phases 0, 1, 2, 3 (except 3.4) and 6; S.1–S.3; M.1–M.2; G.0–G.2 (including 3.5 and P.0–P.4); G.3(a) and G.3(b) (both kept, opt-in flags). **Planned:** Phase G.R (G.R0–G.R6).
-- **Next:** Phase G.R — a principled learning rule from the literature, starting with G.R0 (ceiling tool), then G.R1+G.R2 (reward-prediction-error baseline + policy-gradient update), on top of the current best `--cos-reward --reward-scale 0.25`. Best so far: alignment 0.596, 16/16 acquire; target (§0) not met. Diagnostic: the trained weights themselves encode only ~0.71 of a possible ~0.90 (§6), so the learning rule is the bottleneck.
+- **Next:** G.4 reversal learning. It's needed to judge G.R3's ratio on the user's retooling criterion, and it's where G.R4/G.R5 apply. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`. On 32 fresh seeds: alignment 0.652, 16/32 seeds ≥ 0.7 by 10k bars; the §0 target (≥ 14/16, i.e. ≥ 28/32) is not met. Weights-only ceiling ≈ 0.72; execution loss is now ≈ 0.02.
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -71,6 +71,7 @@ A q/kdb-x simulation of a "cat" learning to hunt a "mouse" on a 100×100 field.
 4. **A motivating factor (reward) steers which structures form.**
 5. **Hierarchy:** the reward for one system is set by another system *of the same kind*, which gets its own, more basic reward. Structure on structure on structure. The primary brain/meta-brain pair is the first instance of this.
 6. **Constraint:** keep the core mechanism, i.e. energy moving by usage-weighted probabilistic choice. Replacing it with a cellular-automaton state rule ("option A") was **rejected** by the user.
+7. **Unconditional usage reinforcement must stay** (user, 2026-10-25). Strengthening a route simply because it was used, whatever the reward, is part of the design, not a flaw. It's what lets the system **retool and reweight itself when conditions change**, and what lets it be **creative**: it keeps routes alive that reward hasn't (yet) singled out. Don't remove it or gate it entirely behind reward. The tunable quantity is the **ratio** between unconditional (usage) reinforcement and directed (reward/goal) reinforcement.
 
 History: Fortran → OpenMP and GPU → meta-brain experiments (Jan 2026, commit `c6f1c17`) → q port by an LLM (Mar 2026, `aab6bff`). The Fortran source is only in git history: `git show c6f1c17:src/programs/cat_mouse_learning.f90`.
 
@@ -283,7 +284,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
 - Compared with that rule, the current update is missing:
   1. a **baseline** $\bar R$: it rewards absolute success, not better-than-expected;
   2. the **(1−p) / −p terms**: it pushes the chosen route equally however certain it already is, i.e. rich-get-richer, which is why routes saturate and why gentler rewards (G.3b) helped;
-  3. it adds an **unconditional Hebbian +1000 per use**, whose equilibrium $W^*=h u\tau_d$ tracks *usage*, not *reward*. That's a habit term, and the prime suspect for the ceiling.
+  3. its **unconditional Hebbian +1000 per use** has equilibrium $W^*=h u\tau_d$, which tracks *usage*, not *reward*. That term is **intentional and stays** (§2, point 7): it enables retooling and creativity. What may be wrong is its *ratio* to the directed reinforcement. G.3(b) supports this: shrinking the directed rewards by λ=0.25, which raised the unconditional share, was the biggest gain so far. G.R3 tunes that ratio.
 - Each directed state choosing among 8 routes is a textbook **stochastic learning automaton**. The brain is a **team of learning automata sharing one reward** (Narendra & Thathachar 1989; Thathachar & Sastry 2004, *Networks of Learning Automata*). Williams (1992) showed the classic linear reward–inaction scheme is a special case of REINFORCE, so convergence results from that literature apply here.
 - **Possibly novel** (check under M.5 before claiming): a team of learning automata *physically coupled through a conserved energy lattice* (direction memory, capacity-2 exclusion), whose credit assignment falls out of the energy path; and an actor–critic built from two systems of the same kind (G.R6).
 
@@ -296,17 +297,17 @@ Work in order. Each change must beat the current baseline in a paired experiment
 
 **Order:** G.R0 → G.R1+G.R2 (one combined arm, plus each alone if the combination wins) → G.R3 → G.3(c)/(d) (cheap execution fixes for the ≈0.06 loss) → G.4 reversal, with G.R4/G.R5 as the relearning fixes → G.R6.
 
-- [ ] **G.R0** Promote the ceiling diagnostic to a tool: `q/programs/policy_ceiling.q results/<arm> [...]`.
+- [x] **G.R0** Promote the ceiling diagnostic to a tool: `q/programs/policy_ceiling.q results/<arm> [...]`. *(2026-10-25: done. Shared maths factored into `q/modules/theory.q` (`.theory`); `theory_checks.q` now loads it and its full output is byte-identical to before. `policy_ceiling.q` reproduces the acceptance numbers exactly (L=1: 0.5400605 vs 0.5103204; L=0.25: 0.7092251 vs 0.6458473) in under 2 s. `-seeds` prints the per-seed table.)*
   - Per seed, it computes the weights-only policy (`chain`/`policy`/`stats` from `theory_checks.q`: the vision unit only, a 12-step bar, T=1, saturation ignored) from `weights_seed<N>.bin`. It prints predicted E[cos], P(exit within the bar) and MI next to the measured last-epoch alignment, plus their per-arm means and correlation.
   - Factor the shared chain/policy code into one place (e.g. `q/modules/theory.q`) rather than copy it.
   - Acceptance: it reproduces §6's numbers (L=1: predicted 0.540 vs measured 0.510; L=0.25: 0.709 vs 0.646).
   - Note: `chain` uses `.dirs.vBias` and T=1. If a task changes either, pass them in.
-- [ ] **G.R1** **Reward-prediction error** (REINFORCE baseline; the dopamine reward-prediction-error account, Schultz, Dayan & Montague 1997).
+- [x] **G.R1** **Reward-prediction error** *(2026-10-25: tested inside G.R2 as PG with vs without `--rpe`. **No effect:** at η=1, +0.008 alignment, CI −0.128 to +0.140. Not kept; flag retained. §6.)* (REINFORCE baseline; the dopamine reward-prediction-error account, Schultz, Dayan & Montague 1997).
   - Define the per-move reward $R$ = the move's cosine to the mouse (the `--cos-reward` dotP). Keep a running average $\bar R \leftarrow \bar R + \beta(R-\bar R)$ (flag `--rpe`, rate `--rpe-rate β`, default ≈ 0.01, i.e. ~100 moves).
   - The direct reward becomes $\delta = R-\bar R$: reinforce if δ > 0 and punish if δ < 0, with log-step ∝ |δ| (replacing the adaptive threshold and the count-of-calls rule).
   - Why it should help **re-learning**: when the world or the reward changes, $\bar R$ is suddenly too high, δ goes negative for the old habits, and unlearning starts by itself.
   - Tests: δ arithmetic; $\bar R$ converges to a constant input; flag off is bit-identical.
-- [ ] **G.R2** **Policy-gradient-shaped update in log space** (REINFORCE; learning-automata reward–penalty schemes).
+- [x] **G.R2** **Policy-gradient-shaped update in log space** *(2026-10-25: tested at η ∈ {0.1, 0.3, 1, 2, 4}. **Not kept:** best at η≈1–2, which ties the reference (alignment −0.035/−0.037, CIs include 0) and is never better, while some seeds collapse (min catches 5–23 vs the reference's 644). η=4 is significantly worse on catches. Flags retained for later. §6.)* (REINFORCE; learning-automata reward–penalty schemes).
   - For each used directed state $s$ with chosen route $c$: $\Delta\theta_{s,o} = \eta\,\delta\,\alpha\,(\mathbb 1[o=c]-p_s(o))$ for **all 8** routes $o$. Here $p_s$ comes from the current row of `syns` × `vBias` (unmasked, T=1). For a HIGH cell, use the row of the label that was used. Apply $W \leftarrow \mathrm{clamp}(W e^{\Delta\theta})$.
   - Flag `--pg-update`, step `--pg-eta η` (sweep e.g. 0.05, 0.1, 0.2, 0.4). Updates then shrink automatically as a route becomes certain, which is the principled version of `--reward-scale`.
   - Scope of the first arm: replace the **direct** reinforce/punish only. Keep the catch boost and strategic lookback at the current best scale, then test removing them.
@@ -316,12 +317,17 @@ Work in order. Each change must beat the current baseline in a paired experiment
     - Unused states are untouched.
     - Flag off is bit-identical.
   - Run G.R1+G.R2 as one arm (δ is the third factor in G.R2), then each alone if the combination wins.
-- [ ] **G.R3** **Reward-gated Hebbian, a three-factor rule** (Izhikevich 2007, "distal reward"; Frémaux & Gerstner 2016).
-  - Replace the unconditional +1000-per-use with an **eligibility trace**: a use adds to $e_{s,o}$, which decays with time constant $\tau_e$ (flag `--three-factor`, `--elig-tau` in bars, sweep e.g. 5, 20, 80). Weights change *only* by $\eta\,\delta\,e$ (with the G.R2 shape).
-  - This should also subsume the 100-bar history buffer, the 20-bar catch boost and the strategic lookback: a catch is just a large δ applied to the current eligibilities. Keep those behind the flag until the trace version is shown equal or better.
-  - Tests: δ = 0 gives no weight change apart from decay; the trace decays by the stated factor per bar; flag off is bit-identical.
-  - **Don't touch `.sub` / the substrate lab:** its channels come from unconditional Hebbian strengthening (S.3), and that's a separate result.
-  - Hypothesis: removing the habit term lifts the weights-only ceiling (G.R0) materially.
+- [~] **G.R3** **Ratio of unconditional (usage) to directed (reward) reinforcement.** *(2026-10-25: `--hebb N` implemented as `.brain.HEBB`, default 1000 (golden unchanged); exact-increment unit test; `--hebb 0` aborts. Steady-state result: an exploratory sweep (seeds 1–16) favoured h=250, and a **pre-registered confirmation on fresh seeds 17–48 (n=32) holds**: alignment +0.043 (CI +0.002 to +0.083); catches +8.6% (CI −3 to +183); target count 16/32 vs 9/32 (McNemar p=0.17). **Working value h=250 for steady state.** Still open: the retooling side. h=250 lowers the unconditional share, so it must be re-judged in G.4 (reversal) before G.R3 is ticked.)* *(Revised 2026-10-25 at the user's direction: the unconditional term stays, §2 point 7. An earlier draft proposed removing it.)*
+  - **Parametrise both terms.** The unconditional term is the per-use Hebbian amount $h$, currently a hard-coded `rAmt:1000i` in `.brain.stepNeuron`. Make it a module setting `.brain.HEBB`, defaulting to 1000 (bit-identical), set by a flag `--hebb N`. The directed term is already `--reward-scale λ` (and `--pg-eta` once G.R2 lands).
+  - **The meaningful knob is their ratio.** In log space:
+    - one use adds $\ln(1+h/W)$: large for weak routes, tiny for strong ones;
+    - one reward event adds $\lambda\cdot 0.80\cdot k$, with $k$ the number of reinforce calls.
+    - So $h$ mainly controls how fast *unrewarded* routes can grow back, i.e. retooling and exploration; λ controls how hard the goal pulls.
+  - **Sweep** $h \in \{2000, 1000, 500, 250, 100\}$ at the current best λ = 0.25, then a small grid of (h, λ) around the best point. **h = 0 is not a candidate configuration** (§2, point 7).
+  - Measure the usual G.R metrics, plus the G.R0 weights-only ceiling. Also measure **reversal recovery (G.4)**: the user's rationale is that the unconditional term enables retooling, so the ratio should be judged on re-learning as well as on steady-state alignment. Expect a trade-off; record it rather than optimising alignment alone.
+  - **Optional refinement** (Izhikevich 2007; Frémaux & Gerstner 2016, three-factor rules): keep the unconditional term, and *add* a reward-gated eligibility trace $e_{s,o}$ (decay $\tau_e$, flag `--elig-tau`) as the vehicle for directed reinforcement. A catch is then a large δ applied to current eligibilities, which could subsume the 100-bar history buffer, the 20-bar catch boost and the strategic lookback. Keep those behind the flag until the trace version is shown equal or better.
+  - Tests: `--hebb 1000` (and no flag) is bit-identical; `--hebb N` changes the per-use increment to exactly N; flag value ≤ 0 aborts; `.sub` keeps its own `hebb` setting, with `test_substrate.q` still passing.
+  - **The substrate lab is untouched:** its channels come from unconditional strengthening (S.3), which is consistent with the user's view that usage reinforcement builds structure.
 - [ ] **G.R4** **Bounded probabilities for re-learning** (MAX–MIN Ant System, Stützle & Hoos 2000).
   - The current cap/floor ratio is 2,000,000 / 25 = 80,000. A floor route next to a capped one has p ≈ 25/(7·25+2·10⁶) ≈ 1.2×10⁻⁵, so it's never tried again. **Prediction:** reversal (G.4) will be very slow with the current bounds. Undoing a capped route at reward scale 0.25 needs ≈ 11.3/0.21 ≈ 54 punish calls *per route on the path*.
   - Add `--weight-ratio ρ` (W_max/W_min, e.g. 100, 1000, 10⁴) so every route keeps p ≥ p_min.
@@ -620,6 +626,63 @@ Gentler rewards give a sparser skeleton of strong routes, not graded weights, ye
 
 **Against §0:** relative to the original G.1-style baseline (552.8 catches, 0.412 alignment, 11/16 acquired), the G.3(a)+(b) configuration gives **1,021.6 catches (+85%), 0.596 alignment, 16/16 acquired, median 1,200 bars**. The target (alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: best is 6/16 (L=0.1). The ceiling of ~0.6–0.65 is now the main gap.
 
+### Phase G.R3 — ratio of unconditional to directed reinforcement (2026-10-25)
+
+**Exploratory sweep.** All arms: `--cos-reward --reward-scale 0.25`, seeds 1–16 × 20,000 bars, varying only `--hebb` (the per-use unconditional reinforcement; reference = 1000, arm `g3b_L0.25_20261025`). Report: `results/gr3_report.txt`.
+
+| `--hebb` | Mean alignment | Δ vs 1000 (95% CI) | Catches/run | Δ catches (95% CI) | ≥0.7 at epoch 5 / 10 | Median epoch-10 alignment | Weights-only predicted E[cos] |
+|---|---|---|---|---|---|---|---|
+| 2000 | 0.577 | −0.020 (−0.078, +0.035) | 1,025.9 | +0.4% (−140, +133) | 4/16 / 6/16 | 0.663 | 0.690 |
+| **1000** (ref) | 0.596 | — | 1,021.6 | — | 2/16 / 5/16 | 0.642 | 0.709 |
+| 500 | 0.597 | +0.001 (−0.041, +0.046) | 1,093.3 | +7% (−35, +182) | 3/16 / 5/16 | 0.643 | 0.744 |
+| **250** | **0.651** | **+0.054 (−0.019, +0.126)** | **1,126.6** | +10% (−51, +252) | **8/16 / 9/16** | **0.731** | 0.703 |
+| 100 | 0.614 | +0.018 (−0.048, +0.082) | 1,042.3 | +2% (−119, +162) | 3/16 / 6/16 | 0.653 | 0.707 |
+
+All arms acquire 16/16. The target count at epoch 5 for hebb 250 vs 1000 is 8 discordant seeds vs 2, giving exact McNemar p = 0.11: suggestive, not significant. **Reading:**
+- The steady-state effect of the ratio is **modest**, with a possible optimum near h = 250 (about a quarter of the default).
+- Raising the unconditional share further (h = 2000) doesn't help, and neither does shrinking it too far (h = 100).
+- With effects this size, n = 16 is under-powered, so a confirmation on fresh seeds was set up before running it (below).
+
+**Pre-registered confirmation** (set before running): hebb 250 vs 1000 on **new seeds 17–48 (n = 32)**, same flags. Primary measures: paired mean alignment, and the target count at epoch 5 (exact McNemar). Arms `gr3c_h1000_20261025`, `gr3c_h250_20261025`; report `results/gr3c_report.txt`.
+
+| n=32, seeds 17–48 | hebb 1000 | hebb 250 | Paired (95% CI) |
+|---|---|---|---|
+| Mean alignment | 0.610 | **0.652** | **+0.0427 (+0.0019, +0.0834)**, t = 2.03 |
+| Catches/run (sd) | 1,070.2 (210.2) | 1,162.5 (208.2) | +92.3, +8.6% (−2.8, +183.1) |
+| Acquired / median bars | 31/32 / 1,210 | 32/32 / 1,420 | — |
+| ≥ 0.7 at epoch 5 (10k bars) | 9/32 | 16/32 | discordant 13 vs 6, exact McNemar p = 0.17 |
+| ≥ 0.7 at epoch 10 (20k bars) | 11/32 | 16/32 | discordant 11 vs 6, p = 0.33 |
+| Weights-only predicted E[cos] | 0.723 | 0.722 | — |
+| Measured last-epoch alignment | 0.671 | 0.706 | — |
+| Execution loss (predicted − measured) | 0.053 | **0.016** | — |
+
+**Confirmed on the primary measure** (small effect). The target-count improvement is in the same direction but not significant. The gain comes from a **smaller execution loss** rather than better weights (the weights-only ceiling is unchanged at ≈ 0.72). One untested reading: with less unconditional reinforcement, routes reinforced only by stray energy (for example meta cross-flow) carry less weight, so the vision signal dominates the action more.
+
+**Not yet measured:** the user's other criterion for the ratio, retooling after conditions change. That needs G.4 (reversal).
+
+### Phase G.R1/G.R2 — policy-gradient update with reward-prediction-error baseline (2026-10-25) — negative result
+
+All arms: `--cos-reward --reward-scale 0.25`, seeds 1–16 × 20,000 bars. The only difference is the direct reward, which is `--pg-update --pg-eta η` (± `--rpe`, rate 0.01) instead of the threshold/count rule. The catch boost and strategic lookback are unchanged. Reference: `g3b_L0.25_20261025`, verified byte-identical under the new code (seed 1, log and weights). Reports: `results/gr12_report.txt`, `results/gr12b_report.txt`.
+
+| Direct reward | Mean alignment | Δ alignment vs ref (95% CI) | Catches/run | Δ catches (95% CI) | Min catches | Acquired | ≥0.7 at epoch 5 / 10 | Weights-only predicted E[cos] |
+|---|---|---|---|---|---|---|---|---|
+| **Reference** (threshold/count rule) | **0.596** | — | **1,021.6** | — | 644 | 16/16 | 2/16 / 5/16 | 0.709 |
+| PG + RPE, η=0.1 | 0.275 | −0.321 (−0.381, −0.258) | 297.7 | −71% (−825, −600) | 9 | 6/16 | 0 / 0 | 0.320 |
+| PG + RPE, η=0.3 | 0.393 | −0.204 (−0.319, −0.091) | 562.3 | −45% (−688, −220) | 6 | 12/16 | 1 / 1 | 0.445 |
+| PG + RPE, η=1 | 0.562 | −0.035 (−0.120, +0.049) | 887.9 | −13% (−330, +72) | 23 | 15/16 | 4 / 3 | 0.649 |
+| PG + RPE, η=2 | 0.559 | −0.037 (−0.134, +0.053) | 904.2 | −11% (−357, +135) | 332 | 15/16 | 5 / 4 | 0.538 |
+| PG + RPE, η=4 | 0.512 | −0.084 (−0.208, +0.020) | 777.6 | **−24% (−492, −22)** | 5 | 15/16 | 1 / 4 | 0.488 |
+| PG alone, η=0.3 | 0.432 | −0.165 (−0.268, −0.067) | 675.0 | −34% (−564, −135) | 5 | 9/16 | 0 / 1 | 0.530 |
+| PG alone, η=1 | 0.554 | −0.043 (−0.132, +0.040) | 877.0 | −14% (−361, +61) | 9 | 13/16 | 4 / 3 | 0.586 |
+
+**Baseline (G.R1) effect at η=1:** PG+RPE minus PG alone gives alignment +0.008 (CI −0.128 to +0.140) and catches +10.9 (CI −292 to +313). No effect.
+
+**Reading:**
+1. **The ratio matters** (§2 point 7). Performance rises steeply with η up to ≈1–2, where PG's per-move log-step (≤ |δ|(1−p) · η) becomes comparable to the old rule's (0.2 per call × 1–7 calls at λ=0.25) and to the unconditional +1000-per-use term on weak routes. Below that, usage dominates and the goal pulls too weakly. That motivates G.R3.
+2. **The principled rule doesn't beat the tuned heuristic here,** and it adds a collapse risk: several PG seeds end with < 25 catches, while the reference never goes below 644. Hypothesis, not tested: **interference through shared states.** Every directed state (cell, inDir) is traversed by paths from many vision slices, and PG also *lowers sibling routes* (−p) that other slices may need. The old rule only ever touches routes actually used.
+3. **The reward-prediction-error baseline didn't help.** The move cosine is already roughly centred, near 0 for random moves, so a running average adds little.
+4. **The weights-only predictor's validity is limited.** For PG at η ≥ 2, the measured last-epoch alignment *exceeds* the prediction (gaps −0.07, −0.12, and −0.015 for PG alone at η=1), so its low-density, vision-unit-only assumptions don't hold for those weights. Treat G.R0 readings for very different update rules with caution.
+
 ### Phase G — where the 0.6 ceiling lives (diagnostic, 2026-10-25)
 
 **Method:** for each seed of the G.3(b) arms, the policy is computed from the final saved weights alone (THEORY.md §2–3 linear chain: the vision unit only, a 12-step bar, T=1, saturation ignored). It's compared with the measured mean alignment in the last epoch (bars 18,001–20,000). This was done with a scratch script; G.R0 makes it a tool.
@@ -787,3 +850,9 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - Added **Phase G.R** (G.R0–G.R6) with designs, flags, tests, acceptance rules and references. Phase 5 is marked as superseded in approach by G.R6.
 - The user approved adding these to the plan. Nothing implemented yet. Nothing committed yet: the working tree holds this session's and the other chat's work.
 - Next: G.R0, then G.R1+G.R2.
+- **User direction:** unconditional usage reinforcement must stay, because it's what lets the system retool and be creative; tune its ratio to directed reinforcement instead. Recorded as §2 point 7 and in CLAUDE.md's "What NOT to do". G.R3 was rewritten from "remove/gate the Hebbian term" to "sweep the unconditional:directed ratio" (`--hebb N` with λ; h = 0 is not a candidate), judged on reversal too.
+- **G.R0 done:** `q/modules/theory.q` and `q/programs/policy_ceiling.q`; acceptance numbers reproduced exactly.
+- **G.R1/G.R2 implemented** (in progress until the sweep is analysed): `.syn.applySparsePG` plus the flags `--pg-update --pg-eta --rpe --rpe-rate`. `--rpe` alone aborts: the baseline is applied only inside the PG update, so "G.R1 alone" is measured as PG with vs without `--rpe`. Unit tests: chosen +(1−p) / siblings −p, row sum ≈ 0, finite-difference gradient, unused states untouched, δ=0 no-op, no RNG. Full suite 153 assertions pass; golden unchanged. With the new flags off, a seed-1 20k run is byte-identical to the `g3b_L0.25` reference (log and weights), so that arm is reused as the reference. Sweep running: PG+RPE η ∈ {0.1, 0.3, 1.0} and PG-only η=0.3, all with `--cos-reward --reward-scale 0.25`.
+- **G.R1/G.R2 analysed: not kept** (negative result, §6). Swept PG η ∈ {0.1, 0.3, 1, 2, 4} with RPE, plus PG alone at η 0.3 and 1. Best (η≈1–2) ties the reference and is never better; some seeds collapse; RPE has no effect. The η trend supports the user's ratio principle. The flags and `.syn.applySparsePG` stay in the code. Next: G.R3, the ratio sweep, on the reference rule.
+- **G.R3 steady state:** an exploratory `--hebb` sweep (seeds 1–16) favoured h=250, then a pre-registered 32-seed confirmation on fresh seeds held on alignment (+0.043, CI +0.002 to +0.083). The gain is a smaller execution loss (0.053 → 0.016); the weights ceiling is unchanged (≈0.72). Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`. Because this lowers the unconditional share the user values for retooling, G.R3 stays open until G.4 measures reversal. Tests: exact-increment test in `test_conservation.q`; `--hebb` recorded, changes learning, rejects 0; full suite 160 assertions pass, golden unchanged.
+- Next: G.4 reversal (`--permute-outputs-at BAR`), then judge h ∈ {250, 1000} and G.R4/G.R5 on recovery.

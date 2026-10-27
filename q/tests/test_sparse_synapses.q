@@ -110,4 +110,28 @@ le:(log `float$(fl e) 3 50 777 4000)-log `float$(fl a) 3 50 777 4000;
 .t.eq["scaleMult lam=1 returns m";.syn.scaleMult[1.5;1f];1.5];
 .t.near["scaleMult lam=0.5 is the square root";.syn.scaleMult[1.5;0.5];sqrt 1.5;1e-12];
 
+/ G.R2 policy-gradient update: shape, zero row-sum, finite-difference gradient, untouched rows
+system "S 41"; pgBase:.syn.init[6;12];
+fl:{raze raze raze x};
+uPG:.syn.sparseUsage ((8*100)+3),(8*250)+0 5;   / parenthesised: q is right-to-left     / state 100 took route 3; state 250 took 0 and 5
+b:.dirs.vBias; eta:0.2; dl:0.5;
+pgNew:.syn.applySparsePG[pgBase;uPG;b;eta;dl];
+th0:log `float$fl pgBase; th1:log `float$fl pgNew;
+r100:(8*100)+til 8; r250:(8*250)+til 8;
+pRow:{[b;th;r] e:(exp th r)*b; e%sum e};
+expected100: eta*dl*((til 8)=3) - pRow[b;th0;r100];
+/ weights are ints, so log values carry rounding error up to ~0.5/W (W ~ 70-1000 here)
+.t.near["PG chosen +(1-p), siblings -p (state 100, within int rounding)";th1 r100;(th0 r100)+expected100;0.008];
+.t.near["PG row log-change sums to ~0 (state 100)";sum (th1-th0) r100;0f;0.02];
+n250:`float$(til 8) in 0 5;
+.t.near["PG two used routes: n - 2p (state 250)";(th1-th0) r250;eta*dl*n250-2*pRow[b;th0;r250];0.008];
+/ finite difference: d ln p(3) / d theta_o equals 1[o=3] - p_o
+fd:{[b;th;r;o] eps:1e-6; th2:@[th;r o;+;eps]; ((log pRow[b;th2;r] 3)-log pRow[b;th;r] 3)%eps}[b;th0;r100] each til 8;
+.t.near["PG gradient matches finite difference of ln p";fd;((til 8)=3)-pRow[b;th0;r100];1e-4];
+untouched:not (til count fl pgBase) in r100,r250;
+.t.ok["PG leaves unused states untouched";(fl[pgBase] where untouched)~fl[pgNew] where untouched];
+.t.ok["PG with delta=0 is a no-op";pgBase~.syn.applySparsePG[pgBase;uPG;b;eta;0f]];
+system "S 51"; ra:rand 1.0; system "S 51"; .syn.applySparsePG[pgBase;uPG;b;eta;dl]; rb:rand 1.0;
+.t.ok["PG uses no RNG";ra=rb];
+
 .t.done[];

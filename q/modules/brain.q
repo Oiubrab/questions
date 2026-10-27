@@ -12,6 +12,10 @@
 \d .brain
 
 hebbEnabled: 1b
+/ Unconditional usage reinforcement added to a route each time it is used. Deliberate and
+/ never removed: it lets the brain retool and explore (REVIVAL_PLAN.md §2 point 7). G.R3 tunes
+/ its ratio to the directed (reward) reinforcement via cat_mouse.q --hebb N.
+HEBB: 1000i
 
 / Initialize brain state: nR x nC matrix of 0i, plus zeroed inc0/inc1
 initBrain:{[nR;nC]
@@ -109,7 +113,7 @@ initBrain:{[nR;nC]
     0];
 
   / Reinforce the synapse (and mark as used)
-  rAmt:1000i;
+  rAmt:.brain.HEBB;
   if[hebbEnabled;
     syns:.[syns;(r;c;d1-1;chosen);:;.syn.MAX_STRENGTH & rAmt + syns[r;c;d1-1;chosen]]];
   if[.syn.isSparseUsage su;
