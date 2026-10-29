@@ -3,7 +3,7 @@
 **Status as of 2026-10-25:**
 - **North star (§0):** the cat learns to head towards the mouse. **Phase G is the top priority.**
 - **Done:** Phases 0, 1, 2, 3 (except 3.4) and 6; S.1–S.3; M.1–M.2; G.0–G.2 (including 3.5 and P.0–P.4); G.3(a) and G.3(b) (both kept, opt-in flags). **Planned:** Phase G.R (G.R0–G.R6).
-- **Next:** G.R4 (narrow the weight range) and G.R5 (fast + slow weights), judged on the G.4 re-learning test. Its problems are interference (re-learning 1.0–2.2× slower than fresh learning at hebb 250) and no savings with practice. Also needed: the user's decision on world geometry (§7 decision 1), because FLEE is confounded by the walls. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`.
+- **Next:** **user decision on output wiring in the wrapped world (§7 decision 6)**: the untrained wiring is the binding constraint for chasing on a torus (§6). Meanwhile G.R5 (two-timescale weights, for savings) can be built. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`, plus `--wrap-world` (the chosen geometry).
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -137,7 +137,7 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 
 **F11 — Tie-break bias.** `first where out=max out` always picks the lowest index (direction 0 = NW) on ties, and ties are common because the values are only 0/1/2.
 
-**F12 — The world is inconsistent.**
+**F12 — The world is inconsistent.** *(Resolved behind `--wrap-world`, 2026-10-28; see task 4.5.)*
 - The cat is clamped to [0,100], while the mouse wraps around the edges (toroidally).
 - Distance is toroidal, but vision uses raw dx/dy (not toroidal).
 - The mouse respawn position is clamped, not wrapped.
@@ -367,7 +367,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - **Optional refinement** (Izhikevich 2007; Frémaux & Gerstner 2016, three-factor rules): keep the unconditional term, and *add* a reward-gated eligibility trace $e_{s,o}$ (decay $\tau_e$, flag `--elig-tau`) as the vehicle for directed reinforcement. A catch is then a large δ applied to current eligibilities, which could subsume the 100-bar history buffer, the 20-bar catch boost and the strategic lookback. Keep those behind the flag until the trace version is shown equal or better.
   - Tests: `--hebb 1000` (and no flag) is bit-identical; `--hebb N` changes the per-use increment to exactly N; flag value ≤ 0 aborts; `.sub` keeps its own `hebb` setting, with `test_substrate.q` still passing.
   - **The substrate lab is untouched:** its channels come from unconditional strengthening (S.3), which is consistent with the user's view that usage reinforcement builds structure.
-- [ ] **G.R4** **Bounded probabilities for re-learning** (MAX–MIN Ant System, Stützle & Hoos 2000).
+- [x] **G.R4** **Bounded probabilities for re-learning** (MAX–MIN Ant System, Stützle & Hoos 2000). *(2026-10-28: implemented as `--weight-ratio R` (cap = R × floor 25; default 80,000, so the default is unchanged; R ≥ 40). It applies to both brains. **Not kept:** in the wrapped world, narrowing the ratio makes steady-state learning monotonically worse (alignment Δ vs 80,000: R=10,000 −0.051 (CI −0.129 to +0.014); R=1,000 −0.185 (CI −0.252 to −0.133); R=100 −0.463 (CI −0.525 to −0.412), i.e. random). It doesn't improve re-learning either: recovered levels are lower or equal at every R. The forced exploration costs far more than it gains. Flag retained. §6.)*
   - The current cap/floor ratio is 2,000,000 / 25 = 80,000. A floor route next to a capped one has p ≈ 25/(7·25+2·10⁶) ≈ 1.2×10⁻⁵, so it's never tried again. **Prediction:** reversal (G.4) will be very slow with the current bounds. Undoing a capped route at reward scale 0.25 needs ≈ 11.3/0.21 ≈ 54 punish calls *per route on the path*.
   - Add `--weight-ratio ρ` (W_max/W_min, e.g. 100, 1000, 10⁴) so every route keeps p ≥ p_min.
   - Measure the trade-off: steady-state alignment (it may drop slightly from forced exploration) vs reversal recovery time (G.4). Test as part of G.4.
@@ -376,6 +376,14 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - Rationale (THEORY.md §7): a single forgetting time $\tau_d$ can't be both short for re-learning and long for retention. Two can.
   - Flags `--two-timescale`, `--tau-fast`, `--tau-slow`, `--consolidate κ`. Weight files must save both parts; extend `test_weights.q`.
   - Test in G.4: retention, and recovery after reversal.
+  - **Concrete design (2026-10-28, chosen to leave propagation untouched).** Keep `syns` as the *effective* weight W used for route choice, so `.brain.stepNeuron`, `.sub` and `.theory` don't change. Add a slow memory $M$ (log-weights, same shape) that is the "consolidated" value.
+    - **Fast relaxation replaces decay.** Every decay period (60 steps), instead of $W \leftarrow W\delta$ (which decays towards the floor), relax towards the memory: $W \leftarrow e^{M} + (W-e^{M})\,\delta_f$. Here $\delta_f$ has the same noise as today, rescaled to `--tau-fast`.
+    - **Slow consolidation.** Then $M \leftarrow M + (\ln W - M)/\tau_s$, with $\tau_s$ = `--tau-slow` in decay periods.
+    - **Initialisation:** $M_0 = \ln W_0$ (the initial weights).
+  - **Why this gives savings.** After a switch, rewards move W quickly while M still holds the old world. On returning, W relaxes back towards M, so the old routes come back faster. M forgets slowly. With $\tau_s \to \infty$ and $M = \ln 25$, this reduces to roughly today's decay towards the floor.
+  - **Flags:** `--two-timescale --tau-fast N --tau-slow N`. Weight files gain an 11th component (M) **only** when the flag is on; `--load-weights` accepts 10 or 11.
+  - **Tests:** with $M$ fixed at the floor and noise as today, it matches plain decay in expectation; W relaxes towards a fixed M at the stated rate; M tracks a constant ln W with time constant $\tau_s$; flag off is bit-identical; 11-component save/load round trip.
+  - **Judged on G.4 savings:** t₀.₆ of the 2nd–4th returns to A against the 1st, and the re-learning ratio, in the wrapped world. Sweep e.g. $\tau_s$ ∈ {50, 200, 800} periods and `--tau-fast` ∈ {default, faster}.
 - [ ] **G.R6** **Hierarchy as actor–critic plus neuromodulation** (Barto, Sutton & Anderson 1983, adaptive critic; Doya 2002, "Metalearning and neuromodulation").
   - The meta-brain becomes the **critic**. It learns to *predict* the primary's reward from its own input (catch-rate code, optionally the vision slice). That prediction replaces G.R1's running average as $\bar R$, and the critic's own prediction error is its **basic reward**.
   - Optionally, the critic also sets the primary's inverse temperature α (exploration) and learning rate η, which are Doya's noradrenaline and acetylcholine roles. Today's scope and magnitude outputs are the existing hook.
@@ -401,7 +409,7 @@ These are behavioural changes. Measure each one against the Phase 3 arm A baseli
 - [ ] **4.2** Random tie-break in the output action (F11).
 - [ ] **4.3** Replace repeated ×2.2 multiplications (`do[k; applyReinforce]`) with a single bounded update per bar (e.g. additive in the log domain, scaled by k). Unify caps (F10).
 - [ ] **4.4** Stop meta-brain saturation: remove `do[rateCounter; …]`, or scale it to the log of the rate (F8).
-- [ ] **4.5** Make the world consistent (F12): either fully toroidal (cat wraps; vision uses toroidal dx/dy) or fully bounded. **User decision (section 7).**
+- [x] **4.5** Make the world consistent (F12): either fully toroidal (cat wraps; vision uses toroidal dx/dy) or fully bounded. **User decision (section 7).** *(2026-10-28: user chose fully toroidal. `--wrap-world`: the cat wraps like the mouse. Vision, the direction reward, the alignment metric and the catch test all use `.vision.torDelta`, the nearest copy of the mouse across the edges; the catch test checks the unwrapped path against that copy. Without the flag, behaviour is bit-identical (golden). Tests: torDelta vs toroidalDist on 1,000 random pairs, edge cases, wrapPos, east-edge vision; integration run checks the cat stays in the field and crosses an edge.)*
 
 ### Phase 5 — Meta-brain redesign so it *can* learn (needs Phase 4)
 *Superseded in approach by G.R6 (actor–critic). Keep these tasks as the fallback if G.R6 doesn't beat its controls.*
@@ -665,6 +673,51 @@ Gentler rewards give a sparser skeleton of strong routes, not graded weights, ye
 
 **Against §0:** relative to the original G.1-style baseline (552.8 catches, 0.412 alignment, 11/16 acquired), the G.3(a)+(b) configuration gives **1,021.6 catches (+85%), 0.596 alignment, 16/16 acquired, median 1,200 bars**. The target (alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: best is 6/16 (L=0.1). The ceiling of ~0.6–0.65 is now the main gap.
 
+### Wrapped world (user's chosen geometry), weight ratio, and the wiring prior (2026-10-28)
+
+All arms: `--cos-reward --reward-scale 0.25 --hebb 250`, seeds 1–16. Reports: `results/ss_wrap_report_20261028.txt` (steady state, 20k bars) and `results/rl_report_20261028.txt` (G.4 in the wrapped world).
+
+**Steady state: walls vs wrapped world (20k bars)**
+
+| | Walls | Wrapped | Paired Δ (95% CI) |
+|---|---|---|---|
+| Mean alignment | 0.651 | **0.408** | **−0.243 (−0.317, −0.160)** |
+| Catches/run | 1,126.6 | 964.3 | −14% (−347, +47), ns |
+| Acquired | 16/16 | 7/16 | — |
+| ≥0.7 at epoch 5 / 10 | 8/16 / 9/16 | 1/16 / 4/16 | — |
+| Weights-only predicted E[cos] | 0.703 | 0.603 | — |
+
+**Is it a bug?** Checked; no. Alignment recomputed from the logged (rounded) positions with toroidal geometry matches the logged values (r = 0.992 over 16,206 moves, seed 3). Both worlds use all 8 vision slices about evenly (entropy 2.99 vs 2.96 bits of 3), so the walled world isn't easier by concentrating directions.
+
+**Where it fails:** by vision slice.
+
+| | slice 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| Measured alignment, walls | 0.66 | 0.57 | 0.74 | 0.70 | 0.62 | 0.76 | 0.60 | 0.58 |
+| Measured alignment, wrapped | **−0.15** | **0.08** | 0.47 | 0.81 | 0.74 | 0.47 | 0.41 | 0.48 |
+| Predicted from weights: untrained | **−0.43** | **−0.49** | −0.26 | −0.01 | 0.05 | −0.26 | −0.36 | −0.03 |
+| Predicted from weights: trained, walls | 0.61 | 0.60 | 0.78 | 0.78 | 0.67 | 0.85 | 0.71 | 0.62 |
+| Predicted from weights: trained, wrapped | **0.26** | **0.18** | 0.73 | 0.89 | 0.82 | 0.70 | 0.74 | 0.51 |
+
+**The slices the wrapped-world cat never fixes are exactly the two with the worst built-in wiring** (THEORY.md §3.1: the untrained brain sends slices 0/1 towards NW/N/NE). Proposed mechanism, consistent with everything but not proven causal:
+- **With walls,** a cat drifting the wrong way gets pinned in a corner with the mouse still in the same slice, and is punished repeatedly. The walls act as an accidental teacher.
+- **On a torus,** drifting the wrong way carries the cat round the world. Past half a field, the nearest copy of the mouse flips to the other side and the same drift becomes "towards", so the bad habit is never consistently punished. Catches stay similar because circling still finds mice.
+
+**Support from G.4 in the wrapped world** (fresh learning, recovered level): FLEE **0.88**, E180 0.64, L180 0.62, L90 0.46, A **0.40** (22/32 never reach 0.6). The worlds where the untrained wiring *helps* (fleeing benefits from the anti-aligned default; reversed legs or eyes partly cancel it) are learned fast and well. Chasing, where it hurts most, is learned worst.
+
+**FLEE confound resolved.** In the wrapped world FLEE is learned from scratch to 0.88 (t₀.₆ 500), and after a chase block to 0.87 (t₀.₆ 543, ratio 1.09). With walls, it was 0.13–0.52. The wall-pinning explanation is confirmed.
+
+**Re-learning in the wrapped world** (R = 80,000):
+- Ratios: A→L180 2.49, A→E180 1.97, A→FLEE 1.09, A→L90 0.79; returns to A 0.94–1.18.
+- **Still no savings:** returns to A take t₀.₆ 1,409 / 1,714 / 1,491 / 1,356 bars, against 1,448 the first time.
+- Chase-world levels are low throughout (≈0.35–0.46), so many t₀.₆ are censored.
+
+**G.R4 (weight ratio) in the wrapped world: not kept.**
+- **Steady state:** see the G.R4 task line.
+- **Re-learning:** recovered levels are lower or equal at every R; e.g. the return to A after FLEE is −0.18 at R=1,000 (CI −0.25 to −0.10) and −0.46 at R=100.
+
+**Implication.** In the chosen geometry the main obstacle to the north star is now the **output wiring prior**, not the learning rule. Options are in §7 decision 6.
+
 ### Phase G.4 — re-learning: how well and how fast (2026-10-27)
 
 **Setup.** Seeds 1–16, both configurations `--cos-reward --reward-scale 0.25`, hebb 1000 vs hebb 250.
@@ -830,7 +883,7 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 
 ## 7. Open decisions for the user
 
-1. **World geometry (4.5):** fully toroidal or bounded box?
+1. **World geometry (4.5):** fully toroidal or bounded box? **ANSWERED 2026-10-28: the world wraps for both cat and mouse (fully toroidal).** Implemented as `--wrap-world` (opt-in until the defaults milestone below).
 2. **Unimplemented "valves" (6.3):** implement pressure-dependent leftward drain and bias steepening, or delete them from the docs?
 3. **Fortran fidelity:** Phase 1 restores what the code *intended*, not what Fortran actually did (dead strategic path, fixed-slot catch boost). Is there any reason to reproduce the Fortran behaviour exactly, e.g. to replicate the old numbers? Current assumption: no.
 4. **After Phase 3** (now answered: the meta-brain contributes nothing, and meta-only halves performance). Which direction next?
@@ -851,6 +904,14 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
    **ANSWERED 2026-10-24:** option A is rejected (see §2 design intent). Go with **B inside the lab (C)** → Phase S. The meta-brain is to stay a system of the same kind as the primary. That makes Phase 5's "output-contingent credit" redesign *optional*: revisit it only if the substrate fix alone doesn't make the meta-brain matter.
 
 ---
+
+6. **Output wiring in the wrapped world** (raised 2026-10-28; see §6 "Wrapped world …").
+   - **The problem:** the output slots are wired in grid order (NW N NE W E SW S SE) while vision slices go in angle order. So an untrained brain's "blurred diagonal" sends slices 0/1 the most wrong way. With walls, learning overcame this; on a torus it doesn't.
+   - **Options:**
+     - (a) **Angle-ordered output wiring:** slot s → the direction at angle 45s° (task M.4 / G.3e, flag `--wiring angle`). Input and output orderings then match. This doesn't hand the cat the answer, but the untrained bias then favours chasing (+0.24 predicted), and fleeing becomes the harder world.
+     - (b) **Random output wiring per seed:** a neutral prior on average, with more seed-to-seed variance.
+     - (c) **Keep the current wiring** and try to fix it through learning instead, e.g. a stronger or more persistent punishment for repeated wrong moves, or the ratio tuned for the torus.
+   - **Recommendation:** test (a) and (b) as paired arms against (c) in the wrapped world. That's cheap, and it separates "the prior matters" from "the learning rule can't overcome a bad prior", which is itself a useful generality test.
 
 ## 8. Progress Log
 
@@ -965,3 +1026,12 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
   - **FLEE is barely learned** (wall confound).
   - **hebb 250 is better than 1000 on re-learning too,** which refutes the predicted trade-off. G.R3 is ticked with h=250.
 - Next: G.R4/G.R5 against this test, plus the user's decision on world geometry so FLEE can be tested cleanly.
+
+### 2026-10-28 — Session 5: wrapped world, weight ratio
+- Committed the G.4 work as `b1cb6c4`.
+- **User decision:** the world wraps for both cat and mouse. Implemented `--wrap-world` (task 4.5; F12 resolved behind the flag). Every "where is the mouse from here" computation uses the nearest copy across the edges (`.vision.torDelta`, `.vision.wrapPos`).
+- **G.R4 implemented:** `--weight-ratio R`.
+- `relearn_experiment.sh` now takes `CONFIGS="name=flags;..."`; the default reproduces the 2026-10-27 run.
+- Tests: 238 assertions pass; golden unchanged.
+- Running: steady state walls vs wrap; R ∈ {80,000, 10,000, 1,000, 100} in the wrapped world (steady state, and G.4 including FLEE).
+- **Wrapped-world batch analysed** (§6). The wrapped world lowers steady-state chase alignment 0.651 → 0.408, which is not a bug (metric re-derived from positions, r=0.992). The failure is concentrated on vision slices 0/1, the two with the worst untrained wiring, and weights-only predictions confirm the weights encode it. FLEE is now learned well (0.88), which confirms the wall confound. G.R4 is not kept (narrower weight ranges are worse). Re-learning still shows no savings. Raised §7 decision 6 (output wiring) for the user; G.R5 can proceed meanwhile.

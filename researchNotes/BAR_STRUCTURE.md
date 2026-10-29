@@ -21,6 +21,7 @@ Parameter values are the current defaults in `cat_mouse.q`. Known oddities are m
 - Every 10 bars, the mouse takes a 2-unit random step and wraps around the field edges.
 - **Vision:** the angle from cat to mouse, split into 8 slices of 45°. Slice k covers angles [45k°, 45(k+1)°), measured from the +x axis turning towards +y. The active slice becomes MEDIUM in the primary brain's input vector.
   - ⚠ Vision uses raw dx/dy, not toroidal (wrap-around) distance (F12).
+  - With `--wrap-world` (the user's chosen geometry), the cat wraps around the edges like the mouse, and vision, the direction reward, the alignment metric and the catch test all use the nearest copy of the mouse across the edges.
   - The brain has to *learn* which output direction matches which slice; nothing pre-wires them.
 
 ## 3. Meta-brain cross-flow into the primary brain

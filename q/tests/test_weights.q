@@ -27,7 +27,7 @@ wf: get hsym `$dir,"frozen/weights_seed5.bin";
 
 / --cos-reward is accepted, recorded in summary.csv, and changes learning (same seed, same bars)
 run "--seed 5 --bars 200 --cos-reward --output-dir ",dir,"cos";
-SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule!"IIBBBBSIIIIIFFIBFBFBFIS"
+SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio!"IIBBBBSIIIIIFFIBFBFBFISBF"
 sumOf:{[d;c] f:hsym `$dir,d,"/summary.csv"; first ((SUM_TYPES `$"," vs first read0 f;enlist ",") 0: f) c}
 .t.eq["summary records cosReward=0 by default";sumOf["a";`cosReward];0b];
 .t.eq["summary records cosReward=1 with --cos-reward";sumOf["cos";`cosReward];1b];
@@ -64,6 +64,22 @@ run "--seed 5 --relearn-schedule A:150,L180:100 --output-dir ",dir,"rl";
 .t.eq["relearn_log.csv has one row per bar";count read0 hsym `$dir,"rl/relearn_log.csv";251];
 .t.ok["unknown world exits non-zero";`failed~@[run;"--seed 5 --relearn-schedule A:10,XYZ:10 --output-dir ",dir,"rlb";{`failed}]];
 .t.ok["--bars disagreeing with the schedule exits non-zero";`failed~@[run;"--seed 5 --bars 99 --relearn-schedule A:10 --output-dir ",dir,"rlc";{`failed}]];
+
+/ --wrap-world: recorded, cat stays inside the field and actually crosses an edge
+run "--seed 5 --bars 2000 --wrap-world --output-dir ",dir,"wrap";
+.t.eq["summary records wrapWorld=0 by default";sumOf["a";`wrapWorld];0b];
+.t.eq["summary records --wrap-world";sumOf["wrap";`wrapWorld];1b];
+wl: ("IIIII";enlist ",") 0: hsym `$dir,"wrap/simulation_log.csv";
+.t.ok["wrapped cat stays within the field";all (raze wl`catX`catY) within 0 100];
+.t.ok["wrapped cat crosses an edge at least once";any 50<abs 1_deltas wl`catX];
+
+/ --weight-ratio (G.R4): recorded, caps every weight at ratio x floor, rejects ratios below 40
+run "--seed 5 --bars 300 --weight-ratio 100 --output-dir ",dir,"wr";
+.t.eq["summary records weightRatio 80000 by default";sumOf["a";`weightRatio];80000f];
+.t.eq["summary records --weight-ratio 100";sumOf["wr";`weightRatio];100f];
+wwr: get hsym `$dir,"wr/weights_seed5.bin";
+.t.ok["--weight-ratio 100 keeps every weight within [25, 2500]";all (raze raze/[wwr 0 1]) within 25 2500];
+.t.ok["--weight-ratio 39 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --weight-ratio 39 --output-dir ",dir,"wr0";{`failed}]];
 
 / A misspelt flag must abort, not silently run the control condition
 .t.ok["unknown flag exits non-zero";`failed~@[run;"--seed 5 --bars 1 --output-dir ",dir,"c --ablate_meta";{`failed}]];

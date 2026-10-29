@@ -51,4 +51,14 @@ rs:.vision.visionSlice[50 50f;;8] each 100*1000 2#2000?1.0;
 .t.eq["histSlot wraps below 0";.syn.histSlot[0i;500i;499i;100i];99i];
 .t.eq["histSlot oldest kept bar";.syn.histSlot[10i;500i;401i;100i];11i];
 
+/ Wrapped world (--wrap-world): nearest-copy displacement and wrapping
+.t.near["torDelta across the east edge";.vision.torDelta[98 50f;2 50f;100f];4 0f;1e-9];
+.t.near["torDelta across the west edge";.vision.torDelta[2 50f;98 50f;100f];-4 0f;1e-9];
+.t.near["torDelta inside the field is the plain difference";.vision.torDelta[10 10f;30 40f;100f];20 30f;1e-9];
+rp:100*1000 2#2000?1.0; rq:100*1000 2#2000?1.0;
+.t.ok["norm torDelta equals toroidalDist on random pairs";all 1e-9>abs ({.vision.norm .vision.torDelta[x;y;100f]}'[rp;rq])-{.vision.toroidalDist[x;y;100f]}'[rp;rq]];
+.t.ok["torDelta components lie within half the field";all 50>=abs raze {.vision.torDelta[x;y;100f]}'[rp;rq]];
+.t.near["wrapPos wraps negatives and overflow";.vision.wrapPos[-3 103f;100f];97 3f;1e-9];
+.t.eq["a mouse just across the east edge is seen to the east (slice 0 or 7)";.vision.visionSlice[98 50f;98 50f+.vision.torDelta[98 50f;2 50.5f;100f];8] in 0 7i;1b];
+
 .t.done[];

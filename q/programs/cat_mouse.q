@@ -20,6 +20,9 @@
 /   --rpe                 with --pg-update: reward = cosine minus its running average (G.R1)
 /   --rpe-rate B          running-average rate for --rpe (default 0.01, ~100 moves)
 /   --hebb N              unconditional per-use reinforcement of a route (default 1000; G.R3)
+/   --wrap-world          the field wraps for the cat as well as the mouse (toroidal; §7 decision 1)
+/   --weight-ratio R      synapse cap = R x floor (default 80000 = 2,000,000/25; G.R4). Lower R keeps
+/                         every route explorable (MAX-MIN Ant System); R >= 40 so initial weights fit
 /   --relearn-schedule S  re-learning test (G.4): flick between worlds, e.g. "A:10000,L180:5000,A:5000"
 /                         (A normal, L180/L90 legs rotated, E180 eyes rotated, FLEE goal flipped).
 /                         Sets the run length; writes relearn_log.csv and switches.csv
@@ -42,7 +45,7 @@
 / ================================================================
 args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
-              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";"--wrap-world";"--weight-ratio";
               "--viz-port";"--viz-delay-ms")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
@@ -62,6 +65,17 @@ noMetaRewards: hasFlag "--no-meta-rewards"
 ablateMeta: hasFlag "--ablate-meta"
 noLearning: hasFlag "--no-learning"
 cosReward: hasFlag "--cos-reward"
+/ Toroidal world (user decision, REVIVAL_PLAN.md §7 decision 1): the cat wraps around the edges like
+/ the mouse, and everything that asks "where is the mouse from here?" (vision, direction reward,
+/ alignment, the catch test) uses the nearest copy of the mouse across the edges. Default off:
+/ then the cat is clamped to the box and those use raw differences, as before (F12).
+wrapWorld: hasFlag "--wrap-world"
+/ G.R4 bounded weights (MAX-MIN Ant System): cap/floor ratio. With the default 80,000:1 a floor route
+/ next to a capped one is chosen ~0.001% of the time, so old habits are slow to un-learn. Lowering R
+/ guarantees every route a minimum chance. Initial weights are 25-1000, so R must be >= 40.
+WEIGHT_RATIO: $[count flagVal "--weight-ratio"; "F"$flagVal "--weight-ratio"; 80000f]
+if[(null WEIGHT_RATIO)|WEIGHT_RATIO<40f; -2 "--weight-ratio must be >= 40 (initial weights go up to 1000)"; exit 1]
+.syn.MAX_STRENGTH: `int$WEIGHT_RATIO*.syn.MIN_STRENGTH
 / G.3(b): rewards multiply weights, so they are steps in log space (reinforce +0.80, punish -0.84,
 / catch boost +0.41 per bar, strategic +0.095*m per lookback bar). REWARD_SCALE multiplies every
 / primary-brain step by L, keeping the same RNG draws; 1 is the original behaviour exactly.
@@ -204,8 +218,10 @@ dx: (2*(rand 1.0))-1.0; dy: (2*(rand 1.0))-1.0
 d:.vision.norm (dx;dy)
 if[d>0.0; dx:dx%d; dy:dy%d]
 catDist: 30.0 + 15.0*(rand 1.0)
-catPos: (0.0 | FIELD_SIZE & mousePos[0]+dx*catDist;
-         0.0 | FIELD_SIZE & mousePos[1]+dy*catDist)
+catPos: $[wrapWorld;
+  .vision.wrapPos[(mousePos[0]+dx*catDist; mousePos[1]+dy*catDist);FIELD_SIZE];
+  (0.0 | FIELD_SIZE & mousePos[0]+dx*catDist;
+   0.0 | FIELD_SIZE & mousePos[1]+dy*catDist)]
 
 prevDist: .vision.toroidalDist[catPos;mousePos;FIELD_SIZE]
 bestDist: prevDist
@@ -263,6 +279,8 @@ show "Cosine direction reward: ",string cosReward
 show "Reward scale (log-step multiplier): ",string REWARD_SCALE
 show "Unconditional usage reinforcement (hebb): ",string .brain.HEBB
 show "Re-learning schedule: ",$[relearn; relearnSpec; "none"]
+show "Wrapped (toroidal) world for the cat: ",string wrapWorld
+show "Weight cap (ratio x floor): ",(string .syn.MAX_STRENGTH)," (ratio ",(string WEIGHT_RATIO),")"
 show "Policy-gradient direct reward: ",(string pgUpdate),$[pgUpdate; " (eta ",(string PG_ETA),"; rpe ",(string rpe),$[rpe; ", rate ",string RPE_RATE; ""],")"; ""]
 show "Weights: ",$[loadWeights; weightFile; "fresh"]
 show "Output dir: ",outputDir
@@ -316,7 +334,8 @@ while[bar<=MAX_BARS;
     mousePos: .vision.moveMouse[mousePos;FIELD_SIZE;2.0]];
 
   / ---- VISION: compute and set primary brain inputter ----
-  visionSlice: .vision.visionSlice[catPos;mousePos;IN_LEN];
+  / In a wrapped world the cat sees the nearest copy of the mouse across the edges
+  visionSlice: .vision.visionSlice[catPos;$[wrapWorld; catPos+.vision.torDelta[catPos;mousePos;FIELD_SIZE]; mousePos];IN_LEN];
   inp: `int$IN_LEN#0i;
   / Eyes: in a remapped world the true slice lights a different input column
   if[visionSlice>=0i; inp[$[relearn; eyePerm visionSlice; visionSlice]]: 1i];   / MEDIUM = 1i
@@ -429,17 +448,21 @@ while[bar<=MAX_BARS;
     moveDir: $[relearn; legPerm outAction; outAction];
     catDx: `float$moveDirCol[moveDir] * moveDist * 5.0;
     catDy: `float$moveDirRow[moveDir] * moveDist * 5.0;
-    newX: 0.0 | FIELD_SIZE & catPos[0]+catDx;
-    newY: 0.0 | FIELD_SIZE & catPos[1]+catDy;
-    actualMove: (newX-oldCat[0];newY-oldCat[1]);
-    targetMove: (targetPos[0]-oldCat[0];targetPos[1]-oldCat[1]);
+    / Wrapped world: the cat wraps; otherwise it is clamped to the box (F12)
+    newX: $[wrapWorld; (catPos[0]+catDx) mod FIELD_SIZE; 0.0 | FIELD_SIZE & catPos[0]+catDx];
+    newY: $[wrapWorld; (catPos[1]+catDy) mod FIELD_SIZE; 0.0 | FIELD_SIZE & catPos[1]+catDy];
+    actualMove: $[wrapWorld; (catDx;catDy); (newX-oldCat[0];newY-oldCat[1])];
+    targetMove: $[wrapWorld; .vision.torDelta[oldCat;targetPos;FIELD_SIZE]; (targetPos[0]-oldCat[0];targetPos[1]-oldCat[1])];
     if[((.vision.norm actualMove)>0.001)&((.vision.norm targetMove)>0.001);
       moveAlignment: .vision.alignment[actualMove;targetMove];
       epochAlignSum[currentEpoch]+:moveAlignment;
       epochAlignCount[currentEpoch]+:1i];
 
     / ---- CATCH CHECK: path to point distance ----
-    closestDist: .vision.pathDist[oldCat;(newX;newY);mousePos];
+    / Wrapped world: test the unwrapped path against the nearest copy of the mouse
+    closestDist: $[wrapWorld;
+      .vision.pathDist[oldCat;oldCat+(catDx;catDy);oldCat+.vision.torDelta[oldCat;mousePos;FIELD_SIZE]];
+      .vision.pathDist[oldCat;(newX;newY);mousePos]];
     if[closestDist<2.0;
       / CATCH!
       catchesCount+:1i;
@@ -472,8 +495,10 @@ while[bar<=MAX_BARS;
       rd: .vision.norm (rdx;rdy);
       if[rd>0.0; rdx:rdx%rd; rdy:rdy%rd];
       rDist: 30.0 + 15.0*(rand 1.0);
-      mousePos: (0.0 | FIELD_SIZE & newX+rdx*rDist;
-                 0.0 | FIELD_SIZE & newY+rdy*rDist);
+      mousePos: $[wrapWorld;
+        .vision.wrapPos[(newX+rdx*rDist; newY+rdy*rDist);FIELD_SIZE];
+        (0.0 | FIELD_SIZE & newX+rdx*rDist;
+         0.0 | FIELD_SIZE & newY+rdy*rDist)];
       bestDist: .vision.toroidalDist[(newX;newY);mousePos;FIELD_SIZE];
       barsSinceProgress: 0i];
 
@@ -482,7 +507,8 @@ while[bar<=MAX_BARS;
     currDist: .vision.toroidalDist[catPos;mousePos;FIELD_SIZE];
 
     / ---- DIRECTION-BASED REWARD ----
-    desX: mousePos[0]-oldCat[0]; desY: mousePos[1]-oldCat[1];
+    desV: $[wrapWorld; .vision.torDelta[oldCat;mousePos;FIELD_SIZE]; mousePos-oldCat];
+    desX: desV 0; desY: desV 1;
     desLen: .vision.norm (desX;desY);
     if[desLen>0.001;
       desX: desX%desLen; desY: desY%desLen;
@@ -711,9 +737,9 @@ show catchPerEpoch
 show "Average brain pressure: ",string avg simLog`pressure
 
 / One-row machine-readable run summary, read by q/programs/compare.q
-summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule!
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio!
   (userSeed; MAX_BARS; (not noDirectRewards)&(not noLearning); (not noMetaRewards)&(not noLearning); ablateMeta; noLearning; `$weightFile;
-  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB; `$relearnSpec)
+  catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB; `$relearnSpec; wrapWorld; WEIGHT_RATIO)
 saveCsv[outputDir;"summary.csv";summary]
 
 / G.4 re-learning outputs: the per-bar goal-alignment log and one metrics row per block

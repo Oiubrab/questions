@@ -33,7 +33,7 @@ scripts/lab_sweep.sh s3                                             # named lab 
 The substrate lab (`q/modules/substrate.q`, `.sub`) is a configurable copy of the propagation rule, used for Phase S experiments. With `.sub.defaults` it must stay bit-identical to `.brain.propagate`; `test_substrate.q` checks this. If you change `.brain.stepNeuron`, mirror the change in `.sub.step`.
 
 - Without `< /dev/null`, q stays at its prompt after the run, with the `simLog` table available to query.
-- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta --no-learning --cos-reward --reward-scale --pg-update --pg-eta --rpe --rpe-rate --hebb --relearn-schedule --viz-port --viz-delay-ms`. `--relearn-schedule "A:10000,L180:5000,..."` (G.4) flicks the cat between worlds (legs/eyes rotated, goal flipped) and writes per-switch re-learning metrics; analyse with `q/programs/relearn_report.q`. `--hebb N` (G.R3) sets the unconditional per-use reinforcement (default 1000; must be > 0). `--pg-update` (G.R2) makes the direct reward a policy-gradient update in log space; `--rpe` (G.R1) subtracts a running-average baseline. `--cos-reward` (G.3a) makes the direction reward use the true cosine of the move angle; `--reward-scale L` (G.3b) multiplies every primary-brain reward's log-step by L. `--no-learning` disables Hebbian updates, rewards and decay while leaving propagation active. They're documented at the top of `cat_mouse.q`.
+- Flags: `--seed --bars --output-dir --load-weights --meta-only/--no-direct-rewards --no-meta-rewards --ablate-meta --no-learning --cos-reward --reward-scale --pg-update --pg-eta --rpe --rpe-rate --hebb --relearn-schedule --wrap-world --weight-ratio --viz-port --viz-delay-ms`. `--wrap-world` makes the field wrap for the cat as well as the mouse (the user's chosen geometry); `--weight-ratio R` caps weights at R × floor (G.R4). `--relearn-schedule "A:10000,L180:5000,..."` (G.4) flicks the cat between worlds (legs/eyes rotated, goal flipped) and writes per-switch re-learning metrics; analyse with `q/programs/relearn_report.q`. `--hebb N` (G.R3) sets the unconditional per-use reinforcement (default 1000; must be > 0). `--pg-update` (G.R2) makes the direct reward a policy-gradient update in log space; `--rpe` (G.R1) subtracts a running-average baseline. `--cos-reward` (G.3a) makes the direction reward use the true cosine of the move angle; `--reward-scale L` (G.3b) multiplies every primary-brain reward's log-step by L. `--no-learning` disables Hebbian updates, rewards and decay while leaving propagation active. They're documented at the top of `cat_mouse.q`.
 - An unknown `--` flag aborts the run.
 - Interactive: `\l q/load.q`.
 
@@ -126,7 +126,7 @@ STEPS_PER_BAR:12i              / primary steps per bar (meta runs 2× per step)
 RATE_WINDOW:200i               / catch-rate window
 EPOCH_SIZE:2000i               / reporting epoch
 HISTORY_SIZE:100i              / su history depth
-FIELD_SIZE:100.0               / mouse wraps; cat is clamped to the box
+FIELD_SIZE:100.0               / mouse wraps; cat clamped to the box unless --wrap-world
 MOUSE_MOVE_INTERVAL:10i        / mouse steps 2.0 units every 10 bars (STEP_SIZE:5.0 is unused)
 ```
 

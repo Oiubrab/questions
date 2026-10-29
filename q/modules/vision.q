@@ -64,6 +64,12 @@ toroidalDist:{[p1;p2;fieldSize]
   if[abs[dy]>fieldSize%2.0; dy: dy - (signum dy)*fieldSize];
   norm (dx;dy)}
 
+/ Shortest displacement from p1 to the nearest copy of p2 on a wrapped (toroidal) field.
+/ Each component lies in [-fieldSize/2, fieldSize/2]; norm torDelta = toroidalDist.
+torDelta:{[p1;p2;fieldSize] d: p2-p1; d - fieldSize*floor 0.5+d%fieldSize}
+/ Wrap a position into [0, fieldSize) on both axes (q's mod is floored, so negatives wrap too)
+wrapPos:{[p;fieldSize] p mod fieldSize}
+
 / Line-segment to point distance: check if cat's movement path crossed near mouse.
 / Returns closest distance (< 2.0 → catch).
 / cat moved from oldPos to newPos; mouse is at mousePos.
