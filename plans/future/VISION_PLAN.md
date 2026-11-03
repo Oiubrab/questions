@@ -321,7 +321,7 @@ There are three ways to feed several channels (say a wall channel and a mouse ch
 
 **Speed matters** (obstacles plan §7 decision 5), so every encoding is screened without a brain first, which takes seconds per seed. Only the finalists get 16-seed learning runs.
 
-- [ ] **S.1 Load and information screen** (`q/programs/vision_screen.q`, new).
+- [ ] **S.1 Load and information screen** (`q/programs/analysis/vision_screen.q`, new).
   - For each encoding × world (open, box, box+pillars, rooms, pillars), run a 20k-bar trajectory with no brain: the cat moves at random, or with the `reactive` policy. Report:
     - load: units per bar and the overwhelmed share;
     - I(input; mouse slice), visible bars only, in bits;

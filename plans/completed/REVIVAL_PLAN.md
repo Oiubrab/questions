@@ -43,7 +43,7 @@ This is a working document. It is written so that any LLM session, or a human, c
 - Never delete findings (section 3). If one turns out to be wrong, strike it through (`~~...~~`) and say why.
 - Decisions that belong to the user are listed in section 7. Don't silently pick an answer to one of them. Ask, or leave the task blocked.
 - Phases are ordered by dependency. Phase 1 must be finished before any experimental result is trusted.
-- **Do not trust performance claims in README.md, CLAUDE.md or `scripts/META_EXPERIMENT_README.md`.** They come from the buggy Fortran-era experiment, or from the buggy q port (see F6–F9). Phase 6 rewrites them.
+- **Do not trust performance claims in README.md, CLAUDE.md or `scripts/experiments/META_EXPERIMENT_README.md`.** They come from the buggy Fortran-era experiment, or from the buggy q port (see F6–F9). Phase 6 rewrites them.
 
 ---
 
@@ -204,7 +204,7 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 - **Subprocesses from q:** write `system "env q …"`, never `system "q …"`. q can parse the latter as its own `\q` command and silently do nothing.
 - **Symbol literals can't contain `-`:** use `hsym `$"path"` for paths, especially scratch paths, which contain `-mnt-`.
 - **Tests:** `q/tests/run_all.sh` must pass after any change to `q/modules/` or `q/programs/`. It runs every `q/tests/test_*.q`; the shared assertions are in `q/tests/harness.q`. `test_weights.q` runs the simulation as a subprocess. The whole suite takes about 0.4 s.
-- **Experiments:** use `scripts/run_trials.sh` (parallel seeds → `results/<label>/s<id>/`), then `q q/programs/compare.q results/<ref> results/<other> … < /dev/null` (paired by brain id, with a bootstrap CI). An n=3 dry run showed a spurious "+87.5%" with a CI of −19…+42 catches. That's why small-n comparisons are worthless here.
+- **Experiments:** use `scripts/run_trials.sh` (parallel seeds → `results/<label>/s<id>/`), then `q q/programs/analysis/compare.q results/<ref> results/<other> … < /dev/null` (paired by brain id, with a bootstrap CI). An n=3 dry run showed a spurious "+87.5%" with a CI of −19…+42 catches. That's why small-n comparisons are worthless here.
 - **Linting:** use `/qlint-snippet` on single functions only (see CLAUDE.md, Tooling).
 - **Commits:** only when the user asks. `results/` and weight files are never committed.
 
@@ -240,7 +240,7 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 
   *(2026-10-24: done. `epoch_summary.csv` has a `bars` column, because the last epoch may be partial, and drops the phantom empty trailing slot. The F18 fix was also applied here.)*
 - [x] **2.5** `scripts/run_trials.sh`: runs N seeds in parallel with pass-through args into `results/<label>/s<seed>/`. *(2026-10-24: done. It uses brain ids plus `-o` seed offset, and a `{id}` placeholder in flags for per-brain weight files. Exits 1 if any run lacks `summary.csv`.)*
-- [x] **2.6** `q/programs/compare.q`: loads `summary.csv` / `epoch_summary.csv` across labels, pairs them by seed, and reports means, paired differences, the t statistic and a bootstrap 95% CI. *(2026-10-24: done. Pairs by brain id; bootstrap uses 10k resamples with a fixed seed. Dry run with n=3 succeeded.)*
+- [x] **2.6** `q/programs/analysis/compare.q`: loads `summary.csv` / `epoch_summary.csv` across labels, pairs them by seed, and reports means, paired differences, the t statistic and a bootstrap 95% CI. *(2026-10-24: done. Pairs by brain id; bootstrap uses 10k resamples with a fixed seed. Dry run with n=3 succeeded.)*
 
 ### Phase 3 — Controlled re-test of the branch hypothesis (needs Phases 1–2)
 Protocol:
@@ -257,7 +257,7 @@ How to read the results:
 - B ≈ C means strategic reinforcement adds nothing.
 - B ≈ D means the meta-brain's outputs add nothing.
 
-The whole protocol is scripted: `scripts/phase3_experiment.sh [K] [TRAIN_BARS] [ARM_BARS]`. Training is skipped if `results/p3_train` is already complete. The report goes to `results/p3_report.txt`.
+The whole protocol is scripted: `scripts/experiments/phase3_experiment.sh [K] [TRAIN_BARS] [ARM_BARS]`. Training is skipped if `results/p3_train` is already complete. The report goes to `results/p3_report.txt`.
 
 - [x] **3.1** Train the 16 brains. *(2026-10-24: 16 × 20k bars in 781 s; all completed)*
 - [x] **3.2** Run arms A–D. *(2026-10-24: 4 × 16 × 10k bars; all completed. Wall time: A 430 s, B 234 s, C 47 s, D 238 s. C being 5× faster is unexplained, and worth a look: presumably much less brain activity.)*
@@ -314,15 +314,15 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - **Tests:** schedule parsing (good and bad specs); each world's mapping (L180 sends slot s opposite; L90 rotates exactly 90°; E180 shifts the input column; FLEE flips the reward sign); no schedule gives a bit-identical run; the metric code gives the right t½ / t₀.₆ / censoring on synthetic series.
   - Later: the live dashboard (KX plan) can show a switch and the recovery as it happens. Useful for intuition, but never evidence on its own.
   - *Implementation (2026-10-27):*
-    - `q/modules/relearn.q` (`.relearn`): worlds, `parseSchedule`, `blockMetrics`, `switchTable`.
+    - `q/modules/world/relearn.q` (`.relearn`): worlds, `parseSchedule`, `blockMetrics`, `switchTable`.
     - `cat_mouse.q --relearn-schedule SPEC`: sets the run length (and `--bars` must agree), writes `relearn_log.csv` and `switches.csv`, and adds a `relearnSchedule` summary column. Worlds only take effect with the flag, so the default is bit-identical (golden).
-    - `q/programs/relearn_report.q`: groups separated by `+`, because q rejects a bare `--`.
-    - `scripts/relearn_experiment.sh [K] [TAG]`.
+    - `q/programs/analysis/relearn_report.q`: groups separated by `+`, because q rejects a bare `--`.
+    - `scripts/experiments/relearn_experiment.sh [K] [TAG]`.
     - Tests: `test_relearn.q` (22: world mappings, parsing, metrics on synthetic series with hand-computed t½=350 and t₀.₆=759, censoring, small-drop flag) and `test_weights.q` +6 (run length, outputs, row counts, bad world, `--bars` mismatch). Full suite: 188 assertions.
     - **Design lesson from the smoke run:** E180 straight after FLEE barely hurt (flee policy + reversed eyes ≈ chase), which is why every perturbation is preceded by an `A` block.
     - **Known confound:** in FLEE the cat is clamped to the box while the mouse wraps (F12), so a fleeing cat can get pinned against a wall. The smoke run learned to flee (t₀.₆ = 564) and then lost it. Note this when reading FLEE numbers.
 - [x] **G.5** Generalisation checks for the final configuration: other mouse speeds, field sizes and seeds. Then rerun the Phase 3-style meta-brain controls on the improved cat. *(2026-10-29: done (§6 "G.5 generalisation"). On the default configuration, 16 seeds × 20k, paired: every variant still acquires 16/16. A slower mouse (step 1) is easier (alignment +0.072, CI +0.025 to +0.125); a faster mouse (step 4, +0.042), a smaller field (70, +0.028) and a larger one (140, +0.004) are not significantly different. The Phase 3-style meta-brain control was rerun on the improved cat: the satiety meta-brain doesn't beat its ablation (§6))*
-- [x] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments. *(2026-10-29: done via M.3. The weights-only predictor (`q/programs/policy_ceiling.q`, wiring-aware) predicts catches across conditions (r = 0.97 between condition means), and every report since G.R0 has used it to screen and explain arms)*
+- [x] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments. *(2026-10-29: done via M.3. The weights-only predictor (`q/programs/analysis/policy_ceiling.q`, wiring-aware) predicts catches across conditions (r = 0.97 between condition means), and every report since G.R0 has used it to screen and explain arms)*
 
 ### Phase G.R — A principled learning rule (from the literature; added 2026-10-25 at the user's request)
 
@@ -347,9 +347,9 @@ Work in order. Each change must beat the current baseline in a paired experiment
 
 **Order:** G.R0 → G.R1+G.R2 (one combined arm, plus each alone if the combination wins) → G.R3 → G.3(c)/(d) (cheap execution fixes for the ≈0.06 loss) → G.4 reversal, with G.R4/G.R5 as the relearning fixes → G.R6.
 
-- [x] **G.R0** Promote the ceiling diagnostic to a tool: `q/programs/policy_ceiling.q results/<arm> [...]`. *(2026-10-25: done. Shared maths factored into `q/modules/theory.q` (`.theory`); `theory_checks.q` now loads it and its full output is byte-identical to before. `policy_ceiling.q` reproduces the acceptance numbers exactly (L=1: 0.5400605 vs 0.5103204; L=0.25: 0.7092251 vs 0.6458473) in under 2 s. `-seeds` prints the per-seed table.)*
+- [x] **G.R0** Promote the ceiling diagnostic to a tool: `q/programs/analysis/policy_ceiling.q results/<arm> [...]`. *(2026-10-25: done. Shared maths factored into `q/modules/analysis/theory.q` (`.theory`); `theory_checks.q` now loads it and its full output is byte-identical to before. `policy_ceiling.q` reproduces the acceptance numbers exactly (L=1: 0.5400605 vs 0.5103204; L=0.25: 0.7092251 vs 0.6458473) in under 2 s. `-seeds` prints the per-seed table.)*
   - Per seed, it computes the weights-only policy (`chain`/`policy`/`stats` from `theory_checks.q`: the vision unit only, a 12-step bar, T=1, saturation ignored) from `weights_seed<N>.bin`. It prints predicted E[cos], P(exit within the bar) and MI next to the measured last-epoch alignment, plus their per-arm means and correlation.
-  - Factor the shared chain/policy code into one place (e.g. `q/modules/theory.q`) rather than copy it.
+  - Factor the shared chain/policy code into one place (e.g. `q/modules/analysis/theory.q`) rather than copy it.
   - Acceptance: it reproduces §6's numbers (L=1: predicted 0.540 vs measured 0.510; L=0.25: 0.709 vs 0.646).
   - Note: `chain` uses `.dirs.vBias` and T=1. If a task changes either, pass them in.
 - [x] **G.R1** **Reward-prediction error** *(2026-10-25: tested inside G.R2 as PG with vs without `--rpe`. **No effect:** at η=1, +0.008 alignment, CI −0.128 to +0.140. Not kept; flag retained. §6.)* (REINFORCE baseline; the dopamine reward-prediction-error account, Schultz, Dayan & Montague 1997).
@@ -436,7 +436,7 @@ These are behavioural changes. Measure each one against the Phase 3 arm A baseli
 - [x] **5.3** Evaluation. The redesigned meta-brain must beat its own ablation (arm D style), paired, with ≥16 seeds and a CI excluding 0. Otherwise report a null result. *(2026-10-29: the evaluation itself was run on the satiety meta-brain (open world, 16 seeds × 20k): it does **not** beat its ablation; ablating it raises alignment +0.057 (CI +0.019 to +0.098). Reported as a negative result in §6; where its output enters is task O.2 of the obstacles plan)*
 
 ### Phase S — Substrate lab: get self-sustaining activity *before* reconnecting the cat
-This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse.q`. The lab uses its own module, `q/modules/substrate.q` (`.sub`): a configurable copy of the propagation rule. **The core rule stays the same** (usage-weighted probabilistic energy moves, Hebbian strengthening, conservation). Only its surroundings change:
+This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse.q`. The lab uses its own module, `q/modules/lab/substrate.q` (`.sub`): a configurable copy of the propagation rule. **The core rule stays the same** (usage-weighted probabilistic energy moves, Hebbian strengthening, conservation). Only its surroundings change:
 
 | Setting | Current brain | Lab can try |
 |---|---|---|
@@ -447,10 +447,10 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
 | Hebbian per use | +1000 | 0 = no learning |
 | decay | every 60 steps (5 bars) | any interval or none |
 
-- [x] **S.1** `.sub` module. Acceptance: with `.sub.defaults` it reproduces `.brain.propagate` **bit for bit** on seeded random states; energy is conserved with wrap on; test file `q/tests/test_substrate.q`. *(2026-10-24: done, `q/modules/substrate.q`, not in `load.q`.)*
+- [x] **S.1** `.sub` module. Acceptance: with `.sub.defaults` it reproduces `.brain.propagate` **bit for bit** on seeded random states; energy is conserved with wrap on; test file `q/tests/test_substrate.q`. *(2026-10-24: done, `q/modules/lab/substrate.q`, not in `load.q`.)*
   - 8 tests pass: bit-for-bit over 50 steps; conservation with wrap and sealing at temp 1, 0.3 and 0, random order, flat bias; wrap geometry; hebb 0.
   - `temp=1` keeps exactly the same RNG use as the original.
-- [x] **S.2** *(2026-10-24: done.)* `q/programs/substrate_lab.q` (CLI options documented in its header), `q/programs/lab_report.q`, and `scripts/lab_sweep.sh SWEEP` (named sweeps; `s3` defined). About 2.5 ms per step on 16×16 at pressure 0.3. Original task spec: lab runner `q/programs/substrate_lab.q` (CLI config → `metrics.csv` + `summary.csv`), plus a sweep script and a report. Metrics, sampled every 50 steps:
+- [x] **S.2** *(2026-10-24: done.)* `q/programs/lab/substrate_lab.q` (CLI options documented in its header), `q/programs/lab/lab_report.q`, and `scripts/lab/lab_sweep.sh SWEEP` (named sweeps; `s3` defined). About 2.5 ms per step on 16×16 at pressure 0.3. Original task spec: lab runner `q/programs/lab/substrate_lab.q` (CLI config → `metrics.csv` + `summary.csv`), plus a sweep script and a report. Metrics, sampled every 50 steps:
   - energy;
   - fraction of cells changing per step (activity);
   - fraction saturated / empty (jam vs spread);
@@ -469,7 +469,7 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
 - [x] **S.7** **User decision:** what to port back into `cat_mouse.q`, then re-run Phase 3-style controls. *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.5, with the user's agreement: the 3D work starts in the same lab)*
 
 ### Phase M — Mathematical theory (user request, 2026-10-24)
-[THEORY.md](../../researchNotes/THEORY.md) is the reference. Every claim in it is tagged Derived / Verified / Consistent / Prediction / Conjecture. `q/programs/theory_checks.q` reproduces every Verified number.
+[THEORY.md](../../researchNotes/THEORY.md) is the reference. Every claim in it is tagged Derived / Verified / Consistent / Prediction / Conjecture. `q/programs/analysis/theory_checks.q` reproduces every Verified number.
 - [x] **M.1** Write the theory. *(2026-10-24.)*
   - It models the brain as an absorbing Markov chain on (cell, inDir) states, with the policy as the within-bar absorption matrix. It covers drift, diffusion and residence time; crowding as a capacity-2 exclusion process; Little's law; learning as a generalised Pólya urn with exponent α=1/T; decay memory τ_d and the reinforcement number 𝓡; log-space reward arithmetic; hierarchy as control of 𝓡; and predictions P1–P7.
   - **Key verified results:**
@@ -478,7 +478,7 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
     - residence time is 15.4 steps, longer than the 12-step bar;
     - the untrained policy is anti-aligned (E[cos] −0.22) because of the output wiring;
     - trained weights are bimodal (96% at the floor, ~3% ≥1M).
-- [x] **M.2** Reproducible checks: `q/programs/theory_checks.q`. *(2026-10-24: runs in ~2 s; output matches THEORY.md.)*
+- [x] **M.2** Reproducible checks: `q/programs/analysis/theory_checks.q`. *(2026-10-24: runs in ~2 s; output matches THEORY.md.)*
 - [x] **M.3** Test P5: does the weights-only predictor also predict catches in arms B–D? If so, promote it to a tool (e.g. `q/programs/policy.q WEIGHTS`) and consider it as a cheap fitness or reward signal. *(2026-10-29: **P5 confirmed.** Over 144 brains in 9 conditions (Phase 3 arms A–D including meta-only, three wirings, satiety meta, meta ablated) the weights-only E[cos] correlates with catches per 1,000 bars at r = 0.78 pooled, 0.49–0.77 within each condition and 0.97 between condition means. `policy_ceiling.q` is the tool (now wiring-aware). As a reward signal: not pursued, since it would bypass the energy dynamics)*
 - [x] **M.4** Test P4: angle-ordered output wiring (slot s → direction at 45s°). Add a `--wiring angle` flag to `cat_mouse.q` and run paired training (16 seeds). Compare acquisition speed and catches. **User decision first:** a built-in prior may or may not fit the project's goals. *(2026-10-29: done with the user's approval (§7 decision 6). P4 confirmed; angle wiring is now the default. §6 "Output wiring")*
 - [x] **M.5** Literature check before claiming novelty. The combination in THEORY.md §6.1 (many walkers + capacity-2 exclusion + direction-conditioned reinforcement + decay + tunable superlinearity) should be checked against the ACO, Physarum, reinforced-random-walk and exclusion-process literature. *(2026-10-29: done (a brief web search; THEORY.md §6.1). Every ingredient has close prior art: Chowdhury–Schadschneider ant-trail exclusion with pheromone; interacting edge-reinforced walks; the directed edge reinforced random walk (trapped in directed circuits on non-tree graphs); current-reinforced walks for Physarum and ants. The full combination wasn't found, so the claim stays a Conjecture, not "novel")*
@@ -494,7 +494,7 @@ Phase S tasks should use the theory's predictions: P2 and P3 belong in S.3b's de
   - **Valves 2/3 are documented as "not wired in / not implemented"** rather than deleted or implemented, so §7 decision 2 is still open.
   - New measured fact, now documented: pressure peaks at about 0.056 over a 20k-bar run, so **the drain and valve 1 never engage**. That makes the whole pressure system inert in practice.
   - OPTIMIZATION_NOTES now holds the measured runtimes.
-- [x] **6.4** `scripts/META_EXPERIMENT_README.md`: replace it with the Phase 3 protocol and results. *(2026-10-24: now a guide to running controlled experiments — rules of thumb, tools, the Phase 3 arms and results — plus a short history of why the old claim failed.)*
+- [x] **6.4** `scripts/experiments/META_EXPERIMENT_README.md`: replace it with the Phase 3 protocol and results. *(2026-10-24: now a guide to running controlled experiments — rules of thumb, tools, the Phase 3 arms and results — plus a short history of why the old claim failed.)*
 
 ### Phase P — Speed up the existing simulation (user request, 2026-10-24)
 
@@ -568,7 +568,7 @@ Other facts from the benchmark:
 - Code as of the end of Phase 2: Phase 1 fixes plus the F17 magnitude restore.
 - Training: 16 brains (ids 101–116) trained from scratch for 20k bars, with direct + meta rewards.
 - Arms: 4 arms × 10k bars from each brain's saved state, with run seed = id+100 in every arm.
-- Reproduce with `scripts/phase3_experiment.sh`. Raw outputs are in `results/p3_*` (gitignored); the full report is in `results/p3_report.txt`.
+- Reproduce with `scripts/experiments/phase3_experiment.sh`. Raw outputs are in `results/p3_*` (gitignored); the full report is in `results/p3_report.txt`.
 
 **Per-arm (catches per 10k-bar run, n=16):**
 
@@ -785,7 +785,7 @@ All arms: `--cos-reward --reward-scale 0.25 --hebb 250`, seeds 1–16. Reports: 
 **Setup.** Seeds 1–16, both configurations `--cos-reward --reward-scale 0.25`, hebb 1000 vs hebb 250.
 - **Schedule arm:** `A:10000,L180:5000,A:5000,E180:5000,A:5000,FLEE:5000,A:5000,L90:5000,A:5000` (50,000 bars, 8 switches).
 - **Fresh controls:** each world learned from scratch for 5,000 bars (row 0 of the schedule arm also counts for A).
-- **Reproduce:** `scripts/relearn_experiment.sh 16 20261027`. Report: `results/rl_report_20261027.txt`.
+- **Reproduce:** `scripts/experiments/relearn_experiment.sh 16 20261027`. Report: `results/rl_report_20261027.txt`.
 - **Definitions:** t½ = bars to win back half the drop (rolling 100, resolution floor 100); t₀.₆ = bars to rolling-500 ≥ 0.6; ratio = median post-switch t₀.₆ / median fresh t₀.₆ for that world. Times are medians over seeds; levels are means.
 
 **hebb 1000 (default):**
@@ -1023,7 +1023,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 ### 2026-10-24 — Session 1 (audit + plan + start of execution)
 - Audit performed; findings F1–F16 recorded. Evidence came from q REPL checks, Fortran source in git history, and scratch-copy experiments (F9).
 - Phase 0 done.
-- **Phase 1 done.** Files changed: `q/modules/vision.q`, `q/modules/synapses.q`, `q/programs/cat_mouse.q`, `.gitignore`; added `q/tests/`.
+- **Phase 1 done.** Files changed: `q/modules/world/vision.q`, `q/modules/brain/synapses.q`, `q/programs/cat_mouse.q`, `.gitignore`; added `q/tests/`.
   - The visionSlice fix took two attempts: `x mod y` is x modulo y, and I first had the arguments reversed. The test caught it.
   - **Sweep result (1.4):** no further precedence bugs.
     - Correct only by accident: the reinforcement lambdas `sc + hc*(min(MAX,sc*m) - hc*sc)`, which only work because `hc` is 0 or 1, and the slot formula `(hi - j + 100) mod 100`, which only works because q's `mod` is floored.
@@ -1031,7 +1031,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - **Phase 2 done.** Two new findings: F17 (strategic magnitude mis-ported, ×2.2 vs Fortran ×1.21; restored) and F18 (final-epoch move counts dropped).
   - **Behaviour changes in Phase 2:** F17 alters learning dynamics, so Phase 3 numbers won't match the F9 scratch numbers or the 1.8 smoke test. Everything else in Phases 1–2 is a bug fix, plumbing or output.
 - Pitfall hit: `system "q …"` silently did nothing from inside a q script. Fixed with `env q`, and added to section 4.
-- **Phase 3 launched:** `scripts/phase3_experiment.sh` with defaults (16 brains × 20k training bars, then 4 arms × 10k bars).
+- **Phase 3 launched:** `scripts/experiments/phase3_experiment.sh` with defaults (16 brains × 20k training bars, then 4 arms × 10k bars).
 - **Phase 3 done** (3.1–3.3). The results are in section 6: B−A = −49.5% (CI −207…−97 catches); D−B ≈ 0. 3.4 (report to the user and get their decision) is pending.
 - Nothing has been committed. All changes are in the working tree on `reaction-dissaccociation`.
 - **Phase 6 done** (on the user's request, ahead of Phases 4/5). All seven docs now describe the current code and results.
@@ -1050,7 +1050,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
   - S.3 is done: usage strengthening turns a uniform gas into self-organised, circulating channels (wrap, temp 0.3, random order). F19's left pile is explained by processing order.
   - Next is S.3b: make the structures reorganise (decay vs hebb balance), then S.4: perturbation.
 - **Lab profiled** (the user asked for speed notes): propagation ≈ all of the lab's cost, ~21 µs per active neuron per step. Phase P now says P.5 is the priority for Phase S, and P.1–P.4 for the cat simulation. OPTIMIZATION_NOTES.md updated.
-- **The user asked for mathematical rigour → Phase M.** THEORY.md and `q/programs/theory_checks.q` were written; M.1 and M.2 are done.
+- **The user asked for mathematical rigour → Phase M.** THEORY.md and `q/programs/analysis/theory_checks.q` were written; M.1 and M.2 are done.
   - Two hypotheses of mine were wrong and were corrected before writing: the untrained policy isn't "straight down" but a blurred diagonal; and weights aren't "pinned at the cap" but bimodal, with decay pulling them back down after saturation.
 - **The user set the north star:** the cat must actually learn to head towards the mouse, and all other work serves that. Added §0 (goal metrics and targets) and **Phase G** (the goal track), and reprioritised: G first, P as its enabler, S and M only where they feed G. The user also approved committing all work so far.
 - **At that point, the next session should:**
@@ -1091,8 +1091,8 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - P.4 complete: batched repeated sparse reinforce/punish loops using per-synapse products of independent noise draws. Focused tests verify RNG continuation and bounded rounding; the full suite passes 118 assertions. Microbenchmark (100 repetitions of eight calls, 13 used indices): reinforce 29.39 ms → 4.20 ms (6.99×); punish 28.08 ms → 4.25 ms (6.61×). Paired 16-seed 20k comparison vs P.3 passes: catches −12.125/run (CI −30.375 to +1.3125), alignment −0.00020 (CI −0.01042 to +0.01004); both include zero. No later task started.
 
 ### 2026-10-25 — KX Dashboards viewer (7.2)
-- Added opt-in `--viz-port`/`--viz-delay-ms`, `q/modules/viz.q`, `q/programs/viz_server.q`, `dashboards/` and `q/tests/test_viz.q` (18 assertions). With viz on, seed 42 x 2000 bars gives a byte-identical `simulation_log.csv`; publishing costs about 11% wall time.
-- `scripts/e2e_dashboards.sh` drives the dashboard in Firefox with Playwright against the real sim. No learning or performance claims were made.
+- Added opt-in `--viz-port`/`--viz-delay-ms`, `q/modules/viz/viz.q`, `q/programs/viz/viz_server.q`, `dashboards/` and `q/tests/test_viz.q` (18 assertions). With viz on, seed 42 x 2000 bars gives a byte-identical `simulation_log.csv`; publishing costs about 11% wall time.
+- `dashboards/e2e/run_e2e.sh` drives the dashboard in Firefox with Playwright against the real sim. No learning or performance claims were made.
 
 ### 2026-10-25 — Session 3 (doc consolidation, G.2 close-out, F20)
 - **Docs consolidated.** The user's restructure left two copies of the plan and of five research notes; the plan copies had diverged (root had the G.1 tables and session logs, `plans/inProgress/` had the current P.3/P.4 status). Merged into one canonical `plans/completed/REVIVAL_PLAN.md`, kept the newer BAR_STRUCTURE (root, with the `--no-learning` and alignment notes), moved all research notes to `researchNotes/`, removed the root duplicates, and rewrote every relative markdown link for the new locations (script-checked: no broken links). CLAUDE.md now documents the layout and that work happens on `main`.
@@ -1112,7 +1112,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - The user approved adding these to the plan. Nothing implemented yet. Nothing committed yet: the working tree holds this session's and the other chat's work.
 - Next: G.R0, then G.R1+G.R2.
 - **User direction:** unconditional usage reinforcement must stay, because it's what lets the system retool and be creative; tune its ratio to directed reinforcement instead. Recorded as §2 point 7 and in CLAUDE.md's "What NOT to do". G.R3 was rewritten from "remove/gate the Hebbian term" to "sweep the unconditional:directed ratio" (`--hebb N` with λ; h = 0 is not a candidate), judged on reversal too.
-- **G.R0 done:** `q/modules/theory.q` and `q/programs/policy_ceiling.q`; acceptance numbers reproduced exactly.
+- **G.R0 done:** `q/modules/analysis/theory.q` and `q/programs/analysis/policy_ceiling.q`; acceptance numbers reproduced exactly.
 - **G.R1/G.R2 implemented** (in progress until the sweep is analysed): `.syn.applySparsePG` plus the flags `--pg-update --pg-eta --rpe --rpe-rate`. `--rpe` alone aborts: the baseline is applied only inside the PG update, so "G.R1 alone" is measured as PG with vs without `--rpe`. Unit tests: chosen +(1−p) / siblings −p, row sum ≈ 0, finite-difference gradient, unused states untouched, δ=0 no-op, no RNG. Full suite 153 assertions pass; golden unchanged. With the new flags off, a seed-1 20k run is byte-identical to the `g3b_L0.25` reference (log and weights), so that arm is reused as the reference. Sweep running: PG+RPE η ∈ {0.1, 0.3, 1.0} and PG-only η=0.3, all with `--cos-reward --reward-scale 0.25`.
 - **G.R1/G.R2 analysed: not kept** (negative result, §6). Swept PG η ∈ {0.1, 0.3, 1, 2, 4} with RPE, plus PG alone at η 0.3 and 1. Best (η≈1–2) ties the reference and is never better; some seeds collapse; RPE has no effect. The η trend supports the user's ratio principle. The flags and `.syn.applySparsePG` stay in the code. Next: G.R3, the ratio sweep, on the reference rule.
 - **G.R3 steady state:** an exploratory `--hebb` sweep (seeds 1–16) favoured h=250, then a pre-registered 32-seed confirmation on fresh seeds held on alignment (+0.043, CI +0.002 to +0.083). The gain is a smaller execution loss (0.053 → 0.016); the weights ceiling is unchanged (≈0.72). Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`. Because this lowers the unconditional share the user values for retooling, G.R3 stays open until G.4 measures reversal. Tests: exact-increment test in `test_conservation.q`; `--hebb` recorded, changes learning, rejects 0; full suite 160 assertions pass, golden unchanged.
@@ -1123,7 +1123,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - With the user, redesigned G.4. All kinds of change are included and the cat is flicked between them (legs 180°/90°, eyes 180°, goal flip), with returns to `A` between each. The key question is **how fast** re-learning happens, but all the metrics are reported: pre-switch level, crash, drop, t½, t₀.₆, recovered level and fraction, re-learning ratio against fresh-brain controls, and savings across repeated returns.
 
 ### 2026-10-27 — G.4 run and analysed
-- Built the re-learning test: `q/modules/relearn.q`, `cat_mouse.q --relearn-schedule`, `relearn_report.q` and `scripts/relearn_experiment.sh`. Tests: 188 assertions pass; default bit-identical.
+- Built the re-learning test: `q/modules/world/relearn.q`, `cat_mouse.q --relearn-schedule`, `relearn_report.q` and `scripts/experiments/relearn_experiment.sh`. Tests: 188 assertions pass; default bit-identical.
 - Fixed F21 (the catch boost ran even with `--no-learning`).
 - Ran 2 configurations × (schedule + 5 fresh controls) × 16 seeds. Results are in §6.
   - **Speed:** t½ ≈ 150–300 bars; t₀.₆ ≈ 1,000–2,000 bars. Re-learning is 1.2–2.9× slower than fresh learning at hebb 1000 and 0.9–2.2× at hebb 250.
@@ -1148,7 +1148,7 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - **User request:** expand the testing regime (obstacles, a mouse the cat can't see, later 3D) with efficient training and internal structure as goals. Added **Phase W** (W.0–W.7), **Phase I** (I.1–I.5), the next north star in §0, and §7 decisions 7–9.
 - **Wiring result** (§6): angle ≫ random > grid in steady state (alignment 0.68 / 0.58 / 0.41; angle 16/16 acquired, median 530 bars). The ranking follows the untrained prior. In G.4, angle's advantage is lost after L180/E180 (no win-back to the fresh level) and there are still no savings. `--wiring angle` joins the working configuration.
 - **Process note:** the G.4 random-wiring fresh controls crashed because they started while a `cat_mouse.q` edit (a missing `;`) was in place. Rerun with the fixed code (bit-identical for those flags; golden passes), all 16/16 complete. Lesson: don't edit `cat_mouse.q` while a batch is running.
-- **Phase W built:** `.world` module (layouts none/pillars/wall/rooms/random, slab-method hits, blocked moves, line of sight across wrapped copies, clear spawns; `test_world.q`, 30 tests); `cat_mouse.q --world --see-through --blink --hidden-reward --policy`; `world_log.csv`; `q/programs/world_report.q`; `scripts/world_experiment.sh`.
+- **Phase W built:** `.world` module (layouts none/pillars/wall/rooms/random, slab-method hits, blocked moves, line of sight across wrapped copies, clear spawns; `test_world.q`, 30 tests); `cat_mouse.q --world --see-through --blink --hidden-reward --policy`; `world_log.csv`; `q/programs/analysis/world_report.q`; `scripts/experiments/world_experiment.sh`.
 - **F22 found** (user's question: "there's still input from the smaller brain, so shouldn't the cat keep moving?"). With the mouse hidden, the only input is cross-flow; it's absent when there's no recent catch (the pillars smoke cat froze for 1,990 of 2,000 bars) and, when present, drains to one output slot (312 of 359 hidden moves in slot 7).
 - **User principles added** (§2 points 8–9): a brain always receives input, external and internal; the meta-brain's input is a hunger-to-full scale. First built as `--meta-hunger` and `--hunger H` flags; **the user rejected flags for a design principle**, so both were removed. Satiety is now the default meta input, and the meta-brain's only reward is graded on it (full reinforced, starving punished). Golden digest updated (`ff9127e5…`). `--efference` and `--spontaneous P` remain opt-in experiments. All tests pass.
 - Stopped the first Phase W pilot (it was testing the rejected flag) and removed its partial results.

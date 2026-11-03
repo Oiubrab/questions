@@ -10,7 +10,7 @@ A **q/kdb-x** simulation: a cat learns to hunt a mouse with grids of trinary neu
 
 **Branch:** work happens on `main`. The `reaction-dissaccociation` branch (spelt that way in git) was merged in PR #4; it tested whether tactical (per-move) rewards interfere with strategic (meta-brain) reinforcement.
 
-**Docs layout:** plans live in `plans/inProgress/` (active: `OBSTACLES_PLAN.md`), `plans/future/` (not started: `VISION_PLAN.md`, seeing walls and other objects without flooding the sight brain; `3D_PLAN.md`, a 3D world and brain, plus the carried substrate research) and `plans/completed/` (`REVIVAL_PLAN.md`, the 2026-10 revival; `KX_DASHBOARDS_PLAN.md`, the viewer). Move a plan between folders as its state changes. Reference notes live in `researchNotes/` (THEORY, BAR_STRUCTURE, CROSS_FLOW_ARCHITECTURE, OPTIMIZATION_NOTES, PROJECT_STRUCTURE). Only README.md and CLAUDE.md stay at the root. Keep one copy of each doc; don't duplicate.
+**Docs layout:** plans live in `plans/inProgress/` (active: `OBSTACLES_PLAN.md`), `plans/future/` (not started: `VISION_PLAN.md`, seeing walls and other objects without flooding the sight brain; `PARAMETERS_PLAN.md`, removing hard-coded values; `3D_PLAN.md`, a 3D world and brain, plus the carried substrate research) and `plans/completed/` (`REVIVAL_PLAN.md`, the 2026-10 revival; `KX_DASHBOARDS_PLAN.md`, the viewer). Move a plan between folders as its state changes. Reference notes live in `researchNotes/` (THEORY, BAR_STRUCTURE, CROSS_FLOW_ARCHITECTURE, OPTIMIZATION_NOTES, PROJECT_STRUCTURE). Only README.md and CLAUDE.md stay at the root. Keep one copy of each doc; don't duplicate.
 
 **Status (2026-10-29; numbers in the revival plan §6 and obstacles plan §6):**
 - Removing tactical rewards **halves** performance (−49%).
@@ -153,4 +153,5 @@ MOUSE_MOVE_INTERVAL:10i        / mouse steps 2.0 units every 10 bars (STEP_SIZE:
 - **Don't use `each` where a fold is needed.**
 - **Don't commit `results/` or weight files** (`*.bin`, `*.bin#`); both are gitignored.
 - **Don't run qlint on a whole module.** Lint single functions (see Tooling).
+- **Don't add hard-coded values** (user, 2026-11-03: "there should never be hard-coded values anywhere"). A new tunable number is a flag or an environment variable with its default documented, not a literal buried in the code; give structural constants a name and a comment. Existing literals (about 200) are the subject of `plans/future/PARAMETERS_PLAN.md`; don't add to the pile while it waits.
 - **Don't commit unless the user asks.**

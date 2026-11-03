@@ -36,7 +36,7 @@ A cat with a **3D brain** hunting a mouse in a **3D world**, keeping the core co
 
 ## 3. Stage A: substrate research carried from the revival plan (2D lab first)
 
-These were revival-plan Phase S tasks (`q/modules/substrate.q`, `.sub`; `q/programs/substrate_lab.q`; `scripts/lab_sweep.sh`). Results so far: revival plan §6 "Phase S — substrate lab, sweep S.3". The lab doesn't touch `cat_mouse.q`; with `.sub.defaults` it must stay bit-identical to `.brain.propagate` (`test_substrate.q`).
+These were revival-plan Phase S tasks (`q/modules/lab/substrate.q`, `.sub`; `q/programs/lab/substrate_lab.q`; `scripts/lab/lab_sweep.sh`). Results so far: revival plan §6 "Phase S — substrate lab, sweep S.3". The lab doesn't touch `cat_mouse.q`; with `.sub.defaults` it must stay bit-identical to `.brain.propagate` (`test_substrate.q`).
 
 - [ ] **A.1** (was S.3b) **Reorganisation.** In S.3, route turnover in the structured configs (≈0.003–0.008 per 50 steps) sat at the noise floor that decay alone produces (hebb-0 runs: ≈0.004–0.014). So structures form but **don't break down and reorganise** (design intent, point 2).
   - Sweep decay strength and interval against `hebb` (e.g. decay every 5–60 steps; hebb 100–1000) on the two middle-regime configs.

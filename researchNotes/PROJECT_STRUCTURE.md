@@ -88,6 +88,7 @@
 │   ├── inProgress/
 │   │   └── OBSTACLES_PLAN.md    # Active: obstacles, a hidden mouse, internal-structure probes
 │   ├── future/
+│   │   ├── PARAMETERS_PLAN.md   # Removing hard-coded values: a parameter registry with defaults in config files
 │   │   ├── VISION_PLAN.md       # Seeing walls and other objects (colour, depth, motion) without flooding the sight brain
 │   │   └── 3D_PLAN.md           # A 3D world and brain, plus the carried substrate research
 │   └── completed/
