@@ -197,6 +197,22 @@ applyDecay:{[syns]
   shape: `int$(count syns;count first syns;8i;8i);
   shape#updated}
 
+/ G.R5 two-timescale weights (REVIVAL_PLAN.md; Benna & Fusi 2016). M is the slow memory in log-weights,
+/ a flat float vector in the order of raze raze raze syns.
+/ relaxDecay: instead of W <- W*u (decay towards the floor), relax towards e^M: W <- e^M + (W-e^M)*d,
+/ where d = 1-(1-u)*80/tauF uses today's decay noise u (0.98-0.995, mean loss 1.25% per period, a
+/ time constant of ~80 periods), rescaled to tauF periods. Same RNG use as applyDecay.
+relaxDecay:{[syns;M;tauF]
+  flat: `float$raze raze raze syns;
+  u: 0.98 + 0.015*(count flat)?1.0;
+  d: 1f-(1f-u)*80f%tauF;
+  target: exp M;
+  updated: MIN_STRENGTH | MAX_STRENGTH & `int$target+(flat-target)*d;
+  shape: `int$(count syns;count first syns;8i;8i);
+  shape#updated}
+/ consolidate: M moves 1/tauS of the way towards ln W (one decay period)
+consolidate:{[syns;M;tauS] M+((log `float$raze raze raze syns)-M)%tauS}
+
 / Module-level helpers for reinforce/punish — defined at namespace scope to avoid
 / kdb-x v5 closure limitation (inner lambdas cannot capture outer local variables).
 

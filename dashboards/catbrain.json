@@ -26,7 +26,7 @@
  "saveViewerState": "enabled",
  "hostnameAccess": "",
  "hidePdfGlobalVS": false,
- "hash": "1cb297f5-4f09-4a3a-a98a-4e659ab43ed5",
+ "hash": "6b8e87c5-26a6-470f-a452-f2eb00f0e8b7",
  "enableShareDashboard": false,
  "notifications": {
   "Notifications": {
@@ -55,12 +55,12 @@
  "action": "replace",
  "screens": [
   {
-   "id": "00e2d052-4ed8-4a06-85a3-e39fa47a9cdd",
+   "id": "4a943947-9015-44e9-a042-4a35222f063d",
    "name": "Screen 1",
    "thumb": null,
    "widgets": [
     {
-     "id": "e851b64c-aead-45c8-8db5-1f8193bd1b70",
+     "id": "5d62d9db-ec3b-48b5-bf76-e01b91cebb66",
      "layout": {
       "row": 0,
       "column": 0,
@@ -68,7 +68,7 @@
       "colSpan": 22
      },
      "component": {
-      "id": "05f584b1-47c6-4429-b209-0f6b3e8c3c0c",
+      "id": "0cde1583-96e7-4379-9ea1-3c9416f13727",
       "key": "ChartGL",
       "options": {
        "version": "v2.5.0",
@@ -374,7 +374,7 @@
          "Range": {
           "UseMinMax": true,
           "Min": "0",
-          "Max": "6",
+          "Max": "9",
           "SelectionMin": "",
           "SelectionMax": "",
           "ResetToNull": true
@@ -437,7 +437,7 @@
      }
     },
     {
-     "id": "10af4613-eb62-40b8-a6b5-3a49e58ce7b7",
+     "id": "b4761b0a-556c-4825-9e1c-6d48d4612405",
      "layout": {
       "row": 0,
       "column": 22,
@@ -445,7 +445,7 @@
       "colSpan": 14
      },
      "component": {
-      "id": "eae97d29-fb20-44ed-a09f-8d8bb22ce148",
+      "id": "57d01558-0aa7-4080-a250-dd7c8d6b565c",
       "key": "ChartGL",
       "options": {
        "version": "v2.5.0",
@@ -820,7 +820,7 @@
      }
     },
     {
-     "id": "639e5563-466a-48d0-975d-eec8cc5d102a",
+     "id": "e94240e8-171e-47bb-90a6-c004f7e262c3",
      "layout": {
       "row": 14,
       "column": 0,
@@ -828,7 +828,7 @@
       "colSpan": 9
      },
      "component": {
-      "id": "ada7c47f-f045-4045-8965-c2b1abf2bc99",
+      "id": "67f4ed52-668c-46e1-9f1c-0724c4553f3c",
       "key": "Datagrid",
       "options": {
        "version": "4.7.7",
@@ -919,7 +919,7 @@
      }
     },
     {
-     "id": "b162ebce-5ac7-4ca1-9e70-79b4a772bfab",
+     "id": "d051b59c-216a-44e3-b92e-df3d24adb839",
      "layout": {
       "row": 14,
       "column": 9,
@@ -927,7 +927,7 @@
       "colSpan": 9
      },
      "component": {
-      "id": "bed5ed3b-7095-40ea-9e48-bab6d9094a6a",
+      "id": "dab878b2-7b74-4ceb-944e-c6ee5df5927a",
       "key": "ChartGL",
       "options": {
        "version": "v2.5.0",
@@ -1296,7 +1296,7 @@
      }
     },
     {
-     "id": "f09b292d-282c-4812-84d8-6aa6d0cf5b1d",
+     "id": "8c6d666d-03cc-4541-827c-173c057a7b51",
      "layout": {
       "row": 14,
       "column": 18,
@@ -1304,7 +1304,7 @@
       "colSpan": 9
      },
      "component": {
-      "id": "c88ba075-4513-4534-8ae2-e02841ee09f8",
+      "id": "d43790ec-ba4d-41c8-aa65-155589aaaf59",
       "key": "ChartGL",
       "options": {
        "version": "v2.5.0",
@@ -1691,7 +1691,7 @@
      }
     },
     {
-     "id": "980671f3-9089-4af0-9a59-e69289cd476c",
+     "id": "f60a1747-6425-4180-b30b-837c38fa446e",
      "layout": {
       "row": 14,
       "column": 27,
@@ -1699,7 +1699,7 @@
       "colSpan": 9
      },
      "component": {
-      "id": "57883e6e-ac8f-40f1-9e68-4944a06cf209",
+      "id": "b991068f-420a-4282-9a3c-2293c3344179",
       "key": "ChartGL",
       "options": {
        "version": "v2.5.0",
@@ -2097,7 +2097,7 @@
  "screenDetails": [
   {
    "label": "Screen 1",
-   "value": "00e2d052-4ed8-4a06-85a3-e39fa47a9cdd"
+   "value": "4a943947-9015-44e9-a042-4a35222f063d"
   }
  ],
  "viewState": {
@@ -2138,7 +2138,7 @@
      "weight": 2
     }
    ],
-   "_queryString": "([] x:-5 -5 -5f; y:-5 -5 -5f; lvl:`l0`l1`l2), select x:col+0.5, y:5.5-row, lvl:`l0`l1`l2 energy from .viz.energyNow[]",
+   "_queryString": "([] x:-5 -5 -5f; y:-5 -5 -5f; lvl:`l0`l1`l2), select x:col+0.5, y:8.5-row, lvl:`l0`l1`l2 energy from .viz.energyNow[]",
    "_queryParams": [],
    "_subscriptionKey": "",
    "_hasUpdateQuery": false,

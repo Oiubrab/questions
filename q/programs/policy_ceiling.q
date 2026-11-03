@@ -1,6 +1,7 @@
 / Where is the alignment ceiling: in the weights, or in execution? (REVIVAL_PLAN.md G.R0)
 / For each seed of each arm, compute the policy from the final saved weights alone (linear chain:
-/ the vision unit only, a 12-step bar, T=1, vBias, saturation ignored) and compare its expected
+/ the vision unit only, a 12-step bar, T=1, vBias, saturation ignored; modular brains: sight then
+/ central as one joint chain) and compare its expected
 / alignment with the alignment the run actually achieved in its last epoch.
 / Usage (repo root): q q/programs/policy_ceiling.q results/<arm> [results/<arm2> ...] < /dev/null
 / Optional: -seeds to print the per-seed table. Best possible E[cos] with 8 slices x 8 moves ~ 0.90;
@@ -19,7 +20,15 @@ if[0=count dirs; -2 "usage: q q/programs/policy_ceiling.q results/<arm> [...] [-
 seedRow:{[d;s]
   id: "I"$1_s;
   w: get hsym `$d,"/",s,"/weights_seed",(string id),".bin";
-  pr: .theory.stats .theory.policy .theory.chain[w 0;.dirs.vBias];
+  / output wiring and architecture from summary.csv (older runs: grid wiring, single brain)
+  sf: hsym `$d,"/",s,"/summary.csv"; hdr: `$"," vs first read0 sf;
+  sm: first (((count hdr)#"*";enlist ",") 0: sf);
+  perm: $[`wiringPerm in hdr; -48+"i"$sm`wiringPerm; til 8];
+  / modular brain: weights stack sight (3 rows), touch (3) and central; the open-world policy runs
+  / vision through sight then central (touch gets no input without walls)
+  QR: $[(`architecture in hdr) & "modular"~sm`architecture;
+    .theory.chainMod[3#w 0;6_w 0;.dirs.vBias]; .theory.chain[w 0;.dirs.vBias]];
+  pr: .theory.statsW[.theory.policyG[QR;12];perm];
   f: hsym `$d,"/",s,"/epoch_summary.csv";
   e: ((`epoch`bars`catches`towards`away`perp`meanAlignment!"IIIIIIF") `$"," vs first read0 f;enlist ",") 0: f;
   (`id`predExpCos`predPMove`predMI!(id; pr`expCos; pr`pMove; pr`MIbits)),

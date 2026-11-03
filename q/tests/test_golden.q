@@ -1,5 +1,13 @@
 / Seeded 300-bar golden state: protects tier-1 performance work from behavior drift.
 / The digest is md5(-8! finalState) for seed 42 with the current sparse-learning code.
+/ Updated 2026-10-29: the meta-brain input became the satiety scale (starving left .. full right) and
+/ its reward follows it (REVIVAL_PLAN.md §2 points 8-9); every default run changed by design.
+/ Updated 2026-10-29 again: the revival plan's working configuration became the default (cosine reward,
+/ reward scale 0.25, hebb 250, wrapped world, angle wiring). Verified first: a default 20k-bar run of
+/ seed 1 is byte-identical (weights and simulation log) to the same run with those flags given explicitly.
+/ Updated 2026-11-02: the modular brain became the default (sight, touch and reward brains feeding a
+/ central brain; OBSTACLES_PLAN.md §7 decision 4). Verified first: --single-brain reproduces the
+/ previous default byte for byte (seed 1, 20k bars: weights and simulation log).
 / Run from repo root: q q/tests/test_golden.q
 
 \l q/tests/harness.q
@@ -17,6 +25,6 @@ md5Path: hsym `$dir,"state.md5";
 md5Output: system "md5sum ",dir,"state.serialized";
 .t.ok["md5sum produced output";count md5Output];
 digest: 32#first md5Output;
-.t.eq["seed 42 300-bar final state matches golden MD5";digest;"4e7d460ae07a59feb626e8dcdcf615f5"];
+.t.eq["seed 42 300-bar final state matches golden MD5";digest;"3e7bda69bb94a1854b66b70a859b894c"];
 system "rm -rf ",dir;
 .t.done[];

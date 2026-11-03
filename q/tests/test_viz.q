@@ -26,7 +26,7 @@ st: h"`.viz.status[]";
 .t.eq["server saw the last bar";st`bar;60i];
 .t.eq["server kept every bar";st`bars;60];
 .t.eq["server saw the last step of the bar";st`step;11i];
-.t.eq["energy matrix has 72 cells";count h"`.viz.energyNow[]";72];
+.t.eq["energy matrix has 108 cells (modular: sight, touch, central stacked, 9x12)";count h"`.viz.energyNow[]";108];
 .t.eq["meta matrix has 15 cells";count h"`.viz.metaNow[]";15];
 .t.eq["field has mouse, cat and gaze dots";(h"`.viz.fieldNow[]")`who;`mouse`cat,8#`gaze];
 .t.ok["positions stay inside the field";all (h"`.viz.fieldNow[]")[`x] within 0 100f];
@@ -56,9 +56,25 @@ h"do[10; .viz.onStep[1;0;.viz.br;.viz.mbr]]";
 .t.eq["frame ring buffer is capped";(h"`.viz.status[]")`frames;5];
 
 / Replay of a finished run drives the same tables
-h"`.viz.bars set 0#.viz.bars; .viz.replay[\"",dir,"off\";1000f]";
+h"`.viz.bars set 0#.viz.bars; .viz.replay[\"",dir,"off\";\"\";1000f]";
 system "sleep 0.5";
 .t.eq["replay fills bars";(h"`.viz.status[]")`bars;60];
+
+/ Side-by-side replay (V3.2): both runs advance together; each run's weights give its route map (V3.1)
+h".viz.replay[\"",dir,"off\";\"",dir,"second\";1000f]";
+system "sleep 0.5";
+.t.eq["compare replay: first run fully replayed";count h".viz.bars";60];
+.t.eq["compare replay: second run fully replayed";count h".viz.bars2";20];
+.t.ok["compare replay: the two fields differ";not (h".viz.fieldNow[]")~h".viz.fieldNow2[]"];
+.t.eq["compare replay: second run's curves";count h".viz.statsNow2[10]";10];
+rn: h".viz.routesNow[0]";
+.t.eq["route map: one bubble and one direction dot per cell (9x12)";count rn;216];
+.t.ok["route map: sharpness bands and direction dots only";all rn[`lvl] in `r0`r1`r2`dir];
+rt: h".viz.routes 0";
+.t.ok["route map: sharpness lies in [1/8, 1]";all rt[`sharp] within (0.125-1e-9;1f)];
+.t.ok["route map: direction dots stay within their cell";all 0.33>abs (rn[`x] 108+til 108)-rn[`x] til 108];
+/ a cell whose weights all favour one route reports it as dominant with sharpness ~1
+.t.eq["routesFrom picks the dominant route";first exec dom from h".viz.routesFrom[(1;1;8;8)#@[64#25i;(8*til 8)+6;:;2000000i]]";6i];
 
 hclose h;
 @[system; "pkill -f 'viz_server.q -port ",(string PORT),"'"; ::];

@@ -157,6 +157,35 @@ copyInputToTopRow:{[inp;inOff;br;inc0]
   (br;inc0)}
 
 / -------------------------------------------------------------------
+/ META-BRAIN INPUT: the cat's satiety, from starving (left) to full
+/ (right). User, 2026-10-29: "energy comes in on the left when there's
+/ starving, and energy comes in on the right when it's completely full.
+/ And then there's some in between." Satiety is a leaky store of food:
+/ each catch adds 1 and it decays by SAT_DECAY every bar (cat_mouse.q),
+/ so it falls while the cat goes without catches and rises with lots of
+/ them. Every bar one MEDIUM unit enters at the cell for its level, so
+/ the meta-brain always has input and its position is the hunger/full
+/ state. Edges for 5 cells: below 0.5 starving (cell 0), 0.5-2, 2-5,
+/ 5-10, and 10 or more full (cell 4; ~50 catches per 1,000 bars).
+/ -------------------------------------------------------------------
+SAT_EDGES: 0.5 2 5 10f
+satietyCell:{[s] 1i+`int$SAT_EDGES bin s}
+satietyInput:{[s;len] v: `int$len#0i; v[satietyCell s]: 1i; v}
+
+/ -------------------------------------------------------------------
+/ INTERNAL INPUT (OBSTACLES_PLAN.md W.1b): the brain's input about itself
+/ Add v units at cells (rs;cs), capped at HIGH, with incoming label d.
+/ Unlike vision and cross-flow, which overwrite their cells (F16), this
+/ never removes energy that is already there. v and d may be atoms.
+/ -------------------------------------------------------------------
+injectAdd:{[br;inc0;rs;cs;v;d]
+  n: count rs;
+  if[0=n; :(br;inc0)];
+  {[s;k] r: k 0; c: k 1;
+    s[0;r;c]: .trinary.HIGH & s[0;r;c]+k 2;
+    s[1;r;c]: k 3; s}/[(br;inc0); flip (`int$rs;`int$cs;`int$n#v;`int$n#d)]}
+
+/ -------------------------------------------------------------------
 / SIDE I/O: META-BRAIN CROSS-FLOW
 / Apply meta-brain output to right column of primary brain.
 / -------------------------------------------------------------------
@@ -214,12 +243,6 @@ captureOverflow:{[br;overflowOff;overflowLen]
 pressure:{[br]
   nR:count br; nC:count br 0;
   `float$(sum raze br) % nR*nC*2}
-
-/ Leftward pull valve (valve 2): multiplier increases with pressure
-leftwardPull:{[p]
-  $[p<0.1; 1.0;
-    p<0.3;  1.0+(p-0.1)%0.2;
-    2.0]}
 
 / -------------------------------------------------------------------
 / ENERGY DRAIN

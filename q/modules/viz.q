@@ -1,4 +1,4 @@
-/ Sim-side publisher for the KX Dashboards viewer (see plans/inProgress/KX_DASHBOARDS_PLAN.md).
+/ Sim-side publisher for the KX Dashboards viewer (see plans/completed/KX_DASHBOARDS_PLAN.md).
 / Off by default. Enabled by --viz-port; sends to q/programs/viz_server.q. Never touches the RNG or the learning path.
 
 \d .viz

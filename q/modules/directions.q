@@ -19,8 +19,4 @@ opp: `int$8 7 6 5 4 3 2 1
 / direction_bias(8) = [0.5,0.5,0.5,1.0,1.0,1.5,1.8,1.5]
 vBias: 0.5 0.5 0.5 1.0 1.0 1.5 1.8 1.5
 
-/ Horizontal bias: favours leftward propagation (for meta-brain signals entering right column)
-/ horizontal_bias(8) = [1.5,1.0,0.5,0.5,0.5,1.0,1.5,1.8]
-hBias: 1.5 1.0 0.5 0.5 0.5 1.0 1.5 1.8
-
 \d .

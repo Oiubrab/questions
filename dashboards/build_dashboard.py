@@ -2,7 +2,8 @@
 """Generate the KX Dashboards definition for the cat/brain viewer.
 
 Templates the ChartGL widget and dashboard shell from a bundled demo dashboard, so it needs the
-Dashboards install (default ~/.kx/dashboards). Output: dashboards/catbrain.json and
+Dashboards install (default ~/.kx/dashboards). Output: dashboards/catbrain.json (live viewer),
+dashboards/catbrain_compare.json (two replayed runs side by side, with route maps) and
 dashboards/connections/catbrain.json. Run dashboards/install.sh to copy them into the install.
 """
 import copy, json, os, sys, uuid
@@ -12,12 +13,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(DASH, "data/dashboards/e9c38322-9660-b54b-d072-cd3c9af241c1.json")
 VIZ_PORT = os.environ.get("VIZ_PORT", "6814")
 DASH_ID = "5c0f0e5a-ca7b-4ab1-9d11-0a7b0c4a7b01"
+COMPARE_ID = "5c0f0e5a-ca7b-4ab1-9d11-0a7b0c4a7b02"
 CONN = "catbrain"
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "0.25"))
 
 LEVEL_COLOURS = ["#2b2f3a", "#f2a900", "#ff3b30"]  # energy 0 / 1 / 2
 FIELD_COLOURS = ["#7a3a3a", "#7a6a1a", "#ff3b30", "#ffd500", "#3aa0ff"]  # mouse trail, cat trail, mouse, cat, gaze
 TRAIL_BARS = 60
+PRIMARY_ROWS = 9  # modular brain stacked top to bottom: sight 0-2, touch 3-5, central 6-8 (single brain: rows 0-5)
+ROUTE_COLOURS = ["#2b2f3a", "#3a6ea5", "#7fd1ff", "#ffd500"]  # sharpness < 0.4 / < 0.7 / >= 0.7, direction dot
 
 
 def matrix_q(fn, nrows):
@@ -72,6 +76,56 @@ def set_range(c, xr, yr):
     return c
 
 
+def titled(c, label):
+    t = c["options"]["Xaxes"][0]["Title"]
+    t.update({"Display": True, "LabelString": label})
+    return c
+
+
+def route_q(k):
+    # Dummy off-grid rows keep all four categories present, so their colours stay fixed
+    return "([] x:-5 -5 -5 -5f; y:-5 -5 -5 -5f; lvl:`r0`r1`r2`dir), .viz.routesNow[%d]" % k
+
+
+def field_chart(gl, data):
+    f = chartgl(gl, "Bubble", data, ["who", "x", "y"], XAxis="x", YAxis="y", ColorData="who")
+    fl = f["options"]["Layers"][0]
+    fl["Bubbles"]["RadiusScaling"] = 7
+    fl["Palette"] = [{"type": col} for col in FIELD_COLOURS]
+    return set_range(f, (0, 100), (0, 100))
+
+
+def shell(src, dash_id, name, widgets, data):
+    screen = copy.deepcopy(src["screens"][0])
+    screen.update({"id": uid(), "name": "Screen 1", "isDefault": True, "widgets": widgets})
+    out = {k: v for k, v in src.items() if k not in ("screens", "data", "viewState", "screenDetails")}
+    out.update({
+        "id": dash_id, "name": name, "hash": uid(), "screens": [screen],
+        "screenDetails": [{"label": "Screen 1", "value": screen["id"]}],
+        "viewState": {".settings": {}}, "popups": [], "tags": [], "data": data})
+    return out
+
+
+def compare(src, gl):
+    """V3.1/V3.2: two replayed runs side by side (viz_server.q -replay A -replay2 B)."""
+    w, data = [], {}
+    for k, (sfx, col) in enumerate((("", 0), ("2", 18))):
+        run = "Run %s" % "AB"[k]
+        r = matrix(gl, "routes%d" % k, 12, PRIMARY_ROWS, 30)
+        r["options"]["Layers"][0]["Palette"] = [{"type": c} for c in ROUTE_COLOURS]
+        w.append(widget(titled(r, run + ": route sharpness per cell (final weights), dot = dominant route"), 0, col, 12, 18))
+        w.append(widget(titled(field_chart(gl, "field%d" % k), run + ": cat and mouse"), 12, col, 14, 9))
+        w.append(widget(titled(curve(gl, "rate%d" % k, "rate", None, None), run + ": catches in last 200 bars"), 12, col + 9, 7, 9))
+        w.append(widget(titled(curve(gl, "align%d" % k, "alignAvg", -1, 1), run + ": move alignment (100 bars)"), 19, col + 9, 7, 9))
+        data.update({
+            "routes%d" % k: datasource(route_q(k)),
+            "field%d" % k: datasource("([] who:`mouseTrail`catTrail`mouse`cat`gaze; x:5#-5f; y:5#-5f), "
+                                      ".viz.trailNow%s[%d], .viz.fieldNow%s[]" % (sfx, TRAIL_BARS, sfx)),
+            "rate%d" % k: datasource("select bar, rate from .viz.statsNow%s[2000]" % sfx),
+            "align%d" % k: datasource("select bar, alignAvg from .viz.statsNow%s[2000]" % sfx)})
+    return shell(src, COMPARE_ID, "Cat Brain Compare", w, data)
+
+
 def widget(component, row, col, rows, cols):
     return {"id": uid(), "layout": {"row": row, "column": col, "rowSpan": rows, "colSpan": cols},
             "component": component}
@@ -117,7 +171,7 @@ def main():
     src = json.load(open(TEMPLATE))
     gl = src["screens"][0]["widgets"][0]["component"]["components"][0]
 
-    energy = matrix(gl, "energy", 12, 6, 30)
+    energy = matrix(gl, "energy", 12, PRIMARY_ROWS, 30)
     meta = matrix(gl, "meta", 5, 3, 36)
     field = chartgl(gl, "Bubble", "field", ["who", "x", "y"], XAxis="x", YAxis="y", ColorData="who")
     fl = field["options"]["Layers"][0]
@@ -138,18 +192,19 @@ def main():
         "id": DASH_ID, "name": "Cat Brain", "hash": uid(), "screens": [screen],
         "screenDetails": [{"label": "Screen 1", "value": screen["id"]}],
         "viewState": {".settings": {}}, "popups": [], "tags": [],
-        "data": {"energy": datasource(matrix_q(".viz.energyNow", 6)),
+        "data": {"energy": datasource(matrix_q(".viz.energyNow", PRIMARY_ROWS)),
                  "meta": datasource(matrix_q(".viz.metaNow", 3)),
                  "field": datasource(FIELD_Q), "rate": datasource(RATE_Q), "align": datasource(ALIGN_Q),
                  "kpi": datasource(KPI_Q)},
     })
     json.dump(out, open(os.path.join(HERE, "catbrain.json"), "w"), indent=1)
+    json.dump(compare(src, gl), open(os.path.join(HERE, "catbrain_compare.json"), "w"), indent=1)
 
     os.makedirs(os.path.join(HERE, "connections"), exist_ok=True)
     conn = {"name": CONN, "dbtype": "q", "tls": "off", "host": "localhost", "port": VIZ_PORT,
             "user": "", "pass": "", "database": ""}
     json.dump(conn, open(os.path.join(HERE, "connections", CONN + ".json"), "w"), indent=2)
-    print("wrote dashboards/catbrain.json")
+    print("wrote dashboards/catbrain.json and dashboards/catbrain_compare.json")
 
 
 if __name__ == "__main__":

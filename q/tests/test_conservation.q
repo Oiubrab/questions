@@ -65,4 +65,46 @@ hebbStep:{[h] .brain.HEBB:h; system "S 9"; sy:.syn.init[6;12];
 .t.eq["HEBB 250: one used route gains exactly 250";hebbStep 250i;enlist 250i];
 .t.eq["HEBB restored to the default";.brain.HEBB;1000i];
 
+/ Internal input (W.1b): .brain.injectAdd adds energy, caps at HIGH, never removes, sets the label
+ib: (6 12#0i); ib[2;3]: 1i; ii: 6 12#0i;
+ia: .brain.injectAdd[ib;ii;0 2 2i;5 3 3i;1i;7i];
+.t.eq["injectAdd adds a unit to an empty cell";ia[0;0;5];1i];
+.t.eq["injectAdd adds to an occupied cell and caps at HIGH (two adds to a cell holding 1)";ia[0;2;3];2i];
+.t.eq["injectAdd adds exactly the units that fit";(sum raze ia 0)-sum raze ib;2i];
+.t.eq["injectAdd sets the incoming label";(ia[1;0;5];ia[1;2;3]);7 7i];
+.t.ok["injectAdd with no cells is the identity";(ib;ii)~.brain.injectAdd[ib;ii;`int$();`int$();1i;7i]];
+
+/ Meta-brain input: satiety enters on the left when starving, on the right when full (user, 2026-10-29)
+.t.eq["satiety cells: starving .. full";.brain.satietyCell each 0 0.49 0.5 1.9 2 4.9 5 9.9 10 40f;0 0 1 1 2 2 3 3 4 4i];
+.t.eq["satiety input: starving enters on the left";.brain.satietyInput[0f;5i];1 0 0 0 0i];
+.t.eq["satiety input: full enters on the right";.brain.satietyInput[25f;5i];0 0 0 0 1i];
+.t.ok["satiety input: always exactly one unit";all 1=sum each .brain.satietyInput[;5i] each 0.1*til 300];
+
+/ Modular brain (.mod): splitting and stacking, and transfers between brains
+\l q/modules/modular.q
+system "S 11";
+mp: .engine.initSystem[10i;12i;8i;8i;2i;2i];
+mp[`br]: `int$10 12#120?3; mp[`inc0]: `int$10 12#120?9; mp[`inc1]: `int$10 12#120?9;
+ms: (.mod.sub[mp;0;3;2i;8i;2i;8i];.mod.sub[mp;3;3;2i;8i;2i;8i];.mod.sub[mp;6;4;2i;8i;2i;8i]);
+st: .mod.stack ms;
+.t.ok["split then stack restores the state";all {x~y}'[st`br`syns`inc0`inc1;mp`br`syns`inc0`inc1]];
+ms[1;`su]: (1b;0 70i); ms[2;`su]: (1b;enlist 5i);
+.t.eq["stack offsets usage by each brain's first row (3 and 6 rows of 12 cells x 64)";(.mod.stack ms)[`su] 1;2304 2374 4613i];
+/ transferIn: units placed + units lost = units sent; first unit sets inc0, second inc1
+tb: 3 12#0i; tb[0;4]: 1i; tb[0;5]: 2i;
+tr: .mod.transferIn[tb;3 12#0i;3 12#0i;2i;0 0 2 1 1 0 0 0i;7i];
+.t.eq["transferIn conserves units (placed + lost = sent)";((sum raze tr 0)-sum raze tb)+tr 3;4i];
+.t.eq["transferIn: a unit into a MEDIUM cell makes it HIGH and sets inc1";(tr[0;0;4];tr[1;0;4];tr[2;0;4]);2 0 7i];
+.t.eq["transferIn: a unit into an empty cell sets inc0";(tr[0;0;6];tr[1;0;6]);1 7i];
+.t.eq["transferIn: units into full cells are lost (one at col 4, one at col 5)";tr 3;2i];
+/ One modular step conserves energy: sight + touch + central + everything that left the central brain
+ce: {sum raze x`br};
+sB: ms 0; tB: ms 1; cB: ms 2; sB[`out]: 8#0i; tB[`out]: 8#0i;
+before: (ce sB)+(ce tB)+ce cB;
+sB: .engine.runCycle sB; tB: .engine.runCycle tB;
+r: .mod.transferIn[cB`br;cB`inc0;cB`inc1;2i;sB`out;7i];
+lost: r 3; r: .mod.transferIn[r 0;r 1;r 2;2i;tB`out;6i]; lost+: r 3;
+cB[`br`inc0`inc1]: 3#r; cB: .engine.runCycle cB;
+.t.eq["one modular step conserves energy (lost transfers and outputs counted)";(ce sB)+(ce tB)+(ce cB)+(sum cB`out)+lost;before];
+
 .t.done[];
