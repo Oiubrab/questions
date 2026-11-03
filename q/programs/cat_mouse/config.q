@@ -7,7 +7,7 @@
 / ================================================================
 args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
-              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";"--wrap-world";"--weight-ratio";"--wiring";"--world";"--see-through";"--blink";"--hidden-reward";"--policy";"--efference";"--spontaneous";
+              "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";"--wrap-world";"--weight-ratio";"--wiring";"--world";"--see-through";"--blink";"--hidden-reward";"--policy";"--efference";
               "--raw-dot-reward";"--walled-world";"--random-tie";"--mice";"--sat-edges";"--evasive";"--distractor";"--layout-every";"--lesion";"--log-state";"--single-brain";"--central-rows";"--no-touch";"--meta-entry";"--mouse-step";"--field-size";
               "--two-timescale";"--tau-fast";"--tau-slow";"--viz-port";"--viz-delay-ms")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
@@ -27,7 +27,7 @@ noDirectRewards: (hasFlag "--no-direct-rewards") | hasFlag "--meta-only"
 noMetaRewards: hasFlag "--no-meta-rewards"
 ablateMeta: hasFlag "--ablate-meta"
 noLearning: hasFlag "--no-learning"
-/ Obstacle worlds (plans/inProgress/OBSTACLES_PLAN.md): harder worlds and scripted baseline agents. All off by default.
+/ Obstacle worlds (plans/completed/OBSTACLES_PLAN.md): harder worlds and scripted baseline agents. All off by default.
 POLICY: $[count flagVal "--policy"; `$flagVal "--policy"; `brain]
 if[not POLICY in `brain`random`greedy`reactive`persist`planner; -2 "--policy must be brain, random, greedy, reactive, persist or planner"; exit 1]
 scripted: POLICY<>`brain
@@ -62,8 +62,9 @@ if[not HIDDEN_REWARD in `cos`none; -2 "--hidden-reward must be cos or none"; exi
 / mouse and has no recent catch gets no input at all and stops (F22). Each channel is opt-in so it
 / can be measured and ablated on its own.
 efference: hasFlag "--efference"
-SPONT: $[count flagVal "--spontaneous"; "F"$flagVal "--spontaneous"; 0f]
-if[(null SPONT)|(SPONT<0f)|SPONT>1f; -2 "--spontaneous must be a probability in [0,1]"; exit 1]
+/ --spontaneous (random resting activity) was removed on 2026-11-03 at the user's request: at P = 0.05 it
+/ swamped vision (researchNotes/OBSTACLES_RESULTS.md). Its replacement, a sparse clock-like input at a
+/ fixed spot, is plans/future/METRONOME_PLAN.md. An old --spontaneous now aborts as an unknown flag.
 / G.3(c): break ties between output slots at random (otherwise the lowest slot wins, F11)
 randomTie: hasFlag "--random-tie"
 / W.5 harder goals, W.6 layout redraws, I.2/I.4 probes

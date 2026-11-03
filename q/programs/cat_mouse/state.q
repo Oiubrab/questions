@@ -151,7 +151,3 @@ stepM:{[p] $[worldOn;
 / W.5 evasive: a mouse within EVADE_R steps away from the cat (blocked by walls like any step)
 flee:{[p] v: .vision.torDelta[catPos;p;FIELD_SIZE]; n: .vision.norm v;
   $[(n>=EVADE_R)|n<0.001; p; worldOn; .vision.wrapPos[first .world.move[WT;p;MOUSE_STEP*v%n];FIELD_SIZE]; .vision.wrapPos[p+MOUSE_STEP*v%n;FIELD_SIZE]]};
-/ Spontaneous activity (--spontaneous): each cell gains a unit with probability SPONT, from a random direction
-spont:{[b] sp: where SPONT>(COLS*count b`br)?1f;
-  r: .brain.injectAdd[b`br;b`inc0;sp div COLS;sp mod COLS;.trinary.MEDIUM;1i+(count sp)?8i];
-  b[`br]: r 0; b[`inc0]: r 1; b};

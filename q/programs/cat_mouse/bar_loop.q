@@ -86,8 +86,11 @@ while[bar<=MAX_BARS;
     if[NMICE>1i; mice[mouseIdx]: mousePos; mice: @[mice;(til count mice) except mouseIdx;stepM]];
     if[distractor; dogPos: stepM dogPos]];
   / W.5 evasive: a mouse within EVADE_R steps away from the cat (flee, defined in state.q)
+  / The current mouse's position (its random step, or its respawn after a catch) is copied into mice
+  / first, for one mouse as for several: otherwise a single evasive mouse kept fleeing from where it
+  / was caught, next to the cat, and was caught again every bar (fixed 2026-11-03)
   if[evasive;
-    if[NMICE>1i; mice[mouseIdx]: mousePos];
+    mice[mouseIdx]: mousePos;
     mice: flee each mice; mousePos: mice mouseIdx];
   / W.5 several mice: the one the cat sees (and is rewarded on) this bar is the nearest visible one,
   / or the nearest if none is visible
@@ -150,8 +153,6 @@ while[bar<=MAX_BARS;
   if[efference & not null lastMoveSlot;
     r0: .brain.injectAdd[prim`br;prim`inc0;enlist 1i;enlist OUT_OFF+lastMoveSlot;.trinary.MEDIUM;7i];
     prim[`br]: r0 0; prim[`inc0]: r0 1];
-  / Spontaneous activity (spont, defined in state.q): every brain of the modular architecture
-  if[SPONT>0f; prim: spont prim; if[MODULAR; sightB: spont sightB; touchB: spont touchB]];
 
   / ---- ACCUMULATE OUTPUT ACROSS STEPS_PER_BAR CYCLES ----
   accOut: `int$OUT_LEN#0i;

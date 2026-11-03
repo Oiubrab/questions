@@ -128,14 +128,12 @@ R: .world.tile[.world.LAYOUTS`rooms;100f];
 
 / W.1b internal input: recorded, changes the run, adds energy; bad values abort
 run "--seed 5 --bars 300 --efference --output-dir ",dir,"intl";
-run "--seed 5 --bars 300 --spontaneous 0.05 --output-dir ",dir,"spont";
-.t.eq["summary records internal-input defaults";(sumOf["a";`efference];sumOf["a";`spontaneous]);(0b;0f)];
+.t.eq["summary records the efference default";sumOf["a";`efference];0b];
 .t.eq["summary records --efference";sumOf["intl";`efference];1b];
 .t.ok["summary records the mean satiety cell (0 starving .. 4 full)";sumOf["a";`meanSatietyCell] within 0 4];
 .t.ok["internal input changes learning vs default";not (wa 0)~(get hsym `$dir,"intl/weights_seed5.bin") 0];
-EN:{[d] avg (("IIIIIII";enlist ",") 0: hsym `$dir,d,"/simulation_log.csv")`brainEnergy};
-.t.ok["--spontaneous 0.05 more than doubles mean brain energy";EN["spont"]>2*EN["a"]];
-.t.ok["--spontaneous 2 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --spontaneous 2 --output-dir ",dir,"sp2";{`failed}]];
+/ --spontaneous was removed (2026-11-03): an old command line must fail loudly, not run without it
+.t.ok["--spontaneous (removed) exits non-zero";`failed~@[run;"--seed 5 --bars 1 --spontaneous 0.05 --output-dir ",dir,"sp2";{`failed}]];
 
 / G.3(c) random tie-break, G.5 mouse step and field size: recorded, change the run, validated
 run "--seed 5 --bars 300 --random-tie --output-dir ",dir,"tie";
@@ -190,6 +188,12 @@ run "--seed 5 --bars 400 --distractor --output-dir ",dir,"dog";
 .t.eq["summary records --mice 3 --evasive";(sumOf["mice";`mice];sumOf["mice";`evasive]);(3i;1b)];
 .t.ok["--distractor: the dog is met and counted";(sumOf["dog";`distractor])&0<sumOf["dog";`dogContacts]];
 .t.ok["--mice 3 --evasive and --distractor change the run";(not (logOf "a")~logOf "mice")&not (logOf "a")~logOf "dog"];
+/ A single evasive mouse is respawned away from the cat after a catch, not caught again at once (bug fixed
+/ 2026-11-03: greedy "caught" it ~985 times per 1,000 bars). Greedy catches about 146 per 1,000 bars
+/ without --evasive; a fleeing mouse can't be easier to catch than that.
+run "--seed 5 --bars 400 --evasive --policy greedy --output-dir ",dir,"ev1";
+run "--seed 5 --bars 400 --policy greedy --output-dir ",dir,"ev0";
+.t.ok["--evasive with one mouse: no faster catching than a mouse that doesn't flee";sumOf["ev1";`catches]<=sumOf["ev0";`catches]];
 run "--seed 5 --bars 300 --blink 20:20 --log-state --output-dir ",dir,"st";
 sl: get hsym `$dir,"st/state_log.bin";
 .t.eq["--log-state: one brain state (9 rows x 12) per bar";(count sl`br;count first sl`br);300 108];

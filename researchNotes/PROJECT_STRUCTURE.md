@@ -82,19 +82,23 @@
 │       └── lab_sweep.sh         # Named substrate-lab sweeps → results/lab/<sweep>/
 ├── dashboards/                  # KX Dashboards definitions (Cat Brain live, Cat Brain Compare), connection,
 │   │                            #   builder and install script
+│   ├── start.sh                 # Start the viewer, the Dashboards server and (live) a simulation; prints the address
 │   └── e2e/                     # Firefox end-to-end tests; run_e2e.sh starts everything (live, or `compare`)
 ├── results/                     # Run outputs (gitignored)
 ├── plans/
-│   ├── inProgress/
-│   │   └── OBSTACLES_PLAN.md    # Active: obstacles, a hidden mouse, internal-structure probes
+│   ├── inProgress/              # (none active)
 │   ├── future/
+│   │   ├── METRONOME_PLAN.md    # A sparse clock-like internal input at a fixed spot (replaces --spontaneous)
+│   │   ├── VIEWER_UPLIFT_PLAN.md  # A purpose-built web viewer: world, brain modules and flow, senses and motor, learning
 │   │   ├── PARAMETERS_PLAN.md   # Removing hard-coded values: a parameter registry with defaults in config files
 │   │   ├── VISION_PLAN.md       # Seeing walls and other objects (colour, depth, motion) without flooding the sight brain
 │   │   └── 3D_PLAN.md           # A 3D world and brain, plus the carried substrate research
 │   └── completed/
+│       ├── OBSTACLES_PLAN.md    # Harder worlds, the hidden mouse, internal-structure probes (2026-10-29 to 11-03)
 │       ├── REVIVAL_PLAN.md      # The 2026-10 revival: design intent, findings F1–F22, results, log
 │       └── KX_DASHBOARDS_PLAN.md  # Live viewer and side-by-side comparison (V0–V3)
 ├── researchNotes/
+│   ├── OBSTACLES_RESULTS.md     # The obstacles plan's results and verdicts: what to keep, what to do next
 │   ├── THEORY.md                # Mathematical model, verified results, predictions
 │   ├── BAR_STRUCTURE.md         # One decision cycle step by step
 │   ├── CROSS_FLOW_ARCHITECTURE.md  # Brain edges and pressure mechanisms

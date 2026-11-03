@@ -12,7 +12,7 @@ Parameter values are the current defaults in `cat_mouse.q` (since 2026-10-29: co
 - At an epoch boundary, store that epoch's catch and direction counts.
 - **Catch rate** `rateCounter` = the number of catches in the last 200 bars (`RATE_WINDOW`).
 - **Satiety** (the meta-brain's input, since 2026-10-29): `satiety` decays by `exp(−1/200)` each bar, and each catch adds 1. One MEDIUM unit enters the meta-brain's 5-cell input at the cell for its level: cell 0 (left) starving (< 0.5), 0.5–2, 2–5, 5–10, cell 4 (right) full (≥ 10). There is always exactly one unit of meta input. (Until 2026-10-29 the input was a positional code of `rateCounter`, and zero catches meant no input at all; F22.)
-- **Internal input** (opt-in, W.1b): `--efference` adds a MEDIUM unit at row 1 above the output slot that moved the cat last bar; `--spontaneous P` adds a unit to each cell with probability P from a random direction. Both add, capped at HIGH, rather than overwrite.
+- **Internal input** (opt-in, W.1b): `--efference` adds a MEDIUM unit at row 1 above the output slot that moved the cat last bar. It adds, capped at HIGH, rather than overwriting. (`--spontaneous`, random resting activity, was removed on 2026-11-03; see plans/future/METRONOME_PLAN.md.)
 
 ## 2. World update and vision
 - **Re-learning worlds** (G.4, only with `--relearn-schedule`): at the start of each bar the current world sets the cat's *eyes* (which input column a vision slice lights), its *legs* (which direction each output slot moves) and its *goal* (chase or flee). In a FLEE world the direct reward is negated and the catch boost and strategic lookback are off. See `q/modules/world/relearn.q`.

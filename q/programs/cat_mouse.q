@@ -69,8 +69,6 @@
 /                         Scripted policies move 5 units a bar and turn learning off. Writes world_log.csv
 /   --efference           internal input: last bar's motor command (output slot a) lights row 1, column
 /                         OUT_OFF+a (an efference copy; W.1b, user 2026-10-29: a brain always has input)
-/   --spontaneous P       internal input: every bar each cell gains one unit with probability P, from a
-/                         random direction (resting activity). All three add energy, capped at HIGH
 /   --relearn-schedule S  re-learning test (G.4): flick between worlds, e.g. "A:10000,L180:5000,A:5000"
 /                         (A normal, L180/L90 legs rotated, E180 eyes rotated, FLEE goal flipped).
 /                         Sets the run length; writes relearn_log.csv and switches.csv

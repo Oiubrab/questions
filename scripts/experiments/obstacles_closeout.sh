@@ -31,16 +31,15 @@ for w in "${WORLDS[@]}"; do
     # shellcheck disable=SC2086
     rt "o_${n}_noTouch" -- --bars $B $f --no-touch; A+=(results/o_${n}_noTouch_$T);; esac
   case $n in blink20|pillars|rooms)
-    # shellcheck disable=SC2086
-    rt "o_${n}_spont" -- --bars $B $f --spontaneous 0.05
+    # (the --spontaneous 0.05 arm was removed with the flag on 2026-11-03; its results are kept in results/)
     # shellcheck disable=SC2086
     rt "o_${n}_hidCos" -- --bars $B $f --hidden-reward cos
     # shellcheck disable=SC2086
     rt "o_${n}_noMeta" -- --bars $B $f --ablate-meta
-    A+=(results/o_${n}_spont_$T results/o_${n}_hidCos_$T results/o_${n}_noMeta_$T);; esac
+    A+=(results/o_${n}_hidCos_$T results/o_${n}_noMeta_$T);; esac
   for p in random reactive persist greedy planner; do A+=(results/o_${n}_${p}_$T); done
   { echo "################ WORLD $n ($f)"; q q/programs/analysis/world_report.q "${A[@]}" < /dev/null 2>&1
-    for x in "${A[@]:1}"; do case $x in *_single_*|*_noTouch_*|*_spont_*|*_hidCos_*|*_noMeta_*)
+    for x in "${A[@]:1}"; do case $x in *_single_*|*_noTouch_*|*_hidCos_*|*_noMeta_*)
       echo "######## $(basename $x) vs brain"; q q/programs/analysis/compare.q results/o_${n}_brain_$T $x < /dev/null 2>&1 | sed -n '/PAIRED DIFF/,/^$/p';; esac; done; echo; } >> $REP
 done
 # ---- 2. satiety edges (O.4) ----

@@ -6,7 +6,7 @@ The project also asks a research question about *how* rewards should be delivere
 
 > **Goal:** the cat reliably learns to head towards the mouse, and then finds it when it can't see it. Progress (16 seeds × 20,000 decisions, the current defaults): mean move alignment with the mouse direction is **0.68** (0 is random, ~0.90 is the best possible), against 0.41 with the original rewards and wiring. Every seed learns, typically within ~540 decisions. 7 of 16 seeds reach alignment 0.7 by 10,000 decisions; the target is 14 of 16. See the [revival plan](plans/completed/REVIVAL_PLAN.md) §0 and §6.
 >
-> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs and re-ran the project's main experiment under controlled conditions; the headline result in earlier versions of this README did not hold up. That revival is complete ([REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md)). The active work is [obstacles and a hidden mouse](plans/inProgress/OBSTACLES_PLAN.md); a [3D world and 3D brain](plans/future/3D_PLAN.md) is planned.
+> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs and re-ran the project's main experiment under controlled conditions; the headline result in earlier versions of this README did not hold up. That revival is complete ([REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md)). The active work is [obstacles and a hidden mouse](plans/completed/OBSTACLES_PLAN.md); a [3D world and 3D brain](plans/future/3D_PLAN.md) is planned.
 
 ---
 
@@ -35,7 +35,7 @@ The project also asks a research question about *how* rewards should be delivere
 
 - **Harder worlds** (opt-in): walls that block movement and sight (`--world pillars|wall|rooms|random`), vision that blinks off (`--blink`), an evasive mouse, several mice, a dog to avoid, and scripted comparison cats (`--policy random|greedy|reactive|persist|planner`; the planner follows the shortest path around walls).
 
-With the modular brain (the default), a cat averages about 79 catches per 1000 decisions over 20,000 decisions, statistically the same as the original single brain (85). When the mouse can hide, it does worse than a simple scripted cat, and its brain holds no memory of where the mouse was ([obstacles plan](plans/inProgress/OBSTACLES_PLAN.md) §6).
+With the modular brain (the default), a cat averages about 79 catches per 1000 decisions over 20,000 decisions, statistically the same as the original single brain (85). When the mouse can hide, it does worse than a simple scripted cat, and its brain holds no memory of where the mouse was ([obstacles plan](plans/completed/OBSTACLES_PLAN.md) §6).
 
 ---
 
@@ -68,7 +68,7 @@ Full numbers and caveats are in [REVIVAL_PLAN.md §6](plans/completed/REVIVAL_PL
 - Gentler, cosine-based rewards and angle-ordered output wiring took alignment from 0.41 to 0.68. Both are now the defaults.
 - The meta-brain was redesigned around satiety (hunger vs fullness). In the open world it still doesn't help: removing it *raises* alignment by about 0.06.
 - Re-learning after the world changes takes a few hundred to a few thousand decisions, and gets no faster with practice.
-- With walls and a hidden mouse, the brain gets trapped against walls and shows no memory of where the mouse was. A scripted cat that simply moves at random when it loses sight beats it. The [obstacles plan](plans/inProgress/OBSTACLES_PLAN.md) is about changing that.
+- November 2026: the brain became modular (sight, touch and reward brains feeding a central brain), and was tested in nine worlds with walls and a hidden mouse against scripted cats ([results and verdicts](researchNotes/OBSTACLES_RESULTS.md)). Touch and the modular layout are clear wins with walls. But the brain has no memory of where the mouse was, and a scripted cat that simply moves at random when it loses sight still beats it in 8 of the 9 worlds.
 
 ---
 
@@ -108,6 +108,16 @@ q/tests/run_all.sh
 
 An unknown flag stops the run with an error, so a typo can't silently run the wrong condition.
 
+### Dashboards (live viewer and run comparison)
+
+```bash
+dashboards/start.sh                                  # live viewer + a simulation (seed 42, 20,000 bars)
+dashboards/start.sh live -- --seed 7 --world rooms   # the same with your own simulation flags
+dashboards/start.sh compare results/A/s1 results/B/s1   # two finished runs side by side
+```
+
+It starts the viewer process and the KX Dashboards server, prints the address, and stops everything on Ctrl-C. Bookmarkable addresses (they work while the script runs): live `http://localhost:10001/#/5c0f0e5a-ca7b-4ab1-9d11-0a7b0c4a7b01`, compare `http://localhost:10001/#/5c0f0e5a-ca7b-4ab1-9d11-0a7b0c4a7b02`. Ports, replay speed and the Dashboards install location are environment variables, listed at the top of the script. `dashboards/e2e/run_e2e.sh` runs the same thing under Firefox as a test.
+
 ### Outputs (per run)
 
 | File | Contents |
@@ -136,7 +146,9 @@ See [scripts/experiments/META_EXPERIMENT_README.md](scripts/experiments/META_EXP
 
 | Document | Covers |
 |---|---|
-| [OBSTACLES_PLAN.md](plans/inProgress/OBSTACLES_PLAN.md) | **Active plan:** obstacles, a hidden mouse, internal-structure probes |
+| [OBSTACLES_RESULTS.md](researchNotes/OBSTACLES_RESULTS.md) | **Read first:** what every element did in every world, what to keep, what to do next |
+| [OBSTACLES_PLAN.md](plans/completed/OBSTACLES_PLAN.md) | The completed obstacles plan: harder worlds, a hidden mouse, internal-structure probes |
+| [VISION_PLAN.md](plans/future/VISION_PLAN.md), [VIEWER_UPLIFT_PLAN.md](plans/future/VIEWER_UPLIFT_PLAN.md), [PARAMETERS_PLAN.md](plans/future/PARAMETERS_PLAN.md), [METRONOME_PLAN.md](plans/future/METRONOME_PLAN.md) | Future plans: richer vision, a better viewer, no hard-coded values, a clock-like internal input |
 | [3D_PLAN.md](plans/future/3D_PLAN.md) | Future plan: a 3D world and brain, and the substrate research it builds on |
 | [REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md) | The completed revival: design intent, audit findings, fixes, every result so far |
 | [KX_DASHBOARDS_PLAN.md](plans/completed/KX_DASHBOARDS_PLAN.md) | The completed live viewer and the side-by-side run comparison |

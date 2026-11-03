@@ -113,12 +113,12 @@ show catchPerEpoch
 show "Average brain pressure: ",string avg simLog`pressure
 
 / One-row machine-readable run summary, read by q/programs/analysis/compare.q
-summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges!
+summary: enlist `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges!
   (userSeed; MAX_BARS; (not noDirectRewards)&(not noLearning); (not noMetaRewards)&(not noLearning); ablateMeta; noLearning; `$weightFile;
   catchesCount; totalMoves; movesTowards; movesAway; movesPerp; avg simLog`pressure; avg simLog`alignment; acquisitionTime; cosReward; REWARD_SCALE; pgUpdate; PG_ETA; rpe; RPE_RATE; .brain.HEBB; `$relearnSpec; wrapWorld; WEIGHT_RATIO; WIRING; `$raze string wiringPerm;
   WORLD; `$blinkSpec; POLICY; HIDDEN_REWARD; seeThrough; avg wVis; avg (simLog`alignment) where wVis; avg (simLog`alignment) where not wVis;
   avg wBlocked where 0i<simLog`moveDist; $[any wCaught; `float$med deltas 0,1+where wCaught; 0n];
-  efference; SPONT; avg `float$satCells; randomTie; MOUSE_STEP; FIELD_SIZE; twoTS; TAU_FAST; TAU_SLOW; $[MODULAR; `modular; `single]; $[MODULAR; CENTRAL_ROWS; 0Ni]; MODULAR & not noTouch; $[MODULAR; META_ENTRY; `right]; NMICE; evasive; distractor; dogContacts; LAYOUT_EVERY; `$"|" sv string .brain.SAT_EDGES)
+  efference; avg `float$satCells; randomTie; MOUSE_STEP; FIELD_SIZE; twoTS; TAU_FAST; TAU_SLOW; $[MODULAR; `modular; `single]; $[MODULAR; CENTRAL_ROWS; 0Ni]; MODULAR & not noTouch; $[MODULAR; META_ENTRY; `right]; NMICE; evasive; distractor; dogContacts; LAYOUT_EVERY; `$"|" sv string .brain.SAT_EDGES)
 saveCsv[outputDir;"summary.csv";summary]
 
 / G.4 re-learning outputs: the per-bar goal-alignment log and one metrics row per block

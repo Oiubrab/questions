@@ -1,11 +1,11 @@
 # Revival Plan — ForWhoseAdvantage / Questions
 
 **Status: COMPLETED 2026-10-29** (closed at the user's request; plan moved to `plans/completed/`).
-- **North star (§0):** the cat learns to head towards the mouse: yes, reliably (16/16 seeds acquire, median ~540 bars, alignment 0.68 against 0.41 originally). The stretch target (≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: 7/16 with the default brain, 11/16 with the meta-brain ablated. It carries over to the [obstacles plan](../inProgress/OBSTACLES_PLAN.md) §0, where where the meta-brain's output enters (its decision 3) is the most direct lever.
+- **North star (§0):** the cat learns to head towards the mouse: yes, reliably (16/16 seeds acquire, median ~540 bars, alignment 0.68 against 0.41 originally). The stretch target (≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: 7/16 with the default brain, 11/16 with the meta-brain ablated. It carries over to the [obstacles plan](../completed/OBSTACLES_PLAN.md) §0, where where the meta-brain's output enters (its decision 3) is the most direct lever.
 - **Kept, and now the defaults:** cosine reward (G.3a), reward scale 0.25 (G.3b), hebb 250 (G.R3), wrapped world (§7 decision 1), angle output wiring (§7 decision 6), the satiety meta-brain (§2 point 9).
 - **Tested and not kept:** policy-gradient update and reward baseline (G.R1/G.R2), narrower weight range (G.R4), two-timescale weights (G.R5), random tie-break (G.3c), efference copy (W.1b).
 - **Retired by the user:** G.R6 and Phase 5 (they would replace the satiety reward).
-- **Moved on:** Phase W and Phase I → `plans/inProgress/OBSTACLES_PLAN.md`; Phase S S.3b–S.7, M.6, P.5 and W.7 → `plans/future/3D_PLAN.md`.
+- **Moved on:** Phase W and Phase I → `plans/completed/OBSTACLES_PLAN.md`; Phase S S.3b–S.7, M.6, P.5 and W.7 → `plans/future/3D_PLAN.md`.
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -415,7 +415,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
 - Doya 2002, *Neural Networks* (metalearning and neuromodulation)
 
 ### Phase W — Harder worlds, and Phase I — internal-structure probes (added 2026-10-29)
-**Moved to [plans/inProgress/OBSTACLES_PLAN.md](../inProgress/OBSTACLES_PLAN.md) on 2026-10-29**, with the user's agreement, as the revival plan closed. That plan holds the full task text, the world code description, the pilot results and the decisions (reward while hidden, getting unstuck, where the meta-brain's output enters, senses).
+**Moved to [plans/completed/OBSTACLES_PLAN.md](../completed/OBSTACLES_PLAN.md) on 2026-10-29**, with the user's agreement, as the revival plan closed. That plan holds the full task text, the world code description, the pilot results and the decisions (reward while hidden, getting unstuck, where the meta-brain's output enters, senses).
 - [x] **W.0–W.6** moved to the obstacles plan (W.0–W.3 partly done there: world module, scripted baselines, pilot). *(2026-10-29)*
 - [x] **W.1b** internal input: the satiety meta input is built into the default (§2 point 9); `--efference` measured and not kept; `--spontaneous` carried to the obstacles plan. *(2026-10-29)*
 - [x] **W.7** (3D) moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md). *(2026-10-29)*
@@ -935,7 +935,7 @@ G.4 schedule in the default world, 16 seeds, against the plain brain (`results/r
 The working configuration became the default: cosine reward (G.3a), reward scale 0.25 (G.3b), hebb 250 (G.R3), wrapped world (§7 decision 1) and angle wiring (§7 decision 6), together with the satiety meta-brain (§2 point 9). **Verified before the golden update:** a default 20,000-bar run of seed 1 is byte-identical (weights and the full simulation log) to the same run with those flags given explicitly on the previous code. Golden digest `0f94f45a7a90eec9cfe0520ebd6a47dc`. Restore flags: `--raw-dot-reward`, `--reward-scale 1`, `--hebb 1000`, `--walled-world`, `--wiring grid`.
 
 ### Obstacle worlds pilot (2026-10-29)
-Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_PLAN.md) §6. In short: walls trap any fixed heading; a memoryless cat that moves randomly when it loses sight beats the brain by far in pillars and rooms; the brain shows no memory; the efference copy is harmful.
+Moved with Phase W: full tables in the [obstacles plan](../completed/OBSTACLES_PLAN.md) §6. In short: walls trap any fixed heading; a memoryless cat that moves randomly when it loses sight beats the brain by far in pillars and rooms; the brain shows no memory; the efference copy is harmful.
 
 ### Phase S — substrate lab, sweep S.3 (2026-10-24)
 
@@ -1165,5 +1165,5 @@ Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_
 - **P.7** profiled (≈1.2 ms/bar; propagation ~half); P.6 measured negligible; P.5 moved to the 3D plan.
 - **Dashboards V3.1/V3.2** built: Cat Brain Compare (two replayed runs side by side, route maps from weights), with a Firefox e2e test.
 - **Valves 2/3** removed from the docs, and their dead code (`.brain.leftwardPull`, `.dirs.hBias`) deleted.
-- New plans: `plans/inProgress/OBSTACLES_PLAN.md` (active) and `plans/future/3D_PLAN.md`. This plan and the dashboards plan moved to `plans/completed/`. CLAUDE.md, README and the research notes updated.
+- New plans: `plans/completed/OBSTACLES_PLAN.md` (active) and `plans/future/3D_PLAN.md`. This plan and the dashboards plan moved to `plans/completed/`. CLAUDE.md, README and the research notes updated.
 
