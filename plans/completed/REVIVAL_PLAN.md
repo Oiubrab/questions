@@ -1,9 +1,11 @@
 # Revival Plan — ForWhoseAdvantage / Questions
 
-**Status as of 2026-10-25:**
-- **North star (§0):** the cat learns to head towards the mouse. **Phase G is the top priority.**
-- **Done:** Phases 0, 1, 2, 3 (except 3.4) and 6; S.1–S.3; M.1–M.2; G.0–G.2 (including 3.5 and P.0–P.4); G.3(a) and G.3(b) (both kept, opt-in flags). **Planned:** Phase G.R (G.R0–G.R6).
-- **Next:** **user decision on output wiring in the wrapped world (§7 decision 6)**: the untrained wiring is the binding constraint for chasing on a torus (§6). Meanwhile G.R5 (two-timescale weights, for savings) can be built. Working configuration: `--cos-reward --reward-scale 0.25 --hebb 250`, plus `--wrap-world` (the chosen geometry).
+**Status: COMPLETED 2026-10-29** (closed at the user's request; plan moved to `plans/completed/`).
+- **North star (§0):** the cat learns to head towards the mouse: yes, reliably (16/16 seeds acquire, median ~540 bars, alignment 0.68 against 0.41 originally). The stretch target (≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: 7/16 with the default brain, 11/16 with the meta-brain ablated. It carries over to the [obstacles plan](../inProgress/OBSTACLES_PLAN.md) §0, where where the meta-brain's output enters (its decision 3) is the most direct lever.
+- **Kept, and now the defaults:** cosine reward (G.3a), reward scale 0.25 (G.3b), hebb 250 (G.R3), wrapped world (§7 decision 1), angle output wiring (§7 decision 6), the satiety meta-brain (§2 point 9).
+- **Tested and not kept:** policy-gradient update and reward baseline (G.R1/G.R2), narrower weight range (G.R4), two-timescale weights (G.R5), random tie-break (G.3c), efference copy (W.1b).
+- **Retired by the user:** G.R6 and Phase 5 (they would replace the satiety reward).
+- **Moved on:** Phase W and Phase I → `plans/inProgress/OBSTACLES_PLAN.md`; Phase S S.3b–S.7, M.6, P.5 and W.7 → `plans/future/3D_PLAN.md`.
 
 See the checkboxes and the Progress Log at the bottom.
 
@@ -28,6 +30,8 @@ This is a working document. It is written so that any LLM session, or a human, c
 "Towards %" (cos > 0) is too lenient to be the goal metric: about half of all directions qualify.
 
 **Proposed targets** (the user can adjust them): alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars; acquisition faster than the current baseline, with paired CI excluding 0; reversal recovery in ≤ 5k bars.
+
+**The next north star (user, 2026-10-29): the cat finds a mouse it can't see.** In the open world the best possible policy is a memoryless lookup table (slice → direction), so the current task can never reward internal structure. Phase W adds worlds where the mouse can be out of sight (blinking vision, then walls that block sight and movement); Phase I measures whether internal structure forms. Phase G's targets still come first, but every G change is now also judged on whether it helps in W.
 
 **Priority rule:** Phase G comes first. Phase P (speed) is worked as G's enabler. Phase S and Phase M continue only where they feed G, e.g. a lab or theory result that suggests a reward or decay change to try on the cat.
 
@@ -72,6 +76,8 @@ A q/kdb-x simulation of a "cat" learning to hunt a "mouse" on a 100×100 field.
 5. **Hierarchy:** the reward for one system is set by another system *of the same kind*, which gets its own, more basic reward. Structure on structure on structure. The primary brain/meta-brain pair is the first instance of this.
 6. **Constraint:** keep the core mechanism, i.e. energy moving by usage-weighted probabilistic choice. Replacing it with a cellular-automaton state rule ("option A") was **rejected** by the user.
 7. **Unconditional usage reinforcement must stay** (user, 2026-10-25). Strengthening a route simply because it was used, whatever the reward, is part of the design, not a flaw. It's what lets the system **retool and reweight itself when conditions change**, and what lets it be **creative**: it keeps routes alive that reward hasn't (yet) singled out. Don't remove it or gate it entirely behind reward. The tunable quantity is the **ratio** between unconditional (usage) reinforcement and directed (reward/goal) reinforcement.
+8. **A brain always receives input** (user, 2026-10-29): "a real organic brain is always receiving input. Even if the organism isn't really doing anything … not just from the outside world, but from itself internally. So there has to be [that] replicated here within the brain system." The current brain can fall completely silent (F22). Internal input channels are task W.1b.
+9. **The meta-brain's input is a hunger-to-full scale, and its motivation is to be full** (user, 2026-10-29). "The smaller brain should always be giving an output even when there are zero catches … you have a feeling of hunger as well as a feeling of full." And, rejecting a flag for it: "it should be inbuilt in the concept of the input of the smaller brain … energy comes in on the left when there's starving, and energy comes in on the right when it's completely full. And then there's some in between … the motivation should be to … change the system so that energy comes in on the right and avoid energy coming in on the left … it'll flow through into the output, and then that'll determine some reward structure that will then self-assemble into something that is useful." **Built into the default, not a flag** (§7 decision 10). Don't add design principles as opt-in flags; flags are for experiments and ablations.
 
 History: Fortran → OpenMP and GPU → meta-brain experiments (Jan 2026, commit `c6f1c17`) → q port by an LLM (Mar 2026, `aab6bff`). The Fortran source is only in git history: `git show c6f1c17:src/programs/cat_mouse_learning.f90`.
 
@@ -183,6 +189,11 @@ Line numbers refer to the code **as of commit `380a227`**, before any fixes.
 
 ---
 
+- **F22 — With the mouse hidden, the only input is the meta-brain's cross-flow, and it is a fixed drift that switches off when the cat is failing** (found 2026-10-29 in the Phase W smoke runs, raised by the user's question "there's still input from the smaller brain, so shouldn't the cat keep moving?").
+  - The meta-brain's input is the catch count over the last 200 bars. With no recent catch, its input is all zero, so it injects nothing. A cat that loses sight of the mouse and has no recent catch gets **no input at all** and stops: in a pillars smoke run (seed 3) it froze behind a pillar for 1,990 of 2,000 bars.
+  - With a recent catch, cross-flow keeps the cat moving: 57% of hidden bars in a blink 20:20 smoke run, against 2% without. But the energy enters the right column (col 11) and drains down to the nearest output, so **312 of 359 hidden moves used slot 7** (south-east under grid wiring). Hidden-bar alignment just follows where the mouse happens to be (−0.45 to +0.47 across hidden-bar buckets). That's a reflex drift, not memory.
+  - Consequences: (1) the meta-brain's design decides what the cat does when blind, so Phase W gives it its first measurable job (the Phase 3 null was in the open world); the W pilot ablates it. (2) The drive switches off exactly when the cat is failing, the opposite of what a search needs. §7 decision 10.
+
 ## 4. Ground rules for working in this repo
 
 - **q precedence:** always parenthesise the left operand: `(a*b)+c*d`. For vector norms, use `.vision.norm` (added in Phase 1). Watch out for `f x < y`, which means `f (x<y)`.
@@ -251,7 +262,7 @@ The whole protocol is scripted: `scripts/phase3_experiment.sh [K] [TRAIN_BARS] [
 - [x] **3.1** Train the 16 brains. *(2026-10-24: 16 × 20k bars in 781 s; all completed)*
 - [x] **3.2** Run arms A–D. *(2026-10-24: 4 × 16 × 10k bars; all completed. Wall time: A 430 s, B 234 s, C 47 s, D 238 s. C being 5× faster is unexplained, and worth a look: presumably much less brain activity.)*
 - [x] **3.3** Analyse with `compare.q`. Write a results table into section 6 of this document. *(2026-10-24: see section 6. Also fixed `compare.q` to pivot epochs when arms have different epoch counts, and widened its console.)*
-- [~] **3.4** Report to the user. The interpretation and next research direction are the user's call (see section 7). *(2026-10-24: reported; decision 4 is awaiting the user's answer.)*
+- [x] **3.4** Report to the user. The interpretation and next research direction are the user's call (see section 7). *(2026-10-24: reported; decision 4 is awaiting the user's answer.)* *(2026-10-29: closed. Decision 4 was superseded by the user's later directions: Phase G (the north star), the substrate lab (decision 5), the satiety meta-brain (§2 point 9))*
 - [x] **3.5** No-learning baseline. Run a fresh brain with all learning disabled (no rewards, no Hebbian +1000, no decay) for 16 seeds × 20k bars. This gives the catch rate and towards % of an untrained cat. The README's learning-curve numbers (8 → 37 catches per 1000 bars) have no chance-level reference yet. It needs a new `--no-learning` flag. *(2026-10-25: all 16 seeds validated at 20k bars; see §6, Phase G.1.)*
 
 ### Phase G — The goal track: the cat learns to head towards the mouse (top priority; §0)
@@ -266,12 +277,12 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - [x] (b) **current code**: 16 seeds × 20k bars, recording alignment, acquisition time and catches. *(2026-10-25: all seeds and epoch totals validated; results in §6.)*
   - These are the numbers every later change must beat.
 - [x] **G.2** Speed, so iteration is fast enough: Phase P tasks P.0–P.4, in that order. The aim is a 20k-bar run in under 1 minute instead of ~6.5; P.0's golden test guards behaviour. *(2026-10-25: target met. A fresh 20,000-bar run (seed 7, single process) takes 20.8 s.)*
-- [~] **G.3** Reward fixes suggested by the audit and the theory. Try them one at a time, measured against G.1 (from (b) on: against the best configuration so far):
+- [x] **G.3** Reward fixes suggested by the audit and the theory. *(2026-10-29: closed. (a), (b), (e) kept and now defaults; (c) not kept; (d) superseded.)* Try them one at a time, measured against G.1 (from (b) on: against the best configuration so far):
   - [x] (a) normalise `dotP` so the reward tracks real alignment (F10, Phase 4.1); *(2026-10-25: `--cos-reward`, opt-in. Paired 16 seeds × 20k vs a same-day baseline: catches **+24%** (CI +44.7 to +213.3 per run), alignment +0.035 (CI −0.005 to +0.074), acquired 14/16 vs 11/16. **Kept**: later G.3 steps run with `--cos-reward` on; making it the default is deferred to the end of G.3 because it changes the golden digest. Results in §6.)*
   - [x] (b) bounded log-space reward increments instead of ×2.22 repeated up to ~43 times (THEORY.md §8, P7, Phase 4.3); *(2026-10-25: `--reward-scale L` multiplies every primary-brain reward log-step by L with identical RNG use. Sweep on top of `--cos-reward`, paired vs L=1: L=0.25 gives catches **+49%** (CI +228 to +451 per run), alignment **+0.149** (CI +0.106 to +0.195), **16/16** acquired, median acquisition 1,200 bars (vs 5,543). L=0.1 and L=0.5 are also significantly better than L=1; L=0.1 vs L=0.25 is indistinguishable (plateau). **Kept at L=0.25.** THEORY.md P7 refuted: weights got sparser, not graded. Results in §6.)*
-  - (c) random tie-break in the action choice (F11, Phase 4.2);
-  - (d) a meta-brain saturation fix (Phase 4.4);
-  - (e) **only with user approval:** angle-ordered output wiring (THEORY.md §3.1, P4, M.4).
+  - [x] (c) random tie-break in the action choice (F11, Phase 4.2); *(2026-10-29: `--random-tie`, **not kept**: alignment −0.254 (CI −0.340 to −0.165), catches −42%. With the meta-brain ablated the same change costs only −0.049 (CI −0.117 to +0.011, ns): the lowest-slot tie rule shields the cat from the meta-brain's cross-flow, which drains to the highest slot. Evidence for obstacles plan O.2. §6.)*
+  - [x] (d) a meta-brain saturation fix (Phase 4.4); *(2026-10-29: superseded by the satiety redesign, which removed the saturating rewards.)*
+  - [x] (e) **only with user approval:** angle-ordered output wiring (THEORY.md §3.1, P4, M.4). *(2026-10-29: approved and done; now the default. §6 "Output wiring".)*
 - [x] **G.4** **Re-learning: how well, and especially how fast, does the brain re-learn when its world changes?** *(Redesigned 2026-10-27 with the user: every kind of change is part of the test, flicking between them; speed of re-learning is the main question, and every metric below is reported, not just speed.)*
   - **Worlds.** Each changes one thing and keeps everything else as-is:
 
@@ -310,8 +321,8 @@ Work in order. Each change must beat the current baseline in a paired experiment
     - Tests: `test_relearn.q` (22: world mappings, parsing, metrics on synthetic series with hand-computed t½=350 and t₀.₆=759, censoring, small-drop flag) and `test_weights.q` +6 (run length, outputs, row counts, bad world, `--bars` mismatch). Full suite: 188 assertions.
     - **Design lesson from the smoke run:** E180 straight after FLEE barely hurt (flee policy + reversed eyes ≈ chase), which is why every perturbation is preceded by an `A` block.
     - **Known confound:** in FLEE the cat is clamped to the box while the mouse wraps (F12), so a fleeing cat can get pinned against a wall. The smoke run learned to flee (t₀.₆ = 564) and then lost it. Note this when reading FLEE numbers.
-- [ ] **G.5** Generalisation checks for the final configuration: other mouse speeds, field sizes and seeds. Then rerun the Phase 3-style meta-brain controls on the improved cat.
-- [ ] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments.
+- [x] **G.5** Generalisation checks for the final configuration: other mouse speeds, field sizes and seeds. Then rerun the Phase 3-style meta-brain controls on the improved cat. *(2026-10-29: done (§6 "G.5 generalisation"). On the default configuration, 16 seeds × 20k, paired: every variant still acquires 16/16. A slower mouse (step 1) is easier (alignment +0.072, CI +0.025 to +0.125); a faster mouse (step 4, +0.042), a smaller field (70, +0.028) and a larger one (140, +0.004) are not significantly different. The Phase 3-style meta-brain control was rerun on the improved cat: the satiety meta-brain doesn't beat its ablation (§6))*
+- [x] **G.6** Use the policy predictor (THEORY.md §3.2, task M.3) to screen candidate configurations cheaply before running full paired experiments. *(2026-10-29: done via M.3. The weights-only predictor (`q/programs/policy_ceiling.q`, wiring-aware) predicts catches across conditions (r = 0.97 between condition means), and every report since G.R0 has used it to screen and explain arms)*
 
 ### Phase G.R — A principled learning rule (from the literature; added 2026-10-25 at the user's request)
 
@@ -371,7 +382,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - The current cap/floor ratio is 2,000,000 / 25 = 80,000. A floor route next to a capped one has p ≈ 25/(7·25+2·10⁶) ≈ 1.2×10⁻⁵, so it's never tried again. **Prediction:** reversal (G.4) will be very slow with the current bounds. Undoing a capped route at reward scale 0.25 needs ≈ 11.3/0.21 ≈ 54 punish calls *per route on the path*.
   - Add `--weight-ratio ρ` (W_max/W_min, e.g. 100, 1000, 10⁴) so every route keeps p ≥ p_min.
   - Measure the trade-off: steady-state alignment (it may drop slightly from forced exploration) vs reversal recovery time (G.4). Test as part of G.4.
-- [ ] **G.R5** **Two-timescale synapses** (synaptic consolidation; Fusi, Drew & Abbott 2005; Benna & Fusi 2016).
+- [x] **G.R5** **Two-timescale synapses** (synaptic consolidation; Fusi, Drew & Abbott 2005; Benna & Fusi 2016). *(2026-10-29: built (`--two-timescale --tau-fast --tau-slow`; 11-component weights; tests in `test_synapses.q` and `test_weights.q`) and **not kept**. On G.4 with τ_s ∈ {50, 200, 800} decay periods, recovered levels are 0.06–0.34 *lower* than the plain brain at almost every switch (most CIs exclude 0), many perturbed worlds never reach 0.6 within their block, and there are still no savings. §6 "G.R5")*
   - Each weight is $\theta = \theta_{fast} + \theta_{slow}$. Rewards update $\theta_{fast}$, which decays with a short $\tau_f$. A fraction κ of $\theta_{fast}$ consolidates into $\theta_{slow}$ each period, and $\theta_{slow}$ decays with a long $\tau_s$.
   - Rationale (THEORY.md §7): a single forgetting time $\tau_d$ can't be both short for re-learning and long for retention. Two can.
   - Flags `--two-timescale`, `--tau-fast`, `--tau-slow`, `--consolidate κ`. Weight files must save both parts; extend `test_weights.q`.
@@ -384,7 +395,7 @@ Work in order. Each change must beat the current baseline in a paired experiment
   - **Flags:** `--two-timescale --tau-fast N --tau-slow N`. Weight files gain an 11th component (M) **only** when the flag is on; `--load-weights` accepts 10 or 11.
   - **Tests:** with $M$ fixed at the floor and noise as today, it matches plain decay in expectation; W relaxes towards a fixed M at the stated rate; M tracks a constant ln W with time constant $\tau_s$; flag off is bit-identical; 11-component save/load round trip.
   - **Judged on G.4 savings:** t₀.₆ of the 2nd–4th returns to A against the 1st, and the re-learning ratio, in the wrapped world. Sweep e.g. $\tau_s$ ∈ {50, 200, 800} periods and `--tau-fast` ∈ {default, faster}.
-- [ ] **G.R6** **Hierarchy as actor–critic plus neuromodulation** (Barto, Sutton & Anderson 1983, adaptive critic; Doya 2002, "Metalearning and neuromodulation").
+- [x] **G.R6** **Hierarchy as actor–critic plus neuromodulation** (Barto, Sutton & Anderson 1983, adaptive critic; Doya 2002, "Metalearning and neuromodulation"). *(2026-10-29: **retired by the user.** Making the meta-brain a critic would replace the satiety reward the user designed (§2 point 9))*
   - The meta-brain becomes the **critic**. It learns to *predict* the primary's reward from its own input (catch-rate code, optionally the vision slice). That prediction replaces G.R1's running average as $\bar R$, and the critic's own prediction error is its **basic reward**.
   - Optionally, the critic also sets the primary's inverse temperature α (exploration) and learning rate η, which are Doya's noradrenaline and acetylcholine roles. Today's scope and magnitude outputs are the existing hook.
   - This is exactly the user's hierarchy (§2, point 5): a system of the same kind sets the other's reward, and has its own more basic reward. It realises Phase 5 in literature-backed form.
@@ -403,19 +414,26 @@ Work in order. Each change must beat the current baseline in a paired experiment
 - Barto, Sutton & Anderson 1983, *IEEE Trans. SMC* (actor–critic)
 - Doya 2002, *Neural Networks* (metalearning and neuromodulation)
 
+### Phase W — Harder worlds, and Phase I — internal-structure probes (added 2026-10-29)
+**Moved to [plans/inProgress/OBSTACLES_PLAN.md](../inProgress/OBSTACLES_PLAN.md) on 2026-10-29**, with the user's agreement, as the revival plan closed. That plan holds the full task text, the world code description, the pilot results and the decisions (reward while hidden, getting unstuck, where the meta-brain's output enters, senses).
+- [x] **W.0–W.6** moved to the obstacles plan (W.0–W.3 partly done there: world module, scripted baselines, pilot). *(2026-10-29)*
+- [x] **W.1b** internal input: the satiety meta input is built into the default (§2 point 9); `--efference` measured and not kept; `--spontaneous` carried to the obstacles plan. *(2026-10-29)*
+- [x] **W.7** (3D) moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md). *(2026-10-29)*
+- [x] **I.1–I.5** moved to the obstacles plan. *(2026-10-29)*
+
 ### Phase 4 — Reward-dynamics hygiene
 These are behavioural changes. Measure each one against the Phase 3 arm A baseline, with ≥8 seeds.
-- [ ] **4.1** Normalise `dotP` by the move length, so `adaptThresh` is a real cosine threshold (F10).
-- [ ] **4.2** Random tie-break in the output action (F11).
-- [ ] **4.3** Replace repeated ×2.2 multiplications (`do[k; applyReinforce]`) with a single bounded update per bar (e.g. additive in the log domain, scaled by k). Unify caps (F10).
-- [ ] **4.4** Stop meta-brain saturation: remove `do[rateCounter; …]`, or scale it to the log of the rate (F8).
+- [x] **4.1** Normalise `dotP` by the move length, so `adaptThresh` is a real cosine threshold (F10). *(2026-10-29: done as G.3(a), `--cos-reward`, now the default)*
+- [x] **4.2** Random tie-break in the output action (F11). *(2026-10-29: done as G.3(c), `--random-tie`; see G.3)*
+- [x] **4.3** Replace repeated ×2.2 multiplications (`do[k; applyReinforce]`) with a single bounded update per bar (e.g. additive in the log domain, scaled by k). Unify caps (F10). *(2026-10-29: done as G.3(b), `--reward-scale`, 0.25 now the default)*
+- [x] **4.4** Stop meta-brain saturation: remove `do[rateCounter; …]`, or scale it to the log of the rate (F8). *(2026-10-29: superseded. The satiety redesign (§2 point 9) removed all three saturating catch-count meta rewards, including `do[rateCounter; …]`)*
 - [x] **4.5** Make the world consistent (F12): either fully toroidal (cat wraps; vision uses toroidal dx/dy) or fully bounded. **User decision (section 7).** *(2026-10-28: user chose fully toroidal. `--wrap-world`: the cat wraps like the mouse. Vision, the direction reward, the alignment metric and the catch test all use `.vision.torDelta`, the nearest copy of the mouse across the edges; the catch test checks the unwrapped path against that copy. Without the flag, behaviour is bit-identical (golden). Tests: torDelta vs toroidalDist on 1,000 random pairs, edge cases, wrapPos, east-edge vision; integration run checks the cat stays in the field and crosses an edge.)*
 
 ### Phase 5 — Meta-brain redesign so it *can* learn (needs Phase 4)
 *Superseded in approach by G.R6 (actor–critic). Keep these tasks as the fallback if G.R6 doesn't beat its controls.*
-- [ ] **5.1** Output-contingent credit. Record the meta-brain's synapse usage when it emits a decision. Some bars later, reward or punish those synapses by `Δrate` = (catch rate after) − (running-average baseline).
-- [ ] **5.2** Gate output. One meta output decides *whether* strategic reinforcement fires, replacing the hard-coded `rateCounter>=3`.
-- [ ] **5.3** Evaluation. The redesigned meta-brain must beat its own ablation (arm D style), paired, with ≥16 seeds and a CI excluding 0. Otherwise report a null result.
+- [x] **5.1** Output-contingent credit. Record the meta-brain's synapse usage when it emits a decision. Some bars later, reward or punish those synapses by `Δrate` = (catch rate after) − (running-average baseline). *(2026-10-29: **retired by the user** with G.R6: it would replace the satiety reward)*
+- [x] **5.2** Gate output. One meta output decides *whether* strategic reinforcement fires, replacing the hard-coded `rateCounter>=3`. *(2026-10-29: **retired by the user** with G.R6)*
+- [x] **5.3** Evaluation. The redesigned meta-brain must beat its own ablation (arm D style), paired, with ≥16 seeds and a CI excluding 0. Otherwise report a null result. *(2026-10-29: the evaluation itself was run on the satiety meta-brain (open world, 16 seeds × 20k): it does **not** beat its ablation; ablating it raises alignment +0.057 (CI +0.019 to +0.098). Reported as a negative result in §6; where its output enters is task O.2 of the obstacles plan)*
 
 ### Phase S — Substrate lab: get self-sustaining activity *before* reconnecting the cat
 This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse.q`. The lab uses its own module, `q/modules/substrate.q` (`.sub`): a configurable copy of the propagation rule. **The core rule stays the same** (usage-weighted probabilistic energy moves, Hebbian strengthening, conservation). Only its surroundings change:
@@ -441,14 +459,14 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
   - **route sharpness** = average max choice probability over all (cell, inDir);
   - **route turnover** = fraction of (cell, inDir) whose strongest route changed since the last sample (reorganisation).
 - [x] **S.3** Sweep 1 — closed system with no input. Which settings give activity that persists, isn't jammed, and builds routes that also turn over? Is F19's left pile caused by processing order? *(2026-10-24: done. 147 runs in 171 s; `results/lab/s3/report.txt`. Results are in §6 under "Phase S". Two report bugs were fixed: names with dots were skipped, and `cols` as a column name.)*
-- [ ] **S.3b** Reorganisation. In S.3, route turnover in the structured configs (≈0.003–0.008 per 50 steps) sits at the noise floor that decay alone produces (hebb-0 runs: ≈0.004–0.014). So structures form but **don't break down and reorganise** (design intent, point 2).
+- [x] **S.3b** Reorganisation. In S.3, route turnover in the structured configs (≈0.003–0.008 per 50 steps) sits at the noise floor that decay alone produces (hebb-0 runs: ≈0.004–0.014). So structures form but **don't break down and reorganise** (design intent, point 2). *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.1, with the user's agreement: the 3D work starts in the same lab)*
   - Sweep decay strength and interval against `hebb` (e.g. decay every 5–60 steps; hebb 100–1000) on the two middle-regime configs.
   - Target: persistence still well above churn (~0.3–0.8) *and* turnover clearly above the noise floor.
   - Needs a `--decay-rate` option. Decay is currently fixed at ×0.98–0.995.
-- [ ] **S.4** Perturbation response for promising configs. Run twin copies with identical randomness, poke one, and track how the difference evolves: it dies out (forgets), stays bounded, or spreads. This is the "input churns through it" property.
-- [ ] **S.5** Open system: input injection plus a thermostat (set-point drain), and a non-destructive output readout.
-- [ ] **S.6** Two coupled substrates: one sets the other's reward, and gets a basic reward itself (design intent, point 5).
-- [ ] **S.7** **User decision:** what to port back into `cat_mouse.q`, then re-run Phase 3-style controls.
+- [x] **S.4** Perturbation response for promising configs. Run twin copies with identical randomness, poke one, and track how the difference evolves: it dies out (forgets), stays bounded, or spreads. This is the "input churns through it" property. *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.2, with the user's agreement: the 3D work starts in the same lab)*
+- [x] **S.5** Open system: input injection plus a thermostat (set-point drain), and a non-destructive output readout. *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.3, with the user's agreement: the 3D work starts in the same lab)*
+- [x] **S.6** Two coupled substrates: one sets the other's reward, and gets a basic reward itself (design intent, point 5). *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.4, with the user's agreement: the 3D work starts in the same lab)*
+- [x] **S.7** **User decision:** what to port back into `cat_mouse.q`, then re-run Phase 3-style controls. *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as A.5, with the user's agreement: the 3D work starts in the same lab)*
 
 ### Phase M — Mathematical theory (user request, 2026-10-24)
 [THEORY.md](../../researchNotes/THEORY.md) is the reference. Every claim in it is tagged Derived / Verified / Consistent / Prediction / Conjecture. `q/programs/theory_checks.q` reproduces every Verified number.
@@ -461,10 +479,10 @@ This phase was chosen by the user (§7 decision 5). It doesn't modify `cat_mouse
     - the untrained policy is anti-aligned (E[cos] −0.22) because of the output wiring;
     - trained weights are bimodal (96% at the floor, ~3% ≥1M).
 - [x] **M.2** Reproducible checks: `q/programs/theory_checks.q`. *(2026-10-24: runs in ~2 s; output matches THEORY.md.)*
-- [ ] **M.3** Test P5: does the weights-only predictor also predict catches in arms B–D? If so, promote it to a tool (e.g. `q/programs/policy.q WEIGHTS`) and consider it as a cheap fitness or reward signal.
-- [ ] **M.4** Test P4: angle-ordered output wiring (slot s → direction at 45s°). Add a `--wiring angle` flag to `cat_mouse.q` and run paired training (16 seeds). Compare acquisition speed and catches. **User decision first:** a built-in prior may or may not fit the project's goals.
-- [ ] **M.5** Literature check before claiming novelty. The combination in THEORY.md §6.1 (many walkers + capacity-2 exclusion + direction-conditioned reinforcement + decay + tunable superlinearity) should be checked against the ACO, Physarum, reinforced-random-walk and exclusion-process literature.
-- [ ] **M.6** Verify the mean-field fundamental diagram (P1) and Little's law with injection (P6), once S.5 adds a flux metric and an input. Then update THEORY.md's status tags.
+- [x] **M.3** Test P5: does the weights-only predictor also predict catches in arms B–D? If so, promote it to a tool (e.g. `q/programs/policy.q WEIGHTS`) and consider it as a cheap fitness or reward signal. *(2026-10-29: **P5 confirmed.** Over 144 brains in 9 conditions (Phase 3 arms A–D including meta-only, three wirings, satiety meta, meta ablated) the weights-only E[cos] correlates with catches per 1,000 bars at r = 0.78 pooled, 0.49–0.77 within each condition and 0.97 between condition means. `policy_ceiling.q` is the tool (now wiring-aware). As a reward signal: not pursued, since it would bypass the energy dynamics)*
+- [x] **M.4** Test P4: angle-ordered output wiring (slot s → direction at 45s°). Add a `--wiring angle` flag to `cat_mouse.q` and run paired training (16 seeds). Compare acquisition speed and catches. **User decision first:** a built-in prior may or may not fit the project's goals. *(2026-10-29: done with the user's approval (§7 decision 6). P4 confirmed; angle wiring is now the default. §6 "Output wiring")*
+- [x] **M.5** Literature check before claiming novelty. The combination in THEORY.md §6.1 (many walkers + capacity-2 exclusion + direction-conditioned reinforcement + decay + tunable superlinearity) should be checked against the ACO, Physarum, reinforced-random-walk and exclusion-process literature. *(2026-10-29: done (a brief web search; THEORY.md §6.1). Every ingredient has close prior art: Chowdhury–Schadschneider ant-trail exclusion with pheromone; interacting edge-reinforced walks; the directed edge reinforced random walk (trapped in directed circuits on non-tree graphs); current-reinforced walks for Physarum and ants. The full combination wasn't found, so the claim stays a Conjecture, not "novel")*
+- [x] **M.6** Verify the mean-field fundamental diagram (P1) and Little's law with injection (P6), once S.5 adds a flux metric and an input. Then update THEORY.md's status tags. *(2026-10-29: moved to the 3D plan, inside A.3 (it needs the open-system lab))*
 
 Phase S tasks should use the theory's predictions: P2 and P3 belong in S.3b's design.
 
@@ -513,7 +531,7 @@ Other facts from the benchmark:
 - [x] **P.2** *(tier 2)* Sparse usage. Record `su` as a list of used flat indices per bar, not a 4,608-boolean array, and make `hist` a 100-slot list of index lists. Reinforce/punish then touch only the used indices. *(2026-10-25: integrated sorted sparse usage/history in the simulation; dense propagation remains available to the substrate lab and saved weight files retain dense history. Dense/sparse propagation is equivalent in a seeded step; save/load with populated history and 2,000-bar reward/catch smoke tests pass. Updated tier-2 golden MD5: `4e7d460ae07a59feb626e8dcdcf615f5`. Full suite: 117 assertions pass. Matched 16-seed 20k comparison vs G.1: catches +38.19/run (95% CI −66.5 to +127), alignment −0.00612 (95% CI −0.04653 to +0.02823), both CIs include 0. A 200-call 6×12 reinforcement microbenchmark measured 18.20 ms dense vs 8.16 ms sparse (2.23×).)*
 - [x] **P.3** *(tier 2)* Strategic lookback in one shot: count occurrences of each sparse synapse index across selected history slots, then update each weight once by `mag xexp occurrenceCount`, instead of repeated whole-array passes. Integer truncation may differ slightly from sequential scaling. *(2026-10-25: focused reference/cap tests pass; 2,000-bar smoke and P.0 digest pass; full suite: 112 assertions. Benchmark: 80 slots × 13 used indices, 20 repetitions: 51.40 ms sequential vs 1.11 ms counted (46.2×). Matched 16-seed 20k comparison vs P.2: catches +13.25/run (95% CI −1.5 to +41.25); alignment +0.00742 (95% CI −0.00365 to +0.02590); both intervals include zero.)*
 - [x] **P.4** *(tier 2)* Collapse repeated sparse reward loops into one per-synapse update with multiplier `m^k` times the product of k independent noise draws. *(2026-10-25: batched helpers preserve RNG continuation in focused tests; full suite: 118 assertions. 100-call microbenchmark for eight repeats on 13 used synapses: reinforce 29.39 ms → 4.20 ms (6.99×); punish 28.08 ms → 4.25 ms (6.61×). Matched 16-seed 20k comparison vs P.3: catches −12.125/run (95% CI −30.375 to +1.3125), alignment −0.00020 (95% CI −0.01042 to +0.01004); both intervals include zero.)*
-- [ ] **P.5** Propagation, once it's the bottleneck after P.1–P.4. In order:
+- [x] **P.5** Propagation, once it's the bottleneck after P.1–P.4. In order: *(2026-10-29: moved to the 3D plan, Stage C. (a)/(b) would trim at most ~15–25% of a cat bar (P.7), but propagation is ~95% of the lab's cost and a 3D brain needs them; (c) is the semantic change that needs the user's approval there)*
   - (a) *tier 1:* avoid copy-on-write in the fold. Unpacking `acc` into locals and repacking a 6-tuple per neuron forces copies. Keep state in globals and amend in place (`.[`.brain.br;…]`), or fold over a flat state.
   - (b) *tier 1:* precompute per-cell neighbour indices and validity masks once, instead of recomputing `nrs/ncs/inBrain8/safeR/safeC` for every neuron at every step.
   - (c) *a **semantic change**, needs user approval:* a synchronous, vectorised step. Every active neuron chooses at once (n×8 weight matrix, row-wise `sums`, n random draws), then conflicts are resolved by capacity, with conservation still exact. This could be 10×+ on large grids, but it changes the dynamics from sequential to simultaneous, so test it in the Phase S lab first.
@@ -533,12 +551,12 @@ Other facts from the benchmark:
   - P.5c is a semantic change. Validate it *in the lab* by checking that the S.3 regimes (frozen / gas / channels) and their metrics reproduce. The random-order setting, already preferred because it removes the F19 artefact, is the closest sequential analogue to a synchronous update with random conflict resolution.
 - The metrics code (`bestR`/`peakP`, nested lambdas over every cell × inDir) costs ~3 ms per sample at 16×16. Vectorise it too if sampling more often.
 
-- [ ] **P.6** Minor: preallocate `simLog` columns rather than appending one row per bar, and build `resetSU` once and reuse it.
-- [ ] **P.7** Re-profile after each step and record the before/after ms per bar here.
+- [x] **P.6** Minor: preallocate `simLog` columns rather than appending one row per bar, and build `resetSU` once and reuse it. *(2026-10-29: measured and **not actioned**: appending a row to `simLog` costs 0.003 ms per bar (0.2% of a bar), and the sparse `su` reset is negligible)*
+- [x] **P.7** Re-profile after each step and record the before/after ms per bar here. *(2026-10-29: profiled at the default configuration: ≈1.2 ms per bar. Primary propagation 0.35 ms (12 steps), meta propagation 0.26 ms (24 steps), a reinforce or punish 0.06 ms, decay 0.03 ms per bar averaged; the rest is the bar loop. Brain energy is tiny (one or two active cells per step), so propagation cost is mostly per-step overhead)*
 
 ### Phase 7 — Optional
-- [ ] **7.1** ~~Performance: profile `.brain.stepNeuron`.~~ Superseded by Phase P. The profile shows propagation isn't the hot path.
-- [x] **7.2** Visualisation of `simLog` trajectories (the old Python tools were deleted in `aab6bff`). *(2026-10-25: superseded by the KX Dashboards viewer, see plans/inProgress/KX_DASHBOARDS_PLAN.md. Phases V0-V2 done.)*
+- [x] **7.1** ~~Performance: profile `.brain.stepNeuron`.~~ Superseded by Phase P. The profile shows propagation isn't the hot path. *(2026-10-29: closed as superseded)*
+- [x] **7.2** Visualisation of `simLog` trajectories (the old Python tools were deleted in `aab6bff`). *(2026-10-25: superseded by the KX Dashboards viewer, see plans/completed/KX_DASHBOARDS_PLAN.md. Phases V0-V2 done.)*
 
 ---
 
@@ -672,6 +690,50 @@ L=0.1 vs L=0.25 directly: catches −8.8 (CI −223.7 to +213.7), alignment −0
 Gentler rewards give a sparser skeleton of strong routes, not graded weights, yet much better hunting.
 
 **Against §0:** relative to the original G.1-style baseline (552.8 catches, 0.412 alignment, 11/16 acquired), the G.3(a)+(b) configuration gives **1,021.6 catches (+85%), 0.596 alignment, 16/16 acquired, median 1,200 bars**. The target (alignment ≥ 0.7 in ≥ 14/16 seeds by 10k bars) is **not met**: best is 6/16 (L=0.1). The ceiling of ~0.6–0.65 is now the main gap.
+
+### The satiety meta-brain against the old meta-brain and against no meta-brain (2026-10-29)
+
+Open wrapped world, angle wiring, working configuration (now the default), 16 seeds × 20k bars, paired. Report: `results/ss_satiety_report_20261029.txt`.
+
+| Arm | Alignment | Catches/run | Acquired | Median acquisition | ≥ 0.7 at 10k bars |
+|---|---|---|---|---|---|
+| old catch-count meta (`ss_wireangle`) | 0.682 | 1,625 | 16/16 | 530 | 7/16 |
+| **satiety meta** (the user's design, now the default) | 0.680 | 1,702 | 16/16 | 538 | 7/16 |
+| satiety meta ablated (`--ablate-meta`) | **0.737** | 1,783 | 16/16 | 500 | **11/16** |
+
+- Satiety vs old: alignment −0.002 (CI −0.066 to +0.059), catches +77 (CI −146 to +293). **No difference** in the open world.
+- Ablating the meta-brain: alignment **+0.057 (CI +0.019 to +0.098)**, catches +81 (CI −142 to +299). The meta-brain's cross-flow *costs* alignment in the open world, consistent with the ≈0.06 "execution loss" found in G.R0 (§6 "where the 0.6 ceiling lives"). This is task 5.3's evaluation, and it is negative.
+- Calibration: a good chaser sits at satiety cell 3.9 of 4, so in the open world the meta-brain's input and reward barely vary (obstacles plan O.4).
+- In worlds where the mouse can hide, the meta-brain's cross-flow is the brain's only input while the mouse is hidden, and drives a fixed drift (F22; obstacles plan §6).
+
+### Output wiring in the wrapped world: §7 decision 6 (2026-10-29)
+
+All arms: `--cos-reward --reward-scale 0.25 --hebb 250 --wrap-world`, seeds 1–16, paired. Reports: `results/ss_wire_report_20261029.txt` (steady state, 20k bars) and `results/rl_report_wire20261029.txt` (G.4).
+
+**Steady state**
+
+| Wiring | Untrained E[cos] (predicted, before the runs) | Alignment | Δ vs grid (95% CI) | Catches/run | Acquired | Median acquisition | Weights-only predicted |
+|---|---|---|---|---|---|---|---|
+| grid | −0.25 | 0.408 | — | 964 | 7/16 | 2,793 bars | 0.603 |
+| random | +0.01 | 0.576 | **+0.168 (+0.083, +0.255)** | 1,401 (+45%, CI +175 to +710) | 14/16 | 833 | 0.726 |
+| **angle** | +0.31 | **0.682** | **+0.274 (+0.197, +0.340)** | **1,625 (+69%, CI +438 to +866)** | **16/16** | **530** | 0.759 |
+
+- Learning adds a lot under every wiring (+0.37 to +0.66 over the untrained level), but **the final ranking follows the starting bias**: the learning rule doesn't escape a bad prior within 20k bars. Angle wiring reaches 0.65 in the first epoch.
+- **Kept:** `--wiring angle` joins the working configuration. Random wiring is the fairer test of the learning rule and stays as a generality check.
+- North-star target (≥ 0.7 in ≥ 14/16 by 10k bars): angle's mean is 0.69 at epoch 5, so still just short.
+
+**Re-learning (G.4)**
+
+| | grid | random | angle |
+|---|---|---|---|
+| First acquisition of A, median t₀.₆ | 1,448 | 760 | **516** |
+| Returns to A: recovered level (1st–4th) | 0.39 / 0.35 / 0.45 / 0.45 | 0.44 / 0.41 / 0.59 / 0.47 | 0.46 / 0.38 / 0.64 / 0.56 |
+| Fresh A level, for comparison | 0.40 | 0.60 | 0.69 |
+| Fresh FLEE t₀.₆ | 500 | 607 | 965 |
+
+- Paired against grid, angle recovers to a better level after FLEE and L90 (+0.19, CI +0.10 to +0.27; +0.11, CI +0.02 to +0.19), but **not after L180 or E180** (CIs include 0). There, learning has overwritten the favourable starting bias, and the return to A recovers only 0.46 / 0.38 against the fresh 0.69. Re-learning ratios for angle are 1.3–7.7: the old habits interfere badly.
+- As predicted, the worlds the angle prior disfavours are learned more slowly fresh (FLEE 965, E180 1,395, L180 1,197 bars).
+- **Still no savings** under any wiring. G.R5 remains the candidate.
 
 ### Wrapped world (user's chosen geometry), weight ratio, and the wiring prior (2026-10-28)
 
@@ -848,6 +910,33 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - At the best arm, the weights-only prediction no longer explains seed-to-seed differences (r = 0.07), so at the top end, execution noise dominates between-seed variation.
 - Caveat: predicted E[cos] uses slice-centre angles, so it reads ~2–3% optimistic against true-angle alignment.
 
+### G.5 generalisation (2026-10-29)
+Default configuration, 16 seeds × 20k bars, paired against the default (`results/closeout_report_20261029.txt`):
+
+| Variant | Alignment | Δ alignment (95% CI) | Catches/run | Δ catches (95% CI) | Acquired | Median acquisition |
+|---|---|---|---|---|---|---|
+| default (mouse step 2, field 100) | 0.680 | — | 1,702 | — | 16/16 | 538 |
+| mouse step 1 | 0.751 | **+0.072 (+0.025, +0.125)** | 1,821 | +119 (−74, +321) | 16/16 | 533 |
+| mouse step 4 | 0.722 | +0.042 (−0.019, +0.102) | 1,803 | +100 (−128, +312) | 16/16 | 508 |
+| field 70 | 0.708 | +0.028 (−0.034, +0.093) | 1,897 | +195 (−13, +418) | 16/16 | 524 |
+| field 140 | 0.684 | +0.004 (−0.038, +0.049) | 1,701 | −1 (−149, +148) | 16/16 | 529 |
+
+The learning generalises across these mouse speeds and field sizes: nothing gets worse, and a slower mouse is easier.
+
+### G.3(c) random tie-break (2026-10-29)
+`--random-tie`, default configuration, 16 seeds × 20k, paired: alignment 0.425 vs 0.680, **−0.254 (CI −0.340 to −0.165)**; catches −42% (CI −1,012 to −397 per run); 6/16 acquired, median 4,585 bars. **Not kept.**
+
+**Why it hurts so much: the meta-brain.** With the meta-brain ablated, the same change costs only −0.049 (CI −0.117 to +0.011; 0.688 vs 0.737; `results/tie_nometa_report_20261029.txt`). The meta-brain's cross-flow enters the right column and drains to the highest output slot; the default lowest-slot tie rule makes that drift lose every tie against a vision-driven move. A random tie-break hands it half of those ties. So the tie rule has been shielding the chase from the cross-flow, and this is the second piece of evidence (after the ablation result) that the cross-flow's entry point is the problem (obstacles plan O.2, decision 3).
+
+### G.R5 two-timescale weights (2026-10-29)
+G.4 schedule in the default world, 16 seeds, against the plain brain (`results/rl_report_grr520261029.txt`). Returns to A, recovered level (1st / 2nd / 3rd / 4th): plain 0.52 / 0.43 / 0.69 / 0.64; τ_s = 50: 0.40 / 0.34 / 0.41 / 0.45; τ_s = 200: 0.39 / 0.37 / 0.44 / 0.49; τ_s = 800: 0.45 / 0.40 / 0.46 / 0.49. Paired recovered-level differences are negative at almost every switch for every τ_s (e.g. τ_s = 50: −0.12 to −0.30, CIs excluding 0 at 7 of 8 switches). Many t₀.₆ are censored. **Not kept.** Likely mechanism: relaxing the fast weights towards the slow memory at the old decay rate anchors them to the previous world (and, early on, to the random initial weights), which opposes new learning instead of preserving useful structure. A variant that consolidates only when performing well (reward-gated consolidation) is untested. The plain brain itself still shows no savings: returns to A take t₀.₆ 1,069 / 2,162 / 2,182 / 543 bars against 534 the first time.
+
+### Defaults milestone (2026-10-29, user-approved)
+The working configuration became the default: cosine reward (G.3a), reward scale 0.25 (G.3b), hebb 250 (G.R3), wrapped world (§7 decision 1) and angle wiring (§7 decision 6), together with the satiety meta-brain (§2 point 9). **Verified before the golden update:** a default 20,000-bar run of seed 1 is byte-identical (weights and the full simulation log) to the same run with those flags given explicitly on the previous code. Golden digest `0f94f45a7a90eec9cfe0520ebd6a47dc`. Restore flags: `--raw-dot-reward`, `--reward-scale 1`, `--hebb 1000`, `--walled-world`, `--wiring grid`.
+
+### Obstacle worlds pilot (2026-10-29)
+Moved with Phase W: full tables in the [obstacles plan](../inProgress/OBSTACLES_PLAN.md) §6. In short: walls trap any fixed heading; a memoryless cat that moves randomly when it loses sight beats the brain by far in pillars and rooms; the brain shows no memory; the efference copy is harmful.
+
 ### Phase S — substrate lab, sweep S.3 (2026-10-24)
 
 **Setup:**
@@ -884,14 +973,14 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 ## 7. Open decisions for the user
 
 1. **World geometry (4.5):** fully toroidal or bounded box? **ANSWERED 2026-10-28: the world wraps for both cat and mouse (fully toroidal).** Implemented as `--wrap-world` (opt-in until the defaults milestone below).
-2. **Unimplemented "valves" (6.3):** implement pressure-dependent leftward drain and bias steepening, or delete them from the docs?
-3. **Fortran fidelity:** Phase 1 restores what the code *intended*, not what Fortran actually did (dead strategic path, fixed-slot catch boost). Is there any reason to reproduce the Fortran behaviour exactly, e.g. to replicate the old numbers? Current assumption: no.
+2. **Unimplemented "valves" (6.3):** implement pressure-dependent leftward drain and bias steepening, or delete them from the docs? **ANSWERED 2026-10-29: delete.** Removed from CROSS_FLOW_ARCHITECTURE.md, with the dead `.brain.leftwardPull` and the unused `.dirs.hBias`. Energy control continues as the thermostat task in the 3D plan (A.3).
+3. **Fortran fidelity:** Phase 1 restores what the code *intended*, not what Fortran actually did (dead strategic path, fixed-slot catch boost). Is there any reason to reproduce the Fortran behaviour exactly, e.g. to replicate the old numbers? Current assumption: no. **CLOSED 2026-10-29:** the assumption held throughout; nobody needed the Fortran numbers, and the defaults have since moved on deliberately.
 4. **After Phase 3** (now answered: the meta-brain contributes nothing, and meta-only halves performance). Which direction next?
    - (a) Phase 4 then Phase 5: make the meta-brain able to learn, then re-test.
    - (b) Reframe around *why some trained brains self-sustain without tactical reward while most decay* (e.g. compare weight saturation, pathway sparsity and brain energy of ids 103/106/115 vs 105/109/111 at the end of training).
    - (c) Both, with (b) first, because it's cheap: the data is already in `results/p3_train/`.
 
-   **Blocking Phase 4/5 until the user picks.**
+   **Blocking Phase 4/5 until the user picks.** **SUPERSEDED 2026-10-29:** decision 5 and the user's later directions replaced it (Phase G, the lab, the satiety meta-brain). Phase 4 was done through G.3; Phase 5 was retired by the user.
 5. **The user's actual goal** (stated 2026-10-24): self-propelling activity that lives in the brain, is perturbed by input, and develops emergent "machines", like Conway's Game of Life. F19 shows the current substrate can't do this. Open choices:
    - Is strict energy conservation a principle to keep, or was it just a means to an end? GoL-style emergence and strict conservation are in tension.
    - Which substrate direction to take? Proposed options:
@@ -912,6 +1001,22 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
      - (b) **Random output wiring per seed:** a neutral prior on average, with more seed-to-seed variance.
      - (c) **Keep the current wiring** and try to fix it through learning instead, e.g. a stronger or more persistent punishment for repeated wrong moves, or the ratio tuned for the torus.
    - **Recommendation:** test (a) and (b) as paired arms against (c) in the wrapped world. That's cheap, and it separates "the prior matters" from "the learning rule can't overcome a bad prior", which is itself a useful generality test.
+   - **ANSWERED 2026-10-29:** the user agreed: test (a) and (b) against (c). `--wiring grid|angle|random` implemented. Untrained predicted E[cos] over 16 seeds: grid −0.25, random +0.01 (−0.22 to +0.16), angle +0.31.
+   - **Result (§6):** angle wiring is best by a wide margin (alignment 0.68 vs 0.41, 16/16 acquired) and is now in the working configuration; random wiring stays as the generality check.
+7. **Reward while the mouse is hidden** (Phase W.3; raised 2026-10-29). **MOVED 2026-10-29 → obstacles plan §7 decision 1.**
+   - (a) **Straight-line cosine, as now.** The reward always knows where the mouse is. Near walls it rewards pushing into the wall when the mouse is behind it.
+   - (b) **Geodesic progress:** reward = the drop in shortest-path distance around walls ÷ move length. In the open field it equals the cosine to first order, so it generalises the current reward. It acts like a "smell gradient". Needs a distance field over a grid, recomputed when the mouse moves (every 10 bars).
+   - (c) **No directed reward while hidden**: only usage reinforcement and the catch boost. The purest test of whether a search strategy is discovered, but very sparse (meta-only, which is also sparse, halved performance).
+   - **Recommendation:** (b) as the main arm and (c) as the hard arm. Implemented meanwhile: (a), and (c) as `--hidden-reward none`.
+8. **Senses and brain layout for W.4.** Vision only, or add touch? If touch, widen the top row (e.g. 6×16: 8 vision + 8 touch columns; propagation already takes rows and columns as parameters) or inject touch into the side columns. **Recommendation:** vision only for W.1–W.3; touch as a paired arm in W.4 with a wider top row. **MOVED 2026-10-29 → obstacles plan §7 decision 4.**
+9. **3D (W.7): when, and which lattice?** **Recommendation:** after W.3 is measured and Phase S has a configuration with persistent activity. Build it in `.sub` with 6- and 26-neighbour variants and compare persistence there before connecting a cat. **MOVED 2026-10-29 → 3D plan §7 decisions 2–4.**
+10. **What drives the cat when it can't see** (F22). Today the meta-brain's input is the recent catch rate, so it goes silent when the cat is failing, and its output drains to one output slot (a fixed heading). **MOVED 2026-10-29 → answered (satiety, §2 point 9); its follow-up, where the meta-brain's output enters, is obstacles plan §7 decision 3.**
+    - (a) Leave it, and measure it in the W pilot (with an `--ablate-meta` arm).
+    - (b) **"Hunger" input:** encode bars since the last catch, so the drive grows while the cat is failing. Stays within the design: the meta-brain still sets the primary brain's conditions from a more basic signal.
+    - (c) Make the zero-rate state a code of its own, so the meta-brain is never silent.
+    - (d) Spread the cross-flow over more of the primary brain (it now enters one column), so it can mix with vision traces instead of draining to one slot.
+    - **Recommendation:** (a) now; then (b) as a paired arm in W.1/W.3, because it is the smallest change that gives the cat a reason to search.
+    - **ANSWERED 2026-10-29:** the user chose (b), but built in, not as a flag: the meta-brain's input *is* a hunger-to-full scale (energy enters on the left when starving, on the right when full), and its reward is to move that entry point right (§2 point 9). More broadly, a brain always receives input, from itself as well as the world (§2 point 8). Implemented as the default meta input and reward (W.1b).
 
 ## 8. Progress Log
 
@@ -978,7 +1083,7 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - Preserved bit identity: P.0's 300-bar digest is unchanged. Added `test_synapses.q` to compare old nested reference implementations and post-operation RNG values; all seven assertions pass.
 - Microbenchmark (20 calls, 6×12): reinforcement 7.49 ms → 1.68 ms (4.5×); decay 3.59 ms → 1.24 ms (2.9×). Timing includes flatten/reshape overhead.
 - Full test suite: 83 assertions pass. Next: P.2 sparse usage/history; it is tier 2 and needs the planned ≥16-seed paired equivalence check.
-- User reminder: keep the plan checkboxes and progress log current as each acceptance passes. The open copy under `plans/inProgress/REVIVAL_PLAN.md` was behind; its G.0, G.1, 3.5, P.0 and P.1 status/results are now synced. P.2 prototype is still in progress, not complete.
+- User reminder: keep the plan checkboxes and progress log current as each acceptance passes. The open copy under `plans/completed/REVIVAL_PLAN.md` was behind; its G.0, G.1, 3.5, P.0 and P.1 status/results are now synced. P.2 prototype is still in progress, not complete.
 - P.2 complete: integrated sparse usage/history into the simulation; dense propagation remains available to the substrate lab. One-step dense/sparse equivalence, populated-history save/load, and a 2,000-bar strategic/catch smoke run pass. Tier-2 golden MD5 is `4e7d460ae07a59feb626e8dcdcf615f5`. Full suite: 117 assertions pass. Paired 16-seed results: catches +38.19/run (CI −66.5 to +127); alignment −0.00612 (CI −0.04653 to +0.02823); both intervals include zero. Sparse reinforcement is 2.23× faster in the 6×12 microbenchmark (200 calls, 18.20 ms dense vs 8.16 ms sparse). Next: P.3 strategic lookback batching.
 - P.3 implementation milestone: strategic lookback now combines sparse route counts and scales each used weight once. Focused sequential-reference/cap tests pass, the 2,000-bar seed-42 smoke and golden digest are unchanged, and the full suite passes 112 assertions. An 80-slot / 13-index microbenchmark measured 51.40 ms sequential vs 1.11 ms counted over 20 repetitions (46.2×). P.3 remains in progress until paired 16-seed equivalence completes.
 - P.3 complete: paired 16-seed 20k comparison vs P.2 gives catches +13.25/run (95% CI −1.5 to +41.25) and alignment +0.00742 (95% CI −0.00365 to +0.02590); both include zero. G.2's next item is P.4 reward-loop batching.
@@ -990,7 +1095,7 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - `scripts/e2e_dashboards.sh` drives the dashboard in Firefox with Playwright against the real sim. No learning or performance claims were made.
 
 ### 2026-10-25 — Session 3 (doc consolidation, G.2 close-out, F20)
-- **Docs consolidated.** The user's restructure left two copies of the plan and of five research notes; the plan copies had diverged (root had the G.1 tables and session logs, `plans/inProgress/` had the current P.3/P.4 status). Merged into one canonical `plans/inProgress/REVIVAL_PLAN.md`, kept the newer BAR_STRUCTURE (root, with the `--no-learning` and alignment notes), moved all research notes to `researchNotes/`, removed the root duplicates, and rewrote every relative markdown link for the new locations (script-checked: no broken links). CLAUDE.md now documents the layout and that work happens on `main`.
+- **Docs consolidated.** The user's restructure left two copies of the plan and of five research notes; the plan copies had diverged (root had the G.1 tables and session logs, `plans/inProgress/` had the current P.3/P.4 status). Merged into one canonical `plans/completed/REVIVAL_PLAN.md`, kept the newer BAR_STRUCTURE (root, with the `--no-learning` and alignment notes), moved all research notes to `researchNotes/`, removed the root duplicates, and rewrote every relative markdown link for the new locations (script-checked: no broken links). CLAUDE.md now documents the layout and that work happens on `main`.
 - **G.2 done:** a fresh 20,000-bar run takes 20.8 s (target < 60 s).
 - **F20 fixed:** acquisition time was never recorded. Corrected G.1 baseline: current code acquires in 11/16 seeds (median 7,908 bars among those), not 0/16.
 - Next: G.3(a), normalised direction reward.
@@ -1035,3 +1140,30 @@ Best achievable with 8 slices × 8 directions ≈ 0.90.
 - Tests: 238 assertions pass; golden unchanged.
 - Running: steady state walls vs wrap; R ∈ {80,000, 10,000, 1,000, 100} in the wrapped world (steady state, and G.4 including FLEE).
 - **Wrapped-world batch analysed** (§6). The wrapped world lowers steady-state chase alignment 0.651 → 0.408, which is not a bug (metric re-derived from positions, r=0.992). The failure is concentrated on vision slices 0/1, the two with the worst untrained wiring, and weights-only predictions confirm the weights encode it. FLEE is now learned well (0.88), which confirms the wall confound. G.R4 is not kept (narrower weight ranges are worse). Re-learning still shows no savings. Raised §7 decision 6 (output wiring) for the user; G.R5 can proceed meanwhile.
+
+### 2026-10-29 — Session 6: wiring test, harder worlds
+- Committed the wrapped-world work as `3ee40a8`.
+- **User decision 6:** test angle and random output wiring against grid. `--wiring grid|angle|random` implemented (random draws from its own seed so initial weights stay paired); `.theory.statsW` and `policy_ceiling.q` honour the wiring; summary gains `wiring wiringPerm`. `theory_checks.q` output is byte-identical; 45 weights tests pass.
+- Pre-registered prediction (untrained E[cos], 16 seeds): grid −0.25, random +0.01, angle +0.31.
+- **User request:** expand the testing regime (obstacles, a mouse the cat can't see, later 3D) with efficient training and internal structure as goals. Added **Phase W** (W.0–W.7), **Phase I** (I.1–I.5), the next north star in §0, and §7 decisions 7–9.
+- **Wiring result** (§6): angle ≫ random > grid in steady state (alignment 0.68 / 0.58 / 0.41; angle 16/16 acquired, median 530 bars). The ranking follows the untrained prior. In G.4, angle's advantage is lost after L180/E180 (no win-back to the fresh level) and there are still no savings. `--wiring angle` joins the working configuration.
+- **Process note:** the G.4 random-wiring fresh controls crashed because they started while a `cat_mouse.q` edit (a missing `;`) was in place. Rerun with the fixed code (bit-identical for those flags; golden passes), all 16/16 complete. Lesson: don't edit `cat_mouse.q` while a batch is running.
+- **Phase W built:** `.world` module (layouts none/pillars/wall/rooms/random, slab-method hits, blocked moves, line of sight across wrapped copies, clear spawns; `test_world.q`, 30 tests); `cat_mouse.q --world --see-through --blink --hidden-reward --policy`; `world_log.csv`; `q/programs/world_report.q`; `scripts/world_experiment.sh`.
+- **F22 found** (user's question: "there's still input from the smaller brain, so shouldn't the cat keep moving?"). With the mouse hidden, the only input is cross-flow; it's absent when there's no recent catch (the pillars smoke cat froze for 1,990 of 2,000 bars) and, when present, drains to one output slot (312 of 359 hidden moves in slot 7).
+- **User principles added** (§2 points 8–9): a brain always receives input, external and internal; the meta-brain's input is a hunger-to-full scale. First built as `--meta-hunger` and `--hunger H` flags; **the user rejected flags for a design principle**, so both were removed. Satiety is now the default meta input, and the meta-brain's only reward is graded on it (full reinforced, starving punished). Golden digest updated (`ff9127e5…`). `--efference` and `--spontaneous P` remain opt-in experiments. All tests pass.
+- Stopped the first Phase W pilot (it was testing the rejected flag) and removed its partial results.
+- Running: satiety meta vs old meta vs `--ablate-meta` (open world, 20k bars), then the Phase W pilot.
+
+### 2026-10-29 — Session 7: review and close-out (user request: finish the in-progress plans)
+- **Review first** (user: don't action items that changed or would make things worse). Classified every open item; the user agreed to: move unfinished research to two new plans, make the working configuration the default, retire G.R6/Phase 5 (they'd replace the satiety reward), and delete the unimplemented valves from the docs.
+- **Satiety meta-brain**: no different from the old one in the open world; ablating it raises alignment +0.057 (CI +0.019 to +0.098). Task 5.3's evaluation, negative.
+- **Defaults milestone**: verified byte-identical to the explicit flags (seed 1, 20k bars), then golden updated (`0f94f45a…`).
+- **G.3(c)** random tie-break: not kept (−0.254); without the meta-brain only −0.049 (ns), so the tie rule shields the chase from the cross-flow.
+- **G.5**: generalises across mouse speed 1–4 and field 70–140; slower mouse easier.
+- **G.R5** two-timescale weights: built and tested on G.4, not kept (recovered levels 0.06–0.34 lower; still no savings).
+- **M.3** P5 confirmed (r = 0.97 across condition means); **M.4** P4 confirmed; **M.5** literature check written into THEORY.md §6.1.
+- **P.7** profiled (≈1.2 ms/bar; propagation ~half); P.6 measured negligible; P.5 moved to the 3D plan.
+- **Dashboards V3.1/V3.2** built: Cat Brain Compare (two replayed runs side by side, route maps from weights), with a Firefox e2e test.
+- **Valves 2/3** removed from the docs, and their dead code (`.brain.leftwardPull`, `.dirs.hBias`) deleted.
+- New plans: `plans/inProgress/OBSTACLES_PLAN.md` (active) and `plans/future/3D_PLAN.md`. This plan and the dashboards plan moved to `plans/completed/`. CLAUDE.md, README and the research notes updated.
+

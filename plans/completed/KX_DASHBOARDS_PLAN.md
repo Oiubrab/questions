@@ -80,13 +80,15 @@ The sim runs thousands of steps per second, far faster than eyes can follow. The
 - **Acceptance:** run a live 5000-bar seed and watch energy visibly entering at the top row and leaving at the bottom; check the cat/mouse positions on screen against `simLog` for a few bars. *(2026-10-25: `scripts/e2e_dashboards.sh` runs the real sim (seed 42, 5 ms/step) against the viz server and Firefox: 10 checks pass, including every panel changing within 8 s. Energy is sparse, as expected from pressure < 0.06: typically one or two lit cells. The meta matrix stays dark until catches arrive, so only its presence is checked.)*
 
 ### V3 — Optional
-- [ ] **V3.1** Synapse/route heatmap view.
-- [ ] **V3.2** Side-by-side comparison of two runs (for example a trained vs an untrained brain, or `--no-direct-rewards` vs normal).
-- [ ] **V3.3** Substrate-lab viewer: `.sub` runs on arbitrary grids (up to 16×16 and beyond), where the regimes (frozen / gas / channels) are far easier to recognise visually than from metrics. The publisher interface should take the grid shape from the brain dict rather than hard-coding 6×12.
+- [x] **V3.1** Synapse/route heatmap view. *(2026-10-29: a route map per run, computed by `viz_server.q` from the run's saved `weights_seed*.bin` (`.viz.routesFrom`/`.viz.routesNow`): one bubble per cell coloured by route sharpness (the largest share among its 8 routes, after the downward bias: r0 < 0.4 ≤ r1 < 0.7 ≤ r2), plus a dot offset towards its dominant route. It shows the final weights of a replayed run. A live, evolving map would need the sim to publish weights (a small `.viz` addition); not done. Tests in `test_viz.q` (sharpness within [1/8, 1], dots stay in their cell, a single-route cell reports that route).)*
+- [x] **V3.2** Side-by-side comparison of two runs (for example a trained vs an untrained brain, or `--no-direct-rewards` vs normal). *(2026-10-29: the **Cat Brain Compare** dashboard (`dashboards/catbrain_compare.json`, built by `build_dashboard.py`, installed by `install.sh`): for runs A and B side by side, the route map, the cat/mouse field with trails, the 200-bar catch rate and the 100-bar alignment, each panel labelled. Served by `viz_server.q -replay DIR_A -replay2 DIR_B -rate N`; both runs advance one bar per tick. `scripts/e2e_dashboards.sh compare` runs it in Firefox: title, both route maps and fields with their legends, no loading overlay or subscriber errors, and all four field/curve panels updating during replay (9 checks pass; panel labels are drawn on the canvas, so they were checked on the screenshot). The live dashboard is unchanged apart from fresh ids. `test_viz.q`: both runs fully replayed, fields differ, second run's curves.)*
+- [x] **V3.3** *(2026-10-29: moved to [plans/future/3D_PLAN.md](../future/3D_PLAN.md) as V.1, with the user's agreement: the substrate lab work continues there.)* Substrate-lab viewer: `.sub` runs on arbitrary grids (up to 16×16 and beyond), where the regimes (frozen / gas / channels) are far easier to recognise visually than from metrics. The publisher interface should take the grid shape from the brain dict rather than hard-coding 6×12.
 
 ## Progress log
 
 - **2026-10-25** Plan moved to `inProgress`. Playwright 1.64 is installed globally; Firefox was fetched with `playwright install firefox`, and tests run with `NODE_PATH=/usr/lib/node_modules`. Dashboards definitions can be generated as JSON (the demo dashboards are the template), which avoids driving the editor by hand. Learned: the gateway reads dashboard files at start-up, ChartGL axes inherited from the template must be reset (the template had a Time x-axis and a fixed y range), and the bundled `Heatmap` component is a treemap, not a matrix.
+
+- **2026-10-29** V3.1 (route map) and V3.2 (Cat Brain Compare, side-by-side replay) built and tested; V3.3 moved to the 3D plan. All tasks closed; plan moved to `plans/completed/`. Known flakiness: the live test's "energy matrix updates live" check can fail when both 8-second snapshots happen to show an empty grid (energy is one or two cells, pressure < 0.06); it passed on rerun, and 2 of 3 consecutive runs passed every check.
 
 ## 6. Risks
 
@@ -98,6 +100,7 @@ The sim runs thousands of steps per second, far faster than eyes can follow. The
 - **Do not make performance or learning claims from the viewer.** Anything it appears to show about learning still needs a multi-seed paired experiment (REVIVAL_PLAN §6).
 
 ## 7. Decisions for the user
+**All resolved (2026-10-29):** 1 was answered in V0.1 (Dashboards and its licence were already installed); 2 and 3 by what was built (live view during runs, plus replay; `--viz-delay-ms` exists and changes only wall-clock time); 4 (`--viz-record`) wasn't needed: replay of `simulation_log.csv` and the weights covers what the views show.
 
 1. Is a KX Dashboards instance (and licence) already available, or is that part of V0?
 2. Must live view work during normal runs, or is replay of recorded runs enough for a first version? Replay-only would be simpler and still shows energy flow, and live could follow later.

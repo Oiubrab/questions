@@ -1,37 +1,41 @@
 # ForWhoseAdvantage
 
-A **q/kdb-x** neural simulation in which an artificial cat learns to hunt a mouse. The cat has no neural-network library, no gradients and no backpropagation. Its "brain" is a small grid of three-state neurons that pass units of energy to their neighbours along weighted routes. Learning means strengthening the routes that were in use when something good happened.
+A **q/kdb-x** neural simulation in which an artificial cat learns to hunt a mouse. The cat has no neural-network library, no gradients and no backpropagation. Its "brain" is a set of small grids of three-state neurons that pass units of energy to their neighbours along weighted routes: a sight brain and a touch brain feed a central brain that moves the cat, and a reward brain driven by hunger feeds the central brain too. Learning means strengthening the routes that were in use when something good happened.
 
 The project also asks a research question about *how* rewards should be delivered (see [Research status](#research-status)).
 
-> **Goal:** the cat reliably learns to head towards the mouse. That's the foundation for generalising the system to richer inputs, outputs and rewards. Progress so far (20,000 decisions per seed): with `--cos-reward --reward-scale 0.25 --hebb 250`, mean move alignment with the mouse direction is **0.65** on 32 fresh seeds (0 is random, ~0.90 is the best possible), up from 0.41 with the original rewards. Essentially every seed learns, typically within ~1,400 decisions, and half reach alignment 0.7 by 10,000 decisions. The target, ≥ 0.7 in 14 of 16 seeds by 10,000 decisions, isn't met yet. See [the plan](plans/inProgress/REVIVAL_PLAN.md) §0 and §6.
+> **Goal:** the cat reliably learns to head towards the mouse, and then finds it when it can't see it. Progress (16 seeds × 20,000 decisions, the current defaults): mean move alignment with the mouse direction is **0.68** (0 is random, ~0.90 is the best possible), against 0.41 with the original rewards and wiring. Every seed learns, typically within ~540 decisions. 7 of 16 seeds reach alignment 0.7 by 10,000 decisions; the target is 14 of 16. See the [revival plan](plans/completed/REVIVAL_PLAN.md) §0 and §6.
 >
-> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs, and re-ran the project's main experiment under controlled conditions. The headline result in earlier versions of this README did not hold up. Work in progress is tracked in [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md).
+> **Status (October 2026):** revived after a pause. A full audit found and fixed serious bugs and re-ran the project's main experiment under controlled conditions; the headline result in earlier versions of this README did not hold up. That revival is complete ([REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md)). The active work is [obstacles and a hidden mouse](plans/inProgress/OBSTACLES_PLAN.md); a [3D world and 3D brain](plans/future/3D_PLAN.md) is planned.
 
 ---
 
 ## What it does
 
-- **The world:** a 100×100 field.
-  - The mouse wanders randomly (2 units every 10 decisions) and wraps around the edges.
+- **The world:** a 100×100 field that wraps around at the edges for both animals (`--walled-world` restores the original box for the cat).
+  - The mouse wanders randomly (2 units every 10 decisions).
   - The cat sees only *which of 8 directions* the mouse lies in (45° vision slices).
   - The cat moves 5 or 10 units per decision in one of 8 compass directions.
   - A **catch** is when the cat's path passes within 2 units of the mouse. The mouse then respawns 30–45 units away.
-- **The primary brain:**
-  - A 6×12 grid of **trinary** neurons (LOW/MEDIUM/HIGH = 0/1/2 energy units).
-  - Vision lights up one cell of the top row. Energy then flows through the grid, and whatever reaches the bottom row picks the move.
+- **The brains** (since November 2026; `--single-brain` restores the original single 6×12 brain):
+  - Grids of **trinary** neurons (LOW/MEDIUM/HIGH = 0/1/2 energy units), all of the same kind.
+  - **Sight brain** (3×12): vision lights up one cell of its top row.
+  - **Touch brain** (3×12): eight "whiskers" light when a wall is within 3 units in that direction, and more strongly just after the cat bumped into one.
+  - **Central brain** (3×12): what flows out of the sight and touch brains enters its top row; whatever reaches its bottom row picks the move. The 8 output slots are wired in the same angle order as the vision slices.
   - Each neuron has **64 synapse weights**, one for each (incoming direction, outgoing direction) pair. So where energy goes next depends on where it came from.
   - Energy is **conserved** while it moves; this is enforced by tests.
 - **Learning:**
   - **Direct ("tactical") rewards:** every decision, routes used on a move towards the mouse are strengthened, and routes used on a move away are weakened.
   - **Catch boost:** after each catch, routes used in the last 20 decisions are boosted.
   - **Hebbian strengthening and decay:** every use strengthens a route a little, and all routes slowly decay.
-- **The meta-brain:**
-  - A second, 3×5 brain that sees the recent catch rate.
+- **The reward brain (meta-brain):**
+  - A 3×5 brain whose input is the cat's **satiety**: a store of food that each catch fills and time drains. Energy enters its input on the left when the cat is starving and on the right when it's full, and its only reward is to be full.
   - Its output sets how far back (20–80 decisions) and how strongly to apply a "strategic" reinforcement of past routes. That reinforcement fires whenever the catch rate is high enough.
-  - Its output is also fed into the side of the primary brain.
+  - Its output is also fed into the side of the central brain. When the cat can't see the mouse, that is what keeps it moving.
 
-From a random start, a cat typically goes from about 8 catches per 1000 decisions in its first 2000 decisions to about 37 by its tenth 2000. Across 16 trained brains, about 82% of its moves have a component towards the mouse.
+- **Harder worlds** (opt-in): walls that block movement and sight (`--world pillars|wall|rooms|random`), vision that blinks off (`--blink`), an evasive mouse, several mice, a dog to avoid, and scripted comparison cats (`--policy random|greedy|reactive|persist|planner`; the planner follows the shortest path around walls).
+
+With the modular brain (the default), a cat averages about 79 catches per 1000 decisions over 20,000 decisions, statistically the same as the original single brain (85). When the mouse can hide, it does worse than a simple scripted cat, and its brain holds no memory of where the mouse was ([obstacles plan](plans/inProgress/OBSTACLES_PLAN.md) §6).
 
 ---
 
@@ -58,7 +62,13 @@ What this shows:
 - **The meta-brain contributes nothing measurable:** zeroing its output changes nothing.
 - **A minority of brains (3 of 16) do better without direct rewards,** while others collapse. Testing only the best trained brain, as the old experiment did, will tend to pick out exactly these cases.
 
-The open question now is what lets some brains sustain hunting on their own while most decay. Full numbers and caveats are in [REVIVAL_PLAN.md §6](plans/inProgress/REVIVAL_PLAN.md#6-results).
+Full numbers and caveats are in [REVIVAL_PLAN.md §6](plans/completed/REVIVAL_PLAN.md#6-results).
+
+**Since then (October 2026, all paired over 16 seeds):**
+- Gentler, cosine-based rewards and angle-ordered output wiring took alignment from 0.41 to 0.68. Both are now the defaults.
+- The meta-brain was redesigned around satiety (hunger vs fullness). In the open world it still doesn't help: removing it *raises* alignment by about 0.06.
+- Re-learning after the world changes takes a few hundred to a few thousand decisions, and gets no faster with practice.
+- With walls and a hidden mouse, the brain gets trapped against walls and shows no memory of where the mouse was. A scripted cat that simply moves at random when it loses sight beats it. The [obstacles plan](plans/inProgress/OBSTACLES_PLAN.md) is about changing that.
 
 ---
 
@@ -126,7 +136,10 @@ See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md).
 
 | Document | Covers |
 |---|---|
-| [REVIVAL_PLAN.md](plans/inProgress/REVIVAL_PLAN.md) | Audit findings, fixes, results, and the task list for ongoing work |
+| [OBSTACLES_PLAN.md](plans/inProgress/OBSTACLES_PLAN.md) | **Active plan:** obstacles, a hidden mouse, internal-structure probes |
+| [3D_PLAN.md](plans/future/3D_PLAN.md) | Future plan: a 3D world and brain, and the substrate research it builds on |
+| [REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md) | The completed revival: design intent, audit findings, fixes, every result so far |
+| [KX_DASHBOARDS_PLAN.md](plans/completed/KX_DASHBOARDS_PLAN.md) | The completed live viewer and the side-by-side run comparison |
 | [THEORY.md](researchNotes/THEORY.md) | The mathematics: the brain as a Markov chain, learning as a reinforced urn, memory and reward arithmetic, testable predictions |
 | [BAR_STRUCTURE.md](researchNotes/BAR_STRUCTURE.md) | What happens in one decision cycle ("bar"), step by step, including every reward |
 | [CROSS_FLOW_ARCHITECTURE.md](researchNotes/CROSS_FLOW_ARCHITECTURE.md) | The brain's four input/output edges and the pressure mechanisms (mostly inactive in practice) |

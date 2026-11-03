@@ -7,7 +7,7 @@ Each claim carries a status:
 | Tag | Meaning |
 |---|---|
 | **Derived** | follows from the rules as coded; no experiment needed |
-| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](../plans/inProgress/REVIVAL_PLAN.md) §6 |
+| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](../plans/completed/REVIVAL_PLAN.md) §6 |
 | **Consistent** | explains existing results after the fact (weaker than a prediction made beforehand) |
 | **Prediction** | not yet tested; each has a test proposed in §11 |
 | **Conjecture** | a proposed principle that needs more work to make precise |
@@ -126,7 +126,7 @@ which peaks at **$p \approx 0.5$ with $J \approx 0.56\,v$**, much as TASEP's $\r
 
 ---
 
-## 5. A driven brain: Little's law and the pressure valves
+## 5. A driven brain: Little's law and the pressure controls
 
 With inflow $\lambda$ (units per step) and mean residence $\bar\tau$, the time-averaged energy in the brain is $\bar E = \lambda\,\bar\tau$ (Little's law; Derived). Pressure is $p = \bar E/(2N)$, with $N = 72$ cells.
 
@@ -181,6 +181,13 @@ In log-weights $\theta=\ln W$, the choice rule is $p(o) = e^{\alpha(\theta_o+\ln
 - tunable superlinearity.
 
 I don't know of a standard model with all five. The second-order part means the reinforced object is a *turn*, (incoming → outgoing), rather than an edge. That's what lets lanes keep their heading.
+
+**Literature check (M.5, 2026-10-29; a brief web search, abstracts only, not a systematic review).** Every ingredient has close prior art; the full combination wasn't found. So the honest claim is "not found in a brief search", **not** "novel".
+- **Exclusion + reinforcement + decay:** the Chowdhury–Schadschneider ant-trail model is an asymmetric simple exclusion process in which ants lay pheromone that evaporates and raises the hopping rate (Chowdhury, Guttal & Schadschneider 2002, arXiv cond-mat/0201207; Kunwar et al. 2004, cond-mat/0411666; Schadschneider et al., cond-mat/0310766). It lives on a fixed one-dimensional trail, so nothing is *routed*; the pheromone changes speed, not choice.
+- **Many walkers sharing reinforced weights:** interacting edge-reinforced random walks (Gantert, Michel & Reis 2023, arXiv 2311.08796; Michel's thesis, arXiv 2309.02475). Shared memory destroys the partial exchangeability that single-walker proofs rely on.
+- **Direction-dependent reinforcement:** the directed edge reinforced random walk (Erhard, Franco & Reis 2019, arXiv 1911.07295), modelled on army-ant mills, with a bias that grows exponentially in the crossing count (i.e. superlinear). **On any finite graph that isn't a tree, and on $\mathbb Z^d$ for $d\ge2$, it is almost surely trapped in a directed circuit forever.** That is the strongest pointer for Phase S: superlinear, direction-dependent reinforcement on a lattice favours closed directed loops, i.e. circulating activity, *if* nothing drains the walker first. Here the downward bias and the bottom-row sink do exactly that, which is consistent with F19 and the W.1b measurement (spontaneous energy drains within a bar).
+- **Flow-reinforced transport networks:** current-reinforced random walks for ants and Physarum converge on shortest paths (Ma et al. 2013, PMC3565737); the ants process on series-parallel graphs is analysed with Pólya-urn comparisons (arXiv 2601.22855). Our §5 urn view matches that toolset.
+- **Remaining candidate for novelty:** turn (in-direction × out-direction) reinforcement for many walkers *with* capacity exclusion on a 2D lattice, plus reward modulation and decay. Treat it as a Conjecture until a proper review (exclusion processes with memory; second-order reinforced walks) has been done.
 
 ---
 
@@ -266,8 +273,8 @@ The design intent (REVIVAL_PLAN.md §2) is that a higher system sets how much re
 | P1 | Circulating current in a sealed, wrapped, downward-biased brain peaks near pressure 0.5 | lab sweep over `--fill`, measuring net downward flux | S.5 (new metric) |
 | P2 | The channel transition lies between T ≈ 0.5 and 0.9, and moves towards T = 1 as $\tau_d$ grows | lab sweep T × decay interval | S.3b |
 | P3 | Turnover rises above the noise floor once $\tau_d$ is below the run length and off-channel $\mathcal R$ ≈ 1–10 | lab sweep decay × hebb | S.3b |
-| P4 | Angle-ordered output wiring makes an untrained cat lean towards the mouse (towards 0.66 vs 0.36) and speeds acquisition | policy matrix + paired training runs | M.4 |
-| P5 | The weights-only $E[\cos]$ predicts catches for *other* conditions too (meta-only, new seeds) | rerun §3.2 on arms B–D | M.3 |
+| P4 | Angle-ordered output wiring makes an untrained cat lean towards the mouse (towards 0.66 vs 0.36) and speeds acquisition | policy matrix + paired training runs | **Confirmed** (M.4, 2026-10-29): untrained E[cos] +0.31 vs −0.25 (grid); wrapped-world median acquisition 530 vs 2,793 bars, alignment +0.27 (CI +0.20 to +0.34), 16 seeds |
+| P5 | The weights-only $E[\cos]$ predicts catches for *other* conditions too (meta-only, new seeds) | rerun §3.2 on arms B–D | **Confirmed** (M.3, 2026-10-29): over 144 brains in 9 conditions (Phase 3 arms A–D incl. meta-only, three wirings, satiety meta, meta ablated), r = 0.78 with catches per 1,000 bars pooled, 0.49–0.77 within each condition, 0.97 between condition means |
 | P6 | Pressure reaches 0.1 only when inflow ≳ 11 units per bar | open-system lab with controlled injection | S.5 |
 | P7 | Bounded log-space rewards remove weight bimodality and give graded policies | weight histogram + policy MI after training | **Refuted** (G.3b): weights became sparser, while hunting improved |
 
