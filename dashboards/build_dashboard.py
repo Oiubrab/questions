@@ -6,7 +6,7 @@ Dashboards install (default ~/.kx/dashboards). Output: dashboards/catbrain.json 
 dashboards/catbrain_compare.json (two replayed runs side by side, with route maps) and
 dashboards/connections/catbrain.json. Run dashboards/install.sh to copy them into the install.
 """
-import copy, json, os, sys, uuid
+import copy, itertools, json, os, sys, uuid
 
 DASH = os.path.expanduser(os.environ.get("KX_DASHBOARDS", "~/.kx/dashboards"))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -38,8 +38,12 @@ GRID_TEMPLATE = os.path.join(DASH, "data/dashboards/020c9b8f-f42f-d552-21e2-dfdf
 ALIGN_Q = "select bar, alignAvg from .viz.statsNow[2000]"
 
 
+_ids = itertools.count()
+
+
 def uid():
-    return str(uuid.uuid4())
+    # deterministic, so rebuilding (dashboards/install.sh, dashboards/start.sh) leaves the committed files unchanged
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "catbrain-dashboard/%d" % next(_ids)))
 
 
 def datasource(query, key=""):

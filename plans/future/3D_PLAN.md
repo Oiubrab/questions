@@ -2,7 +2,7 @@
 
 **Status (2026-10-29):** future plan, not started. Written at the user's request when the revival plan closed. It carries the revival plan's unfinished substrate research (Phase S S.3b–S.7, P.5c, M.6), the 3D task W.7 and the dashboards substrate viewer (V3.3), because the 3D work starts in the same substrate lab.
 
-**Read first:** [the revival plan](../completed/REVIVAL_PLAN.md) §2 (design intent, points 1–9), §3 (findings F1–F22) and §6 (results), and [THEORY.md](../../researchNotes/THEORY.md). The active plan is [OBSTACLES_PLAN.md](../inProgress/OBSTACLES_PLAN.md); this one starts only when its prerequisites (§2) are met.
+**Read first:** [the revival plan](../completed/REVIVAL_PLAN.md) §2 (design intent, points 1–9), §3 (findings F1–F22) and §6 (results), and [THEORY.md](../../researchNotes/THEORY.md). The active plan is [OBSTACLES_PLAN.md](../completed/OBSTACLES_PLAN.md); this one starts only when its prerequisites (§2) are met.
 
 **How to use this document:** same rules as the revival plan. Tasks are checkboxes (`[ ]` / `[~]` / `[x]`), ticked only after their acceptance check passes, with the date and what was verified. Every session appends to the Progress Log (§8). Decisions in §7 belong to the user.
 
