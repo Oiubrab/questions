@@ -1,5 +1,5 @@
 // End-to-end check of the Cat Brain Compare dashboard (two replayed runs side by side, with route
-// maps) in Firefox. Run via scripts/e2e_dashboards.sh compare.
+// maps) in Firefox. Run via dashboards/e2e/run_e2e.sh compare.
 const { firefox } = require('playwright');
 const assert = require('assert');
 

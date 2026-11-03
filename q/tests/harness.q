@@ -22,6 +22,9 @@ near:{[name;got;want;tol] report[name;all tol>abs got-want;"got ",(.Q.s1 got),",
 / Boolean condition
 ok:{[name;cond] report[name;all cond;""]}
 
+/ Run q/programs/cat_mouse.q with the given flag string (output discarded), for tests that check what a run writes
+run:{[a] system "env q q/programs/cat_mouse.q ",a," < /dev/null > /dev/null 2>&1"}
+
 done:{[]
   -1 (string .t.passes)," passed, ",(string .t.fails)," failed";
   exit $[.t.fails>0i; 1; 0]}

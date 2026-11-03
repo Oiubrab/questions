@@ -4,12 +4,12 @@
 
 \l q/tests/harness.q
 \l q/load.q
-\l q/modules/world.q
+\l q/modules/world/world.q
 
 -1 "test_weights";
 dir: "results/_test_weights/";
 / "env q", not "q": system "q ..." can be taken as the q command \q and silently do nothing
-run:{[a] system "env q q/programs/cat_mouse.q ",a," < /dev/null > /dev/null 2>&1"}
+run:.t.run
 
 run "--seed 5 --bars 200 --output-dir ",dir,"a";
 run "--seed 5 --bars 0 --load-weights ",dir,"a/weights_seed5.bin --output-dir ",dir,"b";

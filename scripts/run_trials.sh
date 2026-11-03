@@ -14,7 +14,7 @@
 #   scripts/run_trials.sh -l arm_B -i "$(seq -s ' ' 101 116)" -o 100 -- \
 #     --bars 10000 --meta-only --load-weights 'results/train/s{id}/weights_seed{id}.bin'
 #
-# Each run writes summary.csv and epoch_summary.csv; analyse with q/programs/compare.q.
+# Each run writes summary.csv and epoch_summary.csv; analyse with q/programs/analysis/compare.q.
 set -u
 cd "$(dirname "$0")/.." || exit 2
 

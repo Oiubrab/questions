@@ -1,4 +1,4 @@
-// End-to-end check of the Cat Brain dashboard in Firefox. Run via scripts/e2e_dashboards.sh.
+// End-to-end check of the Cat Brain dashboard in Firefox. Run via dashboards/e2e/run_e2e.sh.
 const { firefox } = require('playwright');
 const assert = require('assert');
 

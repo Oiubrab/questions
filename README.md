@@ -124,11 +124,11 @@ Results vary a lot from seed to seed. One trained brain scored 1 catch where ano
 
 ```bash
 scripts/run_trials.sh -l myrun -i "1 2 3 4 5 6 7 8" -- --bars 10000          # parallel runs
-q q/programs/compare.q results/myrun results/otherrun < /dev/null           # paired stats
-scripts/phase3_experiment.sh                                                # the full re-test above
+q q/programs/analysis/compare.q results/myrun results/otherrun < /dev/null           # paired stats
+scripts/experiments/phase3_experiment.sh                                                # the full re-test above
 ```
 
-See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md).
+See [scripts/experiments/META_EXPERIMENT_README.md](scripts/experiments/META_EXPERIMENT_README.md).
 
 ---
 
@@ -145,7 +145,7 @@ See [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md).
 | [CROSS_FLOW_ARCHITECTURE.md](researchNotes/CROSS_FLOW_ARCHITECTURE.md) | The brain's four input/output edges and the pressure mechanisms (mostly inactive in practice) |
 | [OPTIMIZATION_NOTES.md](researchNotes/OPTIMIZATION_NOTES.md) | Runtime costs, why propagation is a fold, Fortran-era history |
 | [PROJECT_STRUCTURE.md](researchNotes/PROJECT_STRUCTURE.md) | Directory layout |
-| [scripts/META_EXPERIMENT_README.md](scripts/META_EXPERIMENT_README.md) | How to run and analyse controlled experiments |
+| [scripts/experiments/META_EXPERIMENT_README.md](scripts/experiments/META_EXPERIMENT_README.md) | How to run and analyse controlled experiments |
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI coding assistants working in this repo |
 
 ## History

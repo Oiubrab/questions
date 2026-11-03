@@ -40,7 +40,7 @@ The step-by-step speed-up plan, with acceptance tests, is Phase P in [REVIVAL_PL
 
 ### Substrate lab (no rewards)
 
-In `q/programs/substrate_lab.q`, propagation is ~95–97% of the cost: **~21 µs per active neuron per step**, constant across regimes.
+In `q/programs/lab/substrate_lab.q`, propagation is ~95–97% of the cost: **~21 µs per active neuron per step**, constant across regimes.
 
 | Grid | active neurons/step | ms per step |
 |---|---|---|

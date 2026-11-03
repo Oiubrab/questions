@@ -15,7 +15,7 @@
 -1 "test_golden";
 dir: "results/_test_golden/";
 system "rm -rf ",dir;
-run:{[a] system "env q q/programs/cat_mouse.q ",a," < /dev/null > /dev/null 2>&1"};
+run:.t.run
 run "--seed 42 --bars 300 --output-dir ",dir;
 state: get hsym `$dir,"weights_seed42.bin";
 payloadPath: hsym `$dir,"state.serialized";

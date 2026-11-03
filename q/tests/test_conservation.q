@@ -81,7 +81,7 @@ ia: .brain.injectAdd[ib;ii;0 2 2i;5 3 3i;1i;7i];
 .t.ok["satiety input: always exactly one unit";all 1=sum each .brain.satietyInput[;5i] each 0.1*til 300];
 
 / Modular brain (.mod): splitting and stacking, and transfers between brains
-\l q/modules/modular.q
+\l q/modules/brain/modular.q
 system "S 11";
 mp: .engine.initSystem[10i;12i;8i;8i;2i;2i];
 mp[`br]: `int$10 12#120?3; mp[`inc0]: `int$10 12#120?9; mp[`inc1]: `int$10 12#120?9;
@@ -106,5 +106,14 @@ r: .mod.transferIn[cB`br;cB`inc0;cB`inc1;2i;sB`out;7i];
 lost: r 3; r: .mod.transferIn[r 0;r 1;r 2;2i;tB`out;6i]; lost+: r 3;
 cB[`br`inc0`inc1]: 3#r; cB: .engine.runCycle cB;
 .t.eq["one modular step conserves energy (lost transfers and outputs counted)";(ce sB)+(ce tB)+(ce cB)+(sum cB`out)+lost;before];
+/ .mod.lesion: routes into a stacked cell come only from neighbours in the same brain
+ls0: 9 12 8 8#5i;
+nz:{sum raze raze raze 0i=x};
+.t.eq["lesion inside the touch brain (4:3) cuts all 8 routes in, 8 input labels each";nz .mod.lesion[1b;3;9;12;ls0;"4:3"];64i];
+.t.eq["lesion on a brain's top row (3:3) doesn't reach across to the sight brain";nz .mod.lesion[1b;3;9;12;ls0;"3:3"];40i];
+.t.ok["lesion on the touch brain's top row leaves sight-brain row 2 untouched";all 5i=raze raze raze (.mod.lesion[1b;3;9;12;ls0;"3:3"]) 2];
+.t.eq["the same cell in a single brain has all 8 neighbours";nz .mod.lesion[0b;3;6;12;6 12 8 8#5i;"3:3"];64i];
+.t.eq["several cells at once (comma list)";nz .mod.lesion[1b;3;9;12;ls0;"4:3,7:6"];128i];
+.t.eq["a lesion zeroes the route out of the neighbour along the move that enters the cell";.mod.lesion[1b;3;9;12;ls0;"4:3"][4;2;;4];8#0i];
 
 .t.done[];

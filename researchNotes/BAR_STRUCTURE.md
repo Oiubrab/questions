@@ -1,10 +1,10 @@
 # Bar Structure — one decision cycle, step by step
 
-A **bar** is one decision by the cat. Everything below happens once per bar, in this order, in the main loop of [q/programs/cat_mouse.q](../q/programs/cat_mouse.q). An **epoch** is 2000 bars and is used only for reporting.
+A **bar** is one decision by the cat. Everything below happens once per bar, in this order, in the main loop of [q/programs/cat_mouse/bar_loop.q](../q/programs/cat_mouse/bar_loop.q). An **epoch** is 2000 bars and is used only for reporting.
 
 Parameter values are the current defaults in `cat_mouse.q` (since 2026-10-29: cosine reward, reward scale 0.25, hebb 250, wrapped world, angle wiring, satiety meta-brain; since 2026-11-02: the modular brain and no direct reward while the mouse is hidden; the flags that restore the originals are noted where they apply).
 
-**The brains (since 2026-11-02, the user's design).** A **sight brain** (3×12) and a **touch brain** (3×12) feed a **central brain** (3×12, `--central-rows`), whose output moves the cat; the **reward brain** (the 3×5 meta-brain, input = satiety) feeds the central brain too. All four are the same kind of system. Between bars, sight, touch and central are kept stacked top to bottom as one 9-row "primary" state (rows 0–2 sight, 3–5 touch, 6–8 central), so every reward, history, decay and save rule below reaches all three. `--single-brain` restores the original single 6×12 primary brain. Code: `q/modules/modular.q`. Known oddities are marked ⚠, with the finding ID from [REVIVAL_PLAN.md](../plans/completed/REVIVAL_PLAN.md).
+**The brains (since 2026-11-02, the user's design).** A **sight brain** (3×12) and a **touch brain** (3×12) feed a **central brain** (3×12, `--central-rows`), whose output moves the cat; the **reward brain** (the 3×5 meta-brain, input = satiety) feeds the central brain too. All four are the same kind of system. Between bars, sight, touch and central are kept stacked top to bottom as one 9-row "primary" state (rows 0–2 sight, 3–5 touch, 6–8 central), so every reward, history, decay and save rule below reaches all three. `--single-brain` restores the original single 6×12 primary brain. Code: `q/modules/brain/modular.q`. Known oddities are marked ⚠, with the finding ID from [REVIVAL_PLAN.md](../plans/completed/REVIVAL_PLAN.md).
 
 ---
 
@@ -15,7 +15,7 @@ Parameter values are the current defaults in `cat_mouse.q` (since 2026-10-29: co
 - **Internal input** (opt-in, W.1b): `--efference` adds a MEDIUM unit at row 1 above the output slot that moved the cat last bar; `--spontaneous P` adds a unit to each cell with probability P from a random direction. Both add, capped at HIGH, rather than overwrite.
 
 ## 2. World update and vision
-- **Re-learning worlds** (G.4, only with `--relearn-schedule`): at the start of each bar the current world sets the cat's *eyes* (which input column a vision slice lights), its *legs* (which direction each output slot moves) and its *goal* (chase or flee). In a FLEE world the direct reward is negated and the catch boost and strategic lookback are off. See `q/modules/relearn.q`.
+- **Re-learning worlds** (G.4, only with `--relearn-schedule`): at the start of each bar the current world sets the cat's *eyes* (which input column a vision slice lights), its *legs* (which direction each output slot moves) and its *goal* (chase or flee). In a FLEE world the direct reward is negated and the catch boost and strategic lookback are off. See `q/modules/world/relearn.q`.
 - Clear synapse-usage flags (`su`) for both brains. They record which synapses fire during *this* bar, for credit assignment.
 - **Modular brain:** split the stacked state into the sight, touch and central brains for this bar (`.mod.sub`).
 - **W.6** (`--world random --layout-every N`): every N bars a new random layout is drawn and the cat, mice and dog are moved clear of walls.

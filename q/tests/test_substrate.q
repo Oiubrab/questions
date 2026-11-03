@@ -3,7 +3,7 @@
 / Run from repo root: q q/tests/test_substrate.q
 
 \l q/load.q
-\l q/modules/substrate.q
+\l q/modules/lab/substrate.q
 \l q/tests/harness.q
 
 -1 "test_substrate";

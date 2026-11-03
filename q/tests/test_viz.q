@@ -6,11 +6,11 @@
 -1 "test_viz";
 dir: "results/_test_viz/";
 PORT: 6871
-run:{[a] system "env q q/programs/cat_mouse.q ",a," < /dev/null > /dev/null 2>&1"}
+run:.t.run
 logOf:{[d] read0 hsym `$d,"simulation_log.csv"}
 
 / Server in the background; sim publishes to it
-system "env q q/programs/viz_server.q -port ",(string PORT)," < /dev/null > /dev/null 2>&1 &";
+system "env q q/programs/viz/viz_server.q -port ",(string PORT)," < /dev/null > /dev/null 2>&1 &";
 system "sleep 1";
 h: hopen `$"::",string PORT;
 

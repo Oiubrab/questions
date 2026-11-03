@@ -2,7 +2,7 @@
 / Run from repo root: q q/tests/test_relearn.q
 
 \l q/load.q
-\l q/modules/relearn.q
+\l q/modules/world/relearn.q
 \l q/tests/harness.q
 
 -1 "test_relearn";

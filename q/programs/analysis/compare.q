@@ -1,0 +1,68 @@
+/ Compare experiment arms produced by scripts/run_trials.sh
+/ Usage (repo root): q q/programs/analysis/compare.q results/<ref> results/<other> ... < /dev/null
+/ The first directory is the reference arm. Other arms are paired with it by brain
+/ id (the s<id> directory name), so every comparison is within-brain.
+
+\l q/modules/analysis/arms.q
+dirs: .arm.strip each .z.x
+if[0=count dirs; -2 "usage: q q/programs/analysis/compare.q results/<ref> results/<other> ..."; exit 1]
+system "S 42"    / fixed seed so bootstrap CIs are reproducible
+system "c 50 250" / wide console so epoch tables aren't truncated
+
+/ Column types by name, so summaries written before or after a column was added both load.
+/ Columns not listed here are skipped; arms with different columns are union-joined (nulls).
+SUM_TYPES: `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIIS"
+EPOCH_TYPES: `epoch`bars`catches`towards`away`perp`meanAlignment!"IIIIIIF"
+
+/ Read one CSV from every s<id>/ subdirectory of an arm, tagging rows with label and id
+loadArm:{[types;file;d]
+  subs: .arm.runs[d;file];
+  t: (uj/) {[types;file;d;s] f: hsym `$d,"/",s,"/",file;
+       update id:"I"$1_s from ((types `$"," vs first read0 f);enlist ",") 0: f}[types;file;d] each subs;
+  update label:`$last "/" vs d from t}
+
+runs: (uj/) loadArm[SUM_TYPES;"summary.csv"] each dirs
+eps:  (uj/) loadArm[EPOCH_TYPES;"epoch_summary.csv"] each dirs
+labels: distinct runs`label
+
+-1 "=== PER-ARM SUMMARY (catches per run) ===";
+show select n:count i, mean:avg catches, sd:sdev catches, minimum:min catches, maximum:max catches,
+            per1kBars:avg 1000*catches%bars, towardsPct:avg 100*towards%totalMoves,
+            noLearning:first noLearning, meanAlignment:avg meanAlignment, acquired:sum not null acquisitionTime, medianAcqBars:{med x where not null x} acquisitionTime
+     by label from runs;
+
+/ Paired comparison of arm l against the reference arm, matched by brain id.
+/ t is the paired t statistic; ci95 is a bootstrap CI of the mean paired difference.
+pair:{[runs;refL;l]
+  j: (select id, refC:catches from runs where label=refL) ij `id xkey select id, otherC:catches from runs where label=l;
+  d: `float$j[`otherC]-j`refC;
+  n: count d; m: avg d;
+  boot: asc {[d;x] avg d (count d)?count d}[d] each til 10000;
+  `arm`n`meanRef`meanArm`meanDiff`pctChange`t`ci95lo`ci95hi!
+    (l; n; avg j`refC; avg j`otherC; m; 100*m%avg j`refC; m%(sdev d)%sqrt n; boot 250; boot 9749)}
+
+pairAlignment:{[runs;refL;l]
+  j: (select id, refA:meanAlignment from runs where label=refL) ij `id xkey select id, otherA:meanAlignment from runs where label=l;
+  d: `float$j[`otherA]-j`refA;
+  n: count d; m: avg d;
+  boot: asc {[d;x] avg d (count d)?count d}[d] each til 10000;
+  `arm`n`meanRef`meanArm`meanDiff`t`ci95lo`ci95hi!
+    (l; n; avg j`refA; avg j`otherA; m; m%(sdev d)%sqrt n; boot 250; boot 9749)}
+
+if[1<count labels;
+  -1 "";
+  -1 "=== PAIRED DIFFERENCES vs ",(string first labels)," (arm minus reference, matched by brain id) ===";
+  show pair[runs;first labels] each 1_labels;
+  -1 "=== PAIRED ALIGNMENT DIFFERENCES vs ",(string first labels)," ===";
+  show pairAlignment[runs;first labels] each 1_labels];
+
+-1 "";
+-1 "=== CATCHES PER 1000 BARS BY EPOCH (mean over brains) ===";
+/ Pivot to one column per epoch; arms may have different epoch counts (missing -> null)
+er: select rate:avg 1000*catches%bars by label, epoch from eps;
+ec: asc distinct exec epoch from er;
+d: exec epoch!rate by label from er;
+show 1!([] label:key d) ,' flip (`$"e",/:string ec)!flip (value d)@\:ec;
+
+-1 "=== MEAN ALIGNMENT BY EPOCH (mean over brains) ===";
+show select meanAlignment:avg meanAlignment by label, epoch from eps;

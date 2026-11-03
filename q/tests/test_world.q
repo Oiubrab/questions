@@ -3,7 +3,7 @@
 / Run from repo root: q q/tests/test_world.q
 
 \l q/load.q
-\l q/modules/world.q
+\l q/modules/world/world.q
 \l q/tests/harness.q
 
 -1 "test_world";

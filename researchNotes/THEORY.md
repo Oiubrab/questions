@@ -7,7 +7,7 @@ Each claim carries a status:
 | Tag | Meaning |
 |---|---|
 | **Derived** | follows from the rules as coded; no experiment needed |
-| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](../plans/completed/REVIVAL_PLAN.md) §6 |
+| **Verified** | derived *and* checked numerically; the numbers come from `q q/programs/analysis/theory_checks.q` or from the experiments in [REVIVAL_PLAN.md](../plans/completed/REVIVAL_PLAN.md) §6 |
 | **Consistent** | explains existing results after the fact (weaker than a prediction made beforehand) |
 | **Prediction** | not yet tested; each has a test proposed in §11 |
 | **Conjecture** | a proposed principle that needs more work to make precise |
@@ -281,5 +281,5 @@ The design intent (REVIVAL_PLAN.md §2) is that a higher system sets how much re
 ## 12. Reproducing the numbers
 
 ```bash
-q q/programs/theory_checks.q < /dev/null     # sections 1-3 always; 4-5 need results/p3_* (Phase 3)
+q q/programs/analysis/theory_checks.q < /dev/null     # sections 1-3 always; 4-5 need results/p3_* (Phase 3)
 ```

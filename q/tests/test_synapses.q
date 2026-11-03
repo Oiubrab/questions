@@ -1,9 +1,9 @@
 / Synapse update vectorization must preserve nested outputs and RNG consumption.
 / Run from repo root: q q/tests/test_synapses.q
 
-\l q/modules/trinary.q
-\l q/modules/directions.q
-\l q/modules/synapses.q
+\l q/modules/brain/trinary.q
+\l q/modules/brain/directions.q
+\l q/modules/brain/synapses.q
 \l q/tests/harness.q
 
 -1 "test_synapses";

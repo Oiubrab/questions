@@ -1,11 +1,11 @@
 / Sparse usage prototype checks before integrating with simulation state.
 / Run from repo root: q q/tests/test_sparse_synapses.q
 
-\l q/modules/trinary.q
-\l q/modules/directions.q
-\l q/modules/synapses.q
-\l q/modules/brain.q
-\l q/modules/brain_engine.q
+\l q/modules/brain/trinary.q
+\l q/modules/brain/directions.q
+\l q/modules/brain/synapses.q
+\l q/modules/brain/brain.q
+\l q/modules/brain/brain_engine.q
 \l q/tests/harness.q
 
 -1 "test_sparse_synapses";
