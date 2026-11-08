@@ -81,13 +81,14 @@ wl: ("IIIII";enlist ",") 0: hsym `$dir,"wrap/simulation_log.csv";
 .t.ok["wrapped cat stays within the field";all (raze wl`catX`catY) within 0 100];
 .t.ok["wrapped cat crosses an edge at least once";any 50<abs 1_deltas wl`catX];
 
-/ --weight-ratio (G.R4): recorded, caps every weight at ratio x floor, rejects ratios below 40
+/ --weight-ratio (G.R4): recorded, caps every weight at ratio x floor (floor 100 by default since 2026-11-08), rejects ratio x floor below 1000
 run "--seed 5 --bars 300 --weight-ratio 100 --output-dir ",dir,"wr";
-.t.eq["summary records weightRatio 80000 by default";sumOf["a";`weightRatio];80000f];
+.t.eq["summary records weightRatio 20000 by default (cap 2,000,000 / floor 100)";sumOf["a";`weightRatio];20000f];
 .t.eq["summary records --weight-ratio 100";sumOf["wr";`weightRatio];100f];
 wwr: get hsym `$dir,"wr/weights_seed5.bin";
-.t.ok["--weight-ratio 100 keeps every weight within [25, 2500]";all (raze raze/[wwr 0 1]) within 25 2500];
-.t.ok["--weight-ratio 39 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --weight-ratio 39 --output-dir ",dir,"wr0";{`failed}]];
+.t.ok["--weight-ratio 100 keeps primary weights within [100, 10000] (meta: [25 floor at init, 10000])";(all (raze raze/[wwr 0]) within 100 10000)&all (raze raze/[wwr 1]) within 25 10000];
+.t.ok["--weight-ratio 9 (cap 900 at floor 100) exits non-zero";`failed~@[run;"--seed 5 --bars 1 --weight-ratio 9 --output-dir ",dir,"wr0";{`failed}]];
+.t.ok["--floor 25 --weight-ratio 39 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --floor 25 --weight-ratio 39 --output-dir ",dir,"wr0";{`failed}]];
 
 / --wiring (§7 decision 6): recorded; random is a per-seed permutation that leaves the initial weights
 / paired with the grid run; angle changes behaviour; an unknown wiring aborts
@@ -213,7 +214,10 @@ run "--seed 5 --bars 300 --sat-edges 1,4,10,20 --output-dir ",dir,"sat";
 
 / Catch-rate plan flags (plans/inProgress/CATCH_RATE_PLAN.md): recorded, change the run, keep their bounds, validated.
 / Their defaults reproducing the original run exactly is test_golden.q's job.
-.t.eq["summary records the catch-rate defaults (punish rule, gate 3, floor 25, decay x1)";sumOf["a"] each `punishCalls`strategicGate`floor`decayMult;(0Ni;3i;25i;1f)];
+.t.eq["summary records the catch-rate defaults (4 calls, gate 3, floor 100, decay x0.5)";sumOf["a"] each `punishCalls`strategicGate`floor`decayMult;(4i;3i;100i;0.5)];
+run "--seed 5 --bars 300 --punish-calls legacy --floor 25 --decay-mult 1 --output-dir ",dir,"legacy";
+.t.eq["legacy flags recorded (original punish rule, floor 25, decay x1), cap kept at 2,000,000";sumOf["legacy"] each `punishCalls`floor`decayMult`weightRatio;(0Ni;25i;1f;80000f)];
+.t.ok["legacy flags change learning vs the new default";not (wa 0)~(get hsym `$dir,"legacy/weights_seed5.bin") 0];
 run "--seed 5 --bars 300 --punish-calls 4 --output-dir ",dir,"p4";
 .t.ok["--punish-calls 4 changes learning (neutral moves punished from bar 1)";not (wa 0)~(get hsym `$dir,"p4/weights_seed5.bin") 0];
 run "--seed 5 --bars 300 --punish-calls 4 --strategic-gate 20 --floor 100 --weight-ratio 20000 --decay-mult 0.5 --output-dir ",dir,"cr";

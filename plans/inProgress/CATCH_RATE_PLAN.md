@@ -89,6 +89,19 @@ If a prediction fails, the result stands and goes in §6; the model doesn't get 
 - [x] **S.1** Score §0's three conditions for main and gate; check D1–D5; write §6. Acceptance: every number in §6 traces to a report file in `results/`. *(2026-11-08: done; every §6 number is from `results/cr_report_20261108/`)*
 - [ ] **S.2** Report to the user, with the decisions in §7. Update the analysis note's §6 ("not established") and THEORY.md's tags only where a prediction was confirmed or refuted.
 
+### Phase R: constants from the equations (user, 2026-11-08)
+
+> **The user:** "the equations that created what is possible here should be built into any future runs of the brain … if I request a larger brain, some of these constants, like the punish metric there, or the Hebbian number, should scale based on the mathematics automatically, and that should be written into the code." (Revival plan §2 point 10.)
+
+Same course as before: analysis, write-up, plan, execute, test. No simulator runs with new settings before R.3 exists.
+
+- [x] **R.0** Make main the default (§7 decision 1). Acceptance: a default run is byte-identical to the explicit main run; legacy flags reproduce the old golden digest; tests pass; docs updated. *(2026-11-08: done. Seed 1, 20k bars: default and `--punish-calls 4 --floor 100 --weight-ratio 20000 --decay-mult 0.5` give identical weights and simulation logs. `--punish-calls legacy --floor 25 --decay-mult 1` restores the old default and reproduces its golden digest (checked in test_golden.q). Without `--weight-ratio` the cap now stays at 2,000,000 whatever the floor. New golden digest 5af7ecb8…; cat_mouse.q, CLAUDE.md and revival §2 (new point 10) updated; the experiment driver's arms now name all four settings)*
+- [ ] **R.1** Analysis: for each constant the theory ties to the configuration (punish calls, floor, decay, cap, Hebb, steps per bar), the formula and what it depends on: steps per bar, strategic scope and magnitude, catch window, the task's catch-rate ceiling, path length and use rate through the brain, number of input slices. Derive the size-dependent quantities (path length, use rate) from the untrained brain's Markov chain (THEORY.md, `.theory.chain`), so the brain can measure its own geometry at start-up. Give decay a derivation instead of a sweep value. Written up in `researchNotes/CONSTANT_SCALING.md`. Measures existing runs and saved brains only.
+- [ ] **R.2** Analysis: why the gate arm can't re-learn after the leg reversal (§6.3), from its existing logs and weights (§7 decision 5: investigate).
+- [ ] **R.3** Plan: the start-up rules and their margins, chosen so today's configuration gives (or nearly gives) 4 / 100 / ×0.5; predictions for other sizes, fixed before any run.
+- [ ] **R.4** Execute: compute the constants at start-up from the configuration, print and record them in summary.csv; explicit flags still override. Tests: the rules give the expected values on today's brain and on hand-worked cases.
+- [ ] **R.5** Test on other brain sizes (e.g. `--central-rows 6`, `--single-brain`, and any larger brain the infrastructure allows): derived constants against today's fixed ones, fresh seeds. Success: the derived constants keep the §0 conditions where fixed ones lose them, or match them where nothing should change.
+
 ## 6. Results
 
 **Run 2026-11-08**, seeds 17–32, every arm paired by seed. Reports in `results/cr_report_20261108/` (`open_target.txt`, `open_compare.txt`, `open_spontaneity.txt`, `relearn.txt`, `guard.txt`); driver `scripts/experiments/catch_rate_experiment.sh 20261108`.
@@ -171,14 +184,15 @@ Catches per 1,000 bars; paired difference in catches per run against base (CI).
 
 ## 7. Decisions for the user
 
-1. **If main or gate passes, does it become the default?** That changes the golden digest and every default run, as the 2026-10-29 defaults milestone did. Not done without the user's answer.
+1. ~~If main or gate passes, does it become the default?~~ **Answered (user, 2026-11-08): yes, main is the default (R.0), and its constants should come from the equations and scale with the brain (Phase R).**
 2. **Today's punishment timing** (neutral off until bar 2,001; bad-move calls depending on the run length through `numEpochs`): `--punish-calls` replaces both. If a default changes, should the old timing go entirely?
 3. **Decay ×0.5 on the primary brain only.** I applied it to the primary brain only, to match the model, which has no meta-brain. Should the meta-brain's decay follow?
 4. ~~If the guard worlds show a loss~~: moot, none did (§6.4).
-5. **The gate arm's re-learning failure** (§6.3) is unexplained. Investigate it, or drop the gate route since main passes without it?
+5. ~~The gate arm's re-learning failure~~ **Answered (user, 2026-11-08): investigate (R.2).**
 
 ## 8. Progress log
 
 - **2026-11-08.** The user chose the main route (P4 + floor 100 + decay ×0.5) with the gate as a second arm, and asked for the model scripts in the repo. Plan written with predictions fixed (§3) before any simulator run.
 - **2026-11-08.** T.2, T.3, E.1, E.2 done (details on each task). Also, at the user's request, defined every symbol in the analysis note (a notation table at the top, and inline at each equation). E.3 and E.4 started: `scripts/experiments/catch_rate_experiment.sh 20261108` (log `results/cr_run_20261108.log`, reports `results/cr_report_20261108/`).
 - **2026-11-08.** E.3, E.4, S.1 done (§6). Main meets all three §0 conditions: 16/16 seeds ≥ 0.7 (mean 0.853 against base 0.695), catches +38%, spontaneity up, re-learning no worse, no loss in pillars, rooms or blink. Gate fails re-learning after the leg reversal (0/16), cause unknown. The model was right on the open world and wrong on re-learning. Waiting on the user for §7 decisions 1 and 5.
+- **2026-11-08.** The user approved main as the default and asked for the constants to be derived from the equations so they scale with the brain (revival §2 point 10), and for the gate failure to be investigated. R.0 done (byte-identical default; legacy flags reproduce the old digest). Phase R added.

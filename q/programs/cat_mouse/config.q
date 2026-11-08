@@ -109,28 +109,34 @@ if[((hasFlag "--tau-fast")|hasFlag "--tau-slow") & not twoTS; -2 "--tau-fast/--t
 / G.R4 bounded weights (MAX-MIN Ant System): cap/floor ratio. With the default 80,000:1 a floor route
 / next to a capped one is chosen ~0.001% of the time, so old habits are slow to un-learn. Lowering R
 / guarantees every route a minimum chance. Initial weights are 25-1000, so R must be >= 40.
-/ Catch-rate plan (plans/inProgress/CATCH_RATE_PLAN.md): the weight floor. Default 25. A higher floor keeps punished
-/ routes more available (spontaneity), but re-learning needs ln(1 + hebb/floor) > punish log-step per bar
-/ (CATCH_RATE_ANALYSIS.md §3.2). Initial weights stay 25-1000 (.syn.INIT_MIN); the floor applies from the first decay.
-FLOOR: $[count flagVal "--floor"; "I"$flagVal "--floor"; .syn.MIN_STRENGTH]
+/ Catch-rate plan (plans/inProgress/CATCH_RATE_PLAN.md; default since 2026-11-08): the weight floor, 100 (original 25).
+/ A higher floor keeps punished routes more available (spontaneity), but re-learning needs
+/ ln(1 + hebb/floor) > punish log-step per bar (CATCH_RATE_ANALYSIS.md §3.2): 100 is about half that limit at hebb 250
+/ and 4 punish calls. Initial weights stay 25-1000 (.syn.INIT_MIN); the floor applies from the first decay.
+FLOOR: $[count flagVal "--floor"; "I"$flagVal "--floor"; 100i]
 if[(null FLOOR)|(FLOOR<1i)|FLOOR>=.syn.MAX_INIT; -2 "--floor must be an integer from 1 to ",(string .syn.MAX_INIT-1i); exit 1]
 .syn.MIN_STRENGTH: FLOOR
-WEIGHT_RATIO: $[count flagVal "--weight-ratio"; "F"$flagVal "--weight-ratio"; 80000f]
-if[(null WEIGHT_RATIO)|.syn.MAX_INIT>WEIGHT_RATIO*FLOOR; -2 "--weight-ratio x floor must be >= ",(string .syn.MAX_INIT)," (initial weights go up to it): ratio >= 40 at floor 25"; exit 1]
-.syn.MAX_STRENGTH: `int$WEIGHT_RATIO*.syn.MIN_STRENGTH
-/ Catch-rate plan: decay strength of the primary brain. Each decay period (5 bars) multiplies a weight by
+/ G.R4 bounded weights: the cap stays at .syn.MAX_STRENGTH (2,000,000) whatever the floor, unless --weight-ratio R sets
+/ it to R x floor. WEIGHT_RATIO records cap/floor (20,000 by default; 80,000 at the original floor 25).
+if[hasFlag "--weight-ratio";
+  WR_ARG: "F"$flagVal "--weight-ratio";
+  if[(null WR_ARG)|.syn.MAX_INIT>WR_ARG*FLOOR; -2 "--weight-ratio x floor must be >= ",(string .syn.MAX_INIT)," (initial weights go up to it): ratio >= 40 at floor 25"; exit 1];
+  .syn.MAX_STRENGTH: `int$WR_ARG*.syn.MIN_STRENGTH]
+WEIGHT_RATIO: (`float$.syn.MAX_STRENGTH)%.syn.MIN_STRENGTH
+/ Catch-rate plan (default 0.5 since 2026-11-08; original 1): decay strength of the primary brain. Each decay period (5 bars) multiplies a weight by
 / 1 - D*(1-u), u = DECAY_LO + DECAY_SPAN*U(0,1), so D scales the loss (D = 0.5 halves it). The meta-brain's decay is
 / unchanged (the plan's model has no meta-brain; plan §7 decision 3). D = 1 uses the original constants exactly.
-DECAY_MULT: $[count flagVal "--decay-mult"; "F"$flagVal "--decay-mult"; 1f]
+DECAY_MULT: $[count flagVal "--decay-mult"; "F"$flagVal "--decay-mult"; 0.5]
 if[(null DECAY_MULT)|(DECAY_MULT<0f)|DECAY_MULT>1f%1f-.syn.DECAY_LO; -2 "--decay-mult must be from 0 to ",string 1f%1f-.syn.DECAY_LO; exit 1]
 PRIM_DECAY: $[DECAY_MULT=1f; (.syn.DECAY_LO;.syn.DECAY_SPAN); (1f-DECAY_MULT*1f-.syn.DECAY_LO;DECAY_MULT*.syn.DECAY_SPAN)]
 if[twoTS & hasFlag "--decay-mult"; -2 "--decay-mult doesn't apply with --two-timescale (it relaxes towards the slow memory instead)"; exit 1]
 / Catch-rate plan: punishment and the strategic gate (CATCH_RATE_ANALYSIS.md §3.1: a wrong route only falls if its
 / punishment beats the reinforcement every used route gets, nP > C).
-/ --punish-calls N: neutral and bad moves both get N punish calls, from bar 1. Unset keeps the original rule: bad
+/ --punish-calls N: neutral and bad moves both get N punish calls, from bar 1 (default 4 since 2026-11-08: 4 x 0.21 beats
+/ the common-mode gain of about 0.64-0.72). --punish-calls legacy (PUNISH_CALLS null) restores the original rule: bad
 / moves 1 + 2*epoch/numEpochs calls, neutral moves 1 call from bar 2,001.
-PUNISH_CALLS: $[count flagVal "--punish-calls"; "I"$flagVal "--punish-calls"; 0Ni]
-if[(hasFlag "--punish-calls") & (null PUNISH_CALLS)|PUNISH_CALLS<1i; -2 "--punish-calls must be a positive integer"; exit 1]
+PUNISH_CALLS: $[not count flagVal "--punish-calls"; 4i; "legacy"~flagVal "--punish-calls"; 0Ni; "I"$flagVal "--punish-calls"]
+if[(hasFlag "--punish-calls") & (not "legacy"~flagVal "--punish-calls") & (null PUNISH_CALLS)|PUNISH_CALLS<1i; -2 "--punish-calls must be a positive integer or legacy"; exit 1]
 / --strategic-gate N: strategic reinforcement needs at least N catches in the last RATE_WINDOW (200) bars (default 3)
 STRAT_GATE: $[count flagVal "--strategic-gate"; "I"$flagVal "--strategic-gate"; 3i]
 if[(null STRAT_GATE)|STRAT_GATE<1i; -2 "--strategic-gate must be a positive integer"; exit 1]

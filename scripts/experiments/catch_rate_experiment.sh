@@ -8,7 +8,7 @@
 # Usage: [IDS="17 ... 32"] [BARS=10000] [STAGES="open relearn guard"] [ARMS="name=flags;..."] \
 #          scripts/experiments/catch_rate_experiment.sh [TAG]
 #   IDS: brain ids = seeds (default 17-32: seeds 1-16 are used up for this question, CATCH_RATE_ANALYSIS Appendix)
-#   ARMS: the first is the reference. Default: the plan's §4 arms.
+#   ARMS: the first is the reference. Default: the plan's §4 arms (base = the pre-2026-11-08 default).
 #   RL_SCHED, GUARD_ARMS (names from ARMS), GUARD_BARS can be shrunk for a smoke test.
 # Reports go to results/cr_report_TAG/. Runs go to results/cr_<stage>_<arm>_TAG/s<id>/.
 set -u
@@ -17,7 +17,9 @@ TAG=${1:-$(date +%Y%m%d)}
 IDS=${IDS:-$(seq -s ' ' 17 32)}
 BARS=${BARS:-10000}
 STAGES=${STAGES:-"open relearn guard"}
-ARMS=${ARMS:-"base=;P4=--punish-calls 4;main=--punish-calls 4 --floor 100 --weight-ratio 20000 --decay-mult 0.5;gate=--punish-calls 3 --strategic-gate 20 --floor 100 --weight-ratio 20000 --decay-mult 0.5"}
+# Every arm names all four settings, so it means the same thing before and after main became the default (2026-11-08)
+LEGACY="--punish-calls legacy --floor 25 --decay-mult 1"
+ARMS=${ARMS:-"base=$LEGACY;P4=--punish-calls 4 --floor 25 --decay-mult 1;main=--punish-calls 4 --floor 100 --decay-mult 0.5;gate=--punish-calls 3 --strategic-gate 20 --floor 100 --decay-mult 0.5"}
 RL_SCHED=${RL_SCHED:-"A:10000,L180:5000,A:5000"}
 GUARD_ARMS=${GUARD_ARMS:-"base main gate"}
 GUARD_BARS=${GUARD_BARS:-$BARS}
