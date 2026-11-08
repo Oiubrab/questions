@@ -2,6 +2,8 @@
 
 **What this is.** Stages 1 and 2 of the catch-rate course the user set on 2026-11-07: mathematical analysis, then an assessment of it as concrete areas of improvement. The question: how do we raise the catch rate and open-world alignment, with 0.7 as the first target, **without losing spontaneity and the capacity to re-learn**?
 
+**Tested 2026-11-08** ([CATCH_RATE_PLAN.md](../plans/inProgress/CATCH_RATE_PLAN.md) §6, fresh seeds 17–32): the open-world predictions held (P4 + floor 100 + decay ×0.5: 16/16 seeds ≥ 0.7, mean 0.853, catches +38%, spontaneity up, no loss in walled or blinking worlds). **The re-learning predictions did not:** §1 point 3 and the re-learning columns of §4.2 are refuted. Main re-learns no better than today (7 vs 8 of 16 runs missing 0.6 after the leg reversal), and the gate route fails it entirely (16/16). P4's predicted cost to deviation (§3.4) didn't appear on the real brain.
+
 **What this is not.** It is not a plan and not a test. Nothing here has run on the real simulator with a changed constant, and no default has changed. Stages 3 to 5 (plan, execution, test at 0.7 on fresh seeds) come after the user has read this.
 
 **Evidence tags.** Every claim is one of:
@@ -441,7 +443,7 @@ Two further options are mathematically available but not assessed here as recomm
 
 ## 6. What this analysis has not established
 
-- **The real brain may not behave like the model at higher punishment.** Nobody has yet run P4 or a performance gate. The punishment and gate rows are therefore genuine predictions; the strategic-reduction rows aren't quite (Appendix).
+- **The real brain may not behave like the model at higher punishment.** *(Tested 2026-11-08, plan §6: in the open world it does; in re-learning it doesn't.)* Nobody had yet run P4 or a performance gate. The punishment and gate rows are therefore genuine predictions; the strategic-reduction rows aren't quite (Appendix).
 - **The adaptive threshold could weaken the punishment route.** The real threshold can rise to 0.85 and then correct slots are partly punished. Direct reward on a correct slot, by threshold:
 
   | Threshold | 1 call | 3 calls | 4 calls |

@@ -82,25 +82,103 @@ If a prediction fails, the result stands and goes in §6; the model doesn't get 
 ### Stage 4: execute
 - [x] **E.1** Flags `--punish-calls`, `--strategic-gate`, `--floor`, `--decay-mult` (§4), documented at the top of `cat_mouse.q`, in CLAUDE.md's flag list and in `summary.csv`. Acceptance: all tests pass; the golden digest is unchanged; `test_weights.q` covers each flag's parsing and rejection of bad values; a unit test shows `--decay-mult 0.5` halves the mean decay loss and `--floor` sets the floor. *(2026-11-08: done. All 48 test files pass, golden digest unchanged. test_weights.q: defaults and flags recorded in summary.csv, each flag changes learning, floor-100 weights stay in [100, 2,000,000] and some sit at 100, `--floor` leaves the initial weights unchanged, 9 bad values rejected. test_synapses.q: applyDecay = applyDecayBy with the defaults; mean loss 1.25% per period, halved at D = 0.5; a raised floor holds. Also: `.syn.INIT_MIN` keeps initial weights at 25–1000 whatever the floor; `--weight-ratio` now checks ratio × floor ≥ 1000 (the same as ratio ≥ 40 at floor 25))*
 - [x] **E.2** A driver `scripts/experiments/catch_rate_experiment.sh` running the arms of §4 on seeds 17–32: open world 10,000 bars; re-learning `A:10000,L180:5000,A:5000`; walled guard. Acceptance: a smoke run (2 seeds, short bars) completes and the reports parse. *(2026-11-08: done. Seeds 901–902, 600 bars, every stage; target, compare, spontaneity, relearn and guard reports all parse; smoke results deleted. New report `q/programs/analysis/target_report.q` (last-epoch alignment, seeds at the target, paired CIs); on `o_open_brain_20261103` it gives 0.662, 7/16, 80.2 catches/1k, as recorded)*
-- [ ] **E.3** Open world and re-learning, all four arms, seeds 17–32.
-- [ ] **E.4** Guard worlds: base, main and gate in pillars, rooms and blink 20:20, seeds 17–32, 10,000 bars, with `reactive` as the reference baseline.
+- [x] **E.3** Open world and re-learning, all four arms, seeds 17–32. *(2026-11-08: done, §6.1–6.3)*
+- [x] **E.4** Guard worlds: base, main and gate in pillars, rooms and blink 20:20, seeds 17–32, 10,000 bars, with `reactive` as the reference baseline. *(2026-11-08: done, §6.4: no loss in any world)*
 
 ### Stage 5: test
-- [ ] **S.1** Score §0's three conditions for main and gate; check D1–D5; write §6. Acceptance: every number in §6 traces to a report file in `results/`.
+- [x] **S.1** Score §0's three conditions for main and gate; check D1–D5; write §6. Acceptance: every number in §6 traces to a report file in `results/`. *(2026-11-08: done; every §6 number is from `results/cr_report_20261108/`)*
 - [ ] **S.2** Report to the user, with the decisions in §7. Update the analysis note's §6 ("not established") and THEORY.md's tags only where a prediction was confirmed or refuted.
 
 ## 6. Results
 
-*(none yet)*
+**Run 2026-11-08**, seeds 17–32, every arm paired by seed. Reports in `results/cr_report_20261108/` (`open_target.txt`, `open_compare.txt`, `open_spontaneity.txt`, `relearn.txt`, `guard.txt`); driver `scripts/experiments/catch_rate_experiment.sh 20261108`.
+
+### 6.1 Open world, 10,000 bars (§0 condition 1)
+
+Epoch 5 (bars 8,001–10,000). Paired differences against base, with 95% bootstrap CIs.
+
+| Arm | Mean alignment | Min | Seeds ≥ 0.7 | Catches/1k | Δ alignment (CI) | Δ catches/1k (CI) | Seeds better than base |
+|---|---|---|---|---|---|---|---|
+| base | 0.695 | 0.449 | 10/16 | 82.8 | | | |
+| P4 | 0.832 | 0.729 | **16/16** | 106.5 | +0.137 (+0.091, +0.185) | +23.6 (+14.0, +33.7) | 15 |
+| **main** | **0.853** | 0.790 | **16/16** | **114.1** | **+0.158 (+0.112, +0.209)** | **+31.3 (+21.3, +42.1)** | **16** |
+| gate | 0.854 | 0.813 | **16/16** | 115.2 | +0.159 (+0.120, +0.205) | +32.3 (+24.4, +41.4) | 16 |
+
+**The §0 target is met by all three changed arms: 16 of 16 seeds at ≥ 0.7, against 14 needed.** The worst main seed (0.790) is above base's mean. Base did better on these seeds than on seeds 1–16 (10/16 and 0.695, against 7/16 and 0.662); the comparison is paired, so that doesn't affect the differences.
+
+The levels land inside the model's brackets (§3): alignment 0.82–0.87 predicted, 0.83–0.85 measured; catches 107–118 predicted, 106–115 measured.
+
+### 6.2 Spontaneity, weights-only, at bar 10,000 (§0 condition 2)
+
+| Arm | Deviation, median | Deviation, mean | Alt. share (geomean) | Δ mean deviation (CI) | Alt. share vs base |
+|---|---|---|---|---|---|
+| base | 0.207 | 0.219 | 6.4e-5 | | |
+| P4 | 0.213 | 0.215 | 2.3e-4 | −0.004 (−0.093, +0.082) | ×3.7 (CI ×1.2 to ×12) |
+| **main** | **0.329** | **0.316** | **4.5e-4** | **+0.097 (+0.009, +0.179)** | **×7.1 (CI ×3.5 to ×16)** |
+| gate | 0.211 | 0.208 | 2.4e-4 | −0.011 (−0.073, +0.052) | ×3.8 (CI ×1.9 to ×9) |
+
+**Main raises both measures of spontaneity, and the others keep deviation at base and raise alt. share.** All arms pass condition 2.
+
+### 6.3 Re-learning, A:10,000 → L180:5,000 → A:5,000 (§0 condition 3)
+
+| Arm | L180: runs missing 0.6 | L180: t06 median | L180: recovered level | Back to A: t06 median | Back to A: Δ t06 vs base (CI) | Back to A: recovered |
+|---|---|---|---|---|---|---|
+| base | 8/16 | 1,797 | 0.497 | 1,843 | | 0.678 |
+| P4 | 8/16 | 2,582 | 0.405 | 769 | −433 (−969, +178) | 0.790 |
+| **main** | **7/16** | 1,890 | 0.456 | **1,145** | −283 (−718, +192) | 0.715 |
+| gate | **16/16** | never | **0.124** | 836 | −903 (−1,149, −638) | 0.872 |
+
+(t06 medians include censored runs as not reached; L180 recovered level paired vs base: P4 −0.09 (−0.25, +0.08), main −0.04 (−0.18, +0.11), gate **−0.37 (−0.47, −0.27)**.)
+
+- **Main passes condition 3**: as many runs regain 0.6 as base (9 against 8), the recovered level isn't significantly different, and the return to A is no slower (median 1,145 against 1,843 bars; CI includes 0).
+- **Gate fails condition 3**: no run regains 0.6 after the leg reversal, and its recovered level is 0.37 below base. The cause is not established. It is not the floor condition (ln(1 + 250/100) = 1.25 > 3 × 0.21).
+- **Re-learning did not improve**, which the model predicted it would (0–1 runs missing). The note said the model was optimistic on re-learning levels; this is larger than that caveat suggested.
+
+### 6.4 Guard worlds, 10,000 bars (E.4)
+
+Catches per 1,000 bars; paired difference in catches per run against base (CI).
+
+| World | base | main | gate | reactive | main vs base | gate vs base |
+|---|---|---|---|---|---|---|
+| Pillars | 11.0 | 16.1 | 19.1 | 88.0 | **+46%** (+22, +78 per run) | **+74%** (+58, +105) |
+| Rooms | 2.4 | 2.5 | 4.1 | 19.9 | +3%, ns (−10, +10) | **+71%** (+3, +28) |
+| Blink 20:20 | 43.1 | 51.8 | 52.0 | 59.2 | **+20%** (+48, +124) | **+21%** (+43, +131) |
+
+**No loss in any guard world; both arms gain in pillars and blink, and gate in rooms too.** Both still trail the memoryless reactive cat in all three, as before (OBSTACLES_RESULTS); visible alignment in blink rises (0.71 → 0.81) but hidden-bar behaviour doesn't change.
+
+### 6.5 Predictions (§3)
+
+| | Prediction | Outcome |
+|---|---|---|
+| D1 | main and gate raise alignment and catches, CI excluding 0 | **Confirmed** (both) |
+| D2 | main and gate meet ≥ 14/16 at ≥ 0.7 | **Confirmed** (16/16 each; P4 too) |
+| D3 | P4 collapses deviation; main restores it to at least base | **Half refuted.** P4 leaves deviation unchanged (0.213 vs 0.207). Main raises it above base: confirmed |
+| D4 | main and gate miss 0.6 after L180 in fewer runs than base; main slower than P4 | **Refuted.** Main 7 vs 8 (no real change); gate 16 vs 8 (worse); main is not slower than P4 |
+| D5 | returns to A faster than base for all three | **Direction confirmed** for all three medians; significant only for gate |
+
+**What the model got right:** the separation condition's prediction that raising punishment lifts alignment and catches, at the size predicted, without weakening strategic; and that decay ×0.5 with floor 100 adds spontaneity. **What it got wrong:** re-learning (it predicted a large improvement; there is none for main and a failure for gate), and P4's cost to deviation (there is none on the real brain).
+
+### 6.6 Verdict against §0
+
+| Condition | main | gate | P4 |
+|---|---|---|---|
+| 1. ≥ 14/16 at ≥ 0.7, catches up | **Pass** (16/16, +38% catches) | Pass (16/16, +39%) | Pass (16/16, +29%) |
+| 2. Spontaneity not below base | **Pass** (both measures up) | Pass (deviation equal, alt. share up) | Pass (deviation equal, alt. share up) |
+| 3. Re-learning not worse | **Pass** (9 vs 8 recover; return to A no slower) | **Fail** (0 recover) | Pass (8 vs 8) |
+| Guard worlds | No loss; +46% pillars, +20% blink | No loss; +21–74% | not run |
+
+**Main meets all three conditions.** Whether it becomes the default is §7 decision 1.
 
 ## 7. Decisions for the user
 
 1. **If main or gate passes, does it become the default?** That changes the golden digest and every default run, as the 2026-10-29 defaults milestone did. Not done without the user's answer.
 2. **Today's punishment timing** (neutral off until bar 2,001; bad-move calls depending on the run length through `numEpochs`): `--punish-calls` replaces both. If a default changes, should the old timing go entirely?
 3. **Decay ×0.5 on the primary brain only.** I applied it to the primary brain only, to match the model, which has no meta-brain. Should the meta-brain's decay follow?
-4. **If the guard worlds show a loss**, which takes priority: the open-world target or the walled worlds?
+4. ~~If the guard worlds show a loss~~: moot, none did (§6.4).
+5. **The gate arm's re-learning failure** (§6.3) is unexplained. Investigate it, or drop the gate route since main passes without it?
 
 ## 8. Progress log
 
 - **2026-11-08.** The user chose the main route (P4 + floor 100 + decay ×0.5) with the gate as a second arm, and asked for the model scripts in the repo. Plan written with predictions fixed (§3) before any simulator run.
 - **2026-11-08.** T.2, T.3, E.1, E.2 done (details on each task). Also, at the user's request, defined every symbol in the analysis note (a notation table at the top, and inline at each equation). E.3 and E.4 started: `scripts/experiments/catch_rate_experiment.sh 20261108` (log `results/cr_run_20261108.log`, reports `results/cr_report_20261108/`).
+- **2026-11-08.** E.3, E.4, S.1 done (§6). Main meets all three §0 conditions: 16/16 seeds ≥ 0.7 (mean 0.853 against base 0.695), catches +38%, spontaneity up, re-learning no worse, no loss in pillars, rooms or blink. Gate fails re-learning after the leg reversal (0/16), cause unknown. The model was right on the open world and wrong on re-learning. Waiting on the user for §7 decisions 1 and 5.
