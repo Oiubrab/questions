@@ -30,7 +30,7 @@ wf: get hsym `$dir,"frozen/weights_seed5.bin";
 / Defaults since 2026-10-29: cosine reward, reward scale 0.25, hebb 250, wrapped world, angle wiring.
 / Each restore flag is recorded and changes learning (same seed, same bars).
 run "--seed 5 --bars 200 --raw-dot-reward --output-dir ",dir,"cos";
-SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges`punishCalls`strategicGate`floor`decayMult!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIISIIIF"
+SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges`punishCalls`strategicGate`floor`decayMult`stepsPerBar!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIISIIIFI"
 logOf:{[d] read0 hsym `$dir,d,"/simulation_log.csv"}
 sumOf:{[d;c] f:hsym `$dir,d,"/summary.csv"; first ((SUM_TYPES `$"," vs first read0 f;enlist ",") 0: f) c}
 .t.eq["summary records cosReward=1 by default";sumOf["a";`cosReward];1b];
@@ -56,7 +56,7 @@ run "--seed 5 --bars 200 --pg-update --pg-eta 0.2 --rpe --rpe-rate 0.05 --output
 
 / --hebb (G.R3) is recorded and changes learning; it can't be zero (unconditional reinforcement stays)
 run "--seed 5 --bars 200 --hebb 1000 --output-dir ",dir,"hebb";
-.t.eq["summary records hebb=250 by default";sumOf["a";`hebb];250i];
+.t.eq["summary records the derived hebb 252 by default (Phase R)";sumOf["a";`hebb];252i];
 .t.eq["summary records --hebb 1000";sumOf["hebb";`hebb];1000i];
 .t.ok["--hebb 1000 changes primary synapses vs default";not (wa 0)~(get hsym `$dir,"hebb/weights_seed5.bin") 0];
 .t.ok["--hebb 0 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --hebb 0 --output-dir ",dir,"h0";{`failed}]];
@@ -233,6 +233,18 @@ run "--seed 5 --bars 300 --decay-mult 0.5 --output-dir ",dir,"dm";
 .t.ok["--decay-mult 0.5 changes learning";not (wa 0)~(get hsym `$dir,"dm/weights_seed5.bin") 0];
 bad:("--punish-calls 0";"--punish-calls x";"--strategic-gate 0";"--floor 0";"--floor 1000";"--floor 100 --weight-ratio 5";"--decay-mult -1";"--decay-mult 51";"--decay-mult 0.5 --two-timescale");
 {[b] .t.ok[b," exits non-zero";`failed~@[run;"--seed 5 --bars 1 ",b," --output-dir ",dir,"crbad";{`failed}]]} each bad;
+
+/ Phase R: constants derived from the brain's configuration (q/tests/test_scaling.q checks the rules themselves)
+.t.eq["today's brain derives 12 steps, 4 calls, hebb 252, decay x0.5";sumOf["a"] each `stepsPerBar`punishCalls`hebb`decayMult;(12i;4i;252i;0.5)];
+run "--seed 5 --bars 50 --central-rows 6 --output-dir ",dir,"c6";
+.t.eq["central rows 6 derives 21 steps, 3 calls, hebb 332";sumOf["c6"] each `stepsPerBar`punishCalls`hebb;(21i;3i;332i)];
+run "--seed 5 --bars 50 --central-rows 6 --steps-per-bar 12 --punish-calls 4 --hebb 250 --output-dir ",dir,"c6f";
+.t.eq["explicit flags override every derived constant";sumOf["c6f"] each `stepsPerBar`punishCalls`hebb;(12i;4i;250i)];
+.t.eq["legacy punishment keeps hebb 250";sumOf["legacy";`hebb];250i];
+run "--seed 5 --bars 50 --separation-margin 2 --output-dir ",dir,"sm2";
+.t.eq["--separation-margin 2 needs 7 calls (7 x 0.2097 >= 2 x 0.733)";sumOf["sm2";`punishCalls];7i];
+bad2:("--steps-per-bar 0";"--separation-margin 0";"--hebb-margin -1";"--catch-ref -0.1");
+{[b] .t.ok[b," exits non-zero";`failed~@[run;"--seed 5 --bars 1 ",b," --output-dir ",dir,"prbad";{`failed}]]} each bad2;
 
 / A misspelt flag must abort, not silently run the control condition
 .t.ok["unknown flag exits non-zero";`failed~@[run;"--seed 5 --bars 1 --output-dir ",dir,"c --ablate_meta";{`failed}]];

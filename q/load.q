@@ -5,6 +5,7 @@
 \l q/modules/brain/trinary.q
 \l q/modules/brain/directions.q
 \l q/modules/brain/synapses.q
+\l q/modules/brain/scaling.q
 \l q/modules/brain/brain.q
 \l q/modules/world/vision.q
 \l q/modules/brain/brain_engine.q

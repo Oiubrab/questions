@@ -10,7 +10,7 @@ KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
               "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";"--wrap-world";"--weight-ratio";"--wiring";"--world";"--see-through";"--blink";"--hidden-reward";"--policy";"--efference";
               "--raw-dot-reward";"--walled-world";"--random-tie";"--mice";"--sat-edges";"--evasive";"--distractor";"--layout-every";"--lesion";"--log-state";"--single-brain";"--central-rows";"--no-touch";"--meta-entry";"--mouse-step";"--field-size";
               "--two-timescale";"--tau-fast";"--tau-slow";"--viz-port";"--viz-delay-ms";
-              "--punish-calls";"--strategic-gate";"--floor";"--decay-mult")
+              "--punish-calls";"--strategic-gate";"--floor";"--decay-mult";"--steps-per-bar";"--separation-margin";"--hebb-margin";"--catch-ref")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
 if[count badFlags; -2 "Unknown flag(s): ",", " sv badFlags; exit 1]
@@ -126,16 +126,18 @@ WEIGHT_RATIO: (`float$.syn.MAX_STRENGTH)%.syn.MIN_STRENGTH
 / Catch-rate plan (default 0.5 since 2026-11-08; original 1): decay strength of the primary brain. Each decay period (5 bars) multiplies a weight by
 / 1 - D*(1-u), u = DECAY_LO + DECAY_SPAN*U(0,1), so D scales the loss (D = 0.5 halves it). The meta-brain's decay is
 / unchanged (the plan's model has no meta-brain; plan §7 decision 3). D = 1 uses the original constants exactly.
-DECAY_MULT: $[count flagVal "--decay-mult"; "F"$flagVal "--decay-mult"; 0.5]
-if[(null DECAY_MULT)|(DECAY_MULT<0f)|DECAY_MULT>1f%1f-.syn.DECAY_LO; -2 "--decay-mult must be from 0 to ",string 1f%1f-.syn.DECAY_LO; exit 1]
-PRIM_DECAY: $[DECAY_MULT=1f; (.syn.DECAY_LO;.syn.DECAY_SPAN); (1f-DECAY_MULT*1f-.syn.DECAY_LO;DECAY_MULT*.syn.DECAY_SPAN)]
+/ Unless given, it is derived in params.q (0.5 per slice visit: 0.5 x 8 / vision slices; CONSTANT_SCALING.md §5).
+DECAY_MULT: $[count flagVal "--decay-mult"; "F"$flagVal "--decay-mult"; 0n]
+if[(hasFlag "--decay-mult") & (null DECAY_MULT)|(DECAY_MULT<0f)|DECAY_MULT>1f%1f-.syn.DECAY_LO; -2 "--decay-mult must be from 0 to ",string 1f%1f-.syn.DECAY_LO; exit 1]
 if[twoTS & hasFlag "--decay-mult"; -2 "--decay-mult doesn't apply with --two-timescale (it relaxes towards the slow memory instead)"; exit 1]
 / Catch-rate plan: punishment and the strategic gate (CATCH_RATE_ANALYSIS.md §3.1: a wrong route only falls if its
 / punishment beats the reinforcement every used route gets, nP > C).
 / --punish-calls N: neutral and bad moves both get N punish calls, from bar 1 (default 4 since 2026-11-08: 4 x 0.21 beats
 / the common-mode gain of about 0.64-0.72). --punish-calls legacy (PUNISH_CALLS null) restores the original rule: bad
 / moves 1 + 2*epoch/numEpochs calls, neutral moves 1 call from bar 2,001.
-PUNISH_CALLS: $[not count flagVal "--punish-calls"; 4i; "legacy"~flagVal "--punish-calls"; 0Ni; "I"$flagVal "--punish-calls"]
+/ Unless given, derived in params.q from the separation condition (CONSTANT_SCALING.md §3): 4 for today's brain.
+PUNISH_RULE: $[not count flagVal "--punish-calls"; `derived; "legacy"~flagVal "--punish-calls"; `legacy; `fixed]
+PUNISH_CALLS: $[PUNISH_RULE=`fixed; "I"$flagVal "--punish-calls"; 0Ni]
 if[(hasFlag "--punish-calls") & (not "legacy"~flagVal "--punish-calls") & (null PUNISH_CALLS)|PUNISH_CALLS<1i; -2 "--punish-calls must be a positive integer or legacy"; exit 1]
 / --strategic-gate N: strategic reinforcement needs at least N catches in the last RATE_WINDOW (200) bars (default 3)
 STRAT_GATE: $[count flagVal "--strategic-gate"; "I"$flagVal "--strategic-gate"; 3i]
@@ -145,7 +147,8 @@ if[(null STRAT_GATE)|STRAT_GATE<1i; -2 "--strategic-gate must be a positive inte
 / primary-brain step by L, keeping the same RNG draws; 1 is the original behaviour exactly.
 REWARD_SCALE: $[count flagVal "--reward-scale"; "F"$flagVal "--reward-scale"; 0.25]
 if[(null REWARD_SCALE)|REWARD_SCALE<=0f; -2 "--reward-scale must be a positive number"; exit 1]
-CATCH_MULT: .syn.scaleMult[1.5;REWARD_SCALE]   / catch boost per history bar
+CATCH_BOOST: 1.5                               / catch boost multiplier per history bar, before the reward scale
+CATCH_MULT: .syn.scaleMult[CATCH_BOOST;REWARD_SCALE]
 / G.R1/G.R2: the route choice is a softmax over ln W, so REINFORCE gives the principled update:
 / every used (cell, inDir) moves its 8 routes by PG_ETA*delta*(used - p). delta is the move's
 / cosine to the mouse (R), or with --rpe, R minus its running average rBar (better than expected).
@@ -159,8 +162,18 @@ if[(null RPE_RATE)|(RPE_RATE<=0f)|RPE_RATE>1f; -2 "--rpe-rate must be in (0,1]";
 rBar: 0f                                      / running average of the move cosine (--rpe)
 / G.R3: unconditional usage reinforcement per route use. It must stay > 0 (REVIVAL_PLAN.md §2
 / point 7); the tunable is its ratio to the directed reward reinforcement (--reward-scale).
-.brain.HEBB: $[count flagVal "--hebb"; "I"$flagVal "--hebb"; 250i]
-if[(null .brain.HEBB)|.brain.HEBB<=0i; -2 "--hebb must be a positive integer (unconditional reinforcement is never removed)"; exit 1]
+/ Unless given, derived in params.q from the re-learning limit (CONSTANT_SCALING.md §4): 252 for today's brain.
+.brain.HEBB: $[count flagVal "--hebb"; "I"$flagVal "--hebb"; 0Ni]
+if[(hasFlag "--hebb") & (null .brain.HEBB)|.brain.HEBB<=0i; -2 "--hebb must be a positive integer (unconditional reinforcement is never removed)"; exit 1]
+/ Phase R margins and references (CONSTANT_SCALING.md §8). --steps-per-bar overrides the derived steps per bar.
+STEPS_ARG: $[count flagVal "--steps-per-bar"; "I"$flagVal "--steps-per-bar"; 0Ni]
+if[(hasFlag "--steps-per-bar") & (null STEPS_ARG)|STEPS_ARG<1i; -2 "--steps-per-bar must be a positive integer"; exit 1]
+SEP_MARGIN: $[count flagVal "--separation-margin"; "F"$flagVal "--separation-margin"; 1.1]     / punishment >= margin x common mode
+HEBB_MARGIN: $[count flagVal "--hebb-margin"; "F"$flagVal "--hebb-margin"; 1.5]              / ln(1+h/floor) = margin x n P
+CATCH_REF: $[count flagVal "--catch-ref"; "F"$flagVal "--catch-ref"; 0.1265]   / catches per bar of the scripted reactive cat, open world
+if[(null SEP_MARGIN)|SEP_MARGIN<=0f; -2 "--separation-margin must be a positive number"; exit 1]
+if[(null HEBB_MARGIN)|HEBB_MARGIN<=0f; -2 "--hebb-margin must be a positive number"; exit 1]
+if[(null CATCH_REF)|CATCH_REF<0f; -2 "--catch-ref must be a non-negative number (catches per bar)"; exit 1]
 .brain.hebbEnabled: not noLearning
 outputDir: flagVal "--output-dir"
 if[0=count outputDir; outputDir: "results/seed",string userSeed]

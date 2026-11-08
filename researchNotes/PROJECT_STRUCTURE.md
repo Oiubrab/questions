@@ -9,6 +9,7 @@
 │   │   │   ├── trinary.q        # .trinary — LOW/MEDIUM/HIGH constants, shift, initGrid
 │   │   │   ├── directions.q     # .dirs — direction deltas dr/dc, opposites, vBias
 │   │   │   ├── synapses.q       # .syn — synapse init, decay, reinforce/punish, history helpers
+│   │   │   ├── scaling.q        # .scale — steps per bar, punish calls and Hebb derived from the brain's geometry (Phase R)
 │   │   │   │                    #        (histSlot, lookbackBars), two-timescale relax/consolidate (G.R5)
 │   │   │   ├── brain.q          # .brain — stepNeuron/propagate fold, input copy, meta cross-flow,
 │   │   │   │                    #          satiety (meta input), additive internal input,
@@ -67,6 +68,7 @@
 │       ├── test_synapses.q      # Flat synapse updates match the nested reference, incl. RNG stream
 │       ├── test_sparse_synapses.q  # Sparse usage/history, lookback batching, batched reward loops
 │       ├── test_substrate.q     # .sub matches .brain bit for bit by default; conserves under all settings
+│       ├── test_scaling.q       # .scale: exit-share chain matches .theory; the rules give today's constants
 │       ├── test_viz.q           # Viewer off = identical run; dead viewer tolerated; ring buffer wraps
 │       └── test_weights.q       # Save/load round trip, output files, unknown-flag rejection
 ├── scripts/                     # Shell drivers. All cd to the repo root themselves
@@ -75,6 +77,7 @@
 │   │   ├── phase3_experiment.sh    # The controlled re-test (train 16 brains, 4 arms, report)
 │   │   ├── relearn_experiment.sh   # G.4 re-learning experiment (schedule + fresh controls + report)
 │   │   ├── catch_rate_experiment.sh # Catch-rate plan: open world, re-learning and guard worlds on seeds 17-32
+│   │   ├── scaling_experiment.sh    # Phase R.5: derived vs fixed constants at central rows 3, 6, 9 (seeds 33-48)
 │   │   ├── world_experiment.sh     # Obstacle worlds: brain arms vs scripted baselines, per world
 │   │   ├── obstacles_closeout.sh   # Obstacles plan close-out batch (resumable; skips finished arms)
 │   │   └── META_EXPERIMENT_README.md

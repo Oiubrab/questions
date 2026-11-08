@@ -12,6 +12,9 @@
 / cap kept at 2,000,000, primary decay x0.5; plans/inProgress/CATCH_RATE_PLAN.md). Verified first: a default 20k-bar
 / run of seed 1 is byte-identical (weights and simulation log) to the same run with those flags given explicitly.
 / The legacy flags must still reproduce the previous default's digest, checked below.
+/ Updated 2026-11-08 again (Phase R): constants are derived from the brain's configuration (q/modules/brain/scaling.q).
+/ Today's brain derives the same values except hebb 252 (was 250). Verified first: with --hebb 250 the new code
+/ reproduces the previous default byte for byte (seed 1, 20k bars: weights and simulation log).
 / Run from repo root: q q/tests/test_golden.q
 
 \l q/tests/harness.q
@@ -29,7 +32,7 @@ md5Path: hsym `$dir,"state.md5";
 md5Output: system "md5sum ",dir,"state.serialized";
 .t.ok["md5sum produced output";count md5Output];
 digest: 32#first md5Output;
-.t.eq["seed 42 300-bar final state matches golden MD5";digest;"5af7ecb8be45bee0854c0a3f5e987ec9"];
+.t.eq["seed 42 300-bar final state matches golden MD5";digest;"3521e4e06f8a2184104b8921108f3e22"];
 system "rm -rf ",dir;
 / The pre-2026-11-08 default, restored by flags
 run "--seed 42 --bars 300 --punish-calls legacy --floor 25 --decay-mult 1 --output-dir ",dir;

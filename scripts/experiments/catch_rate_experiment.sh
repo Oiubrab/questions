@@ -19,7 +19,8 @@ BARS=${BARS:-10000}
 STAGES=${STAGES:-"open relearn guard"}
 # Every arm names all four settings, so it means the same thing before and after main became the default (2026-11-08)
 LEGACY="--punish-calls legacy --floor 25 --decay-mult 1"
-ARMS=${ARMS:-"base=$LEGACY;P4=--punish-calls 4 --floor 25 --decay-mult 1;main=--punish-calls 4 --floor 100 --decay-mult 0.5;gate=--punish-calls 3 --strategic-gate 20 --floor 100 --decay-mult 0.5"}
+# (and, since Phase R derives steps per bar and hebb, pins those to the values tested on 2026-11-08)
+ARMS=${ARMS:-"base=$LEGACY --steps-per-bar 12;P4=--punish-calls 4 --floor 25 --decay-mult 1 --hebb 250 --steps-per-bar 12;main=--punish-calls 4 --floor 100 --decay-mult 0.5 --hebb 250 --steps-per-bar 12;gate=--punish-calls 3 --strategic-gate 20 --floor 100 --decay-mult 0.5 --hebb 250 --steps-per-bar 12"}
 RL_SCHED=${RL_SCHED:-"A:10000,L180:5000,A:5000"}
 GUARD_ARMS=${GUARD_ARMS:-"base main gate"}
 GUARD_BARS=${GUARD_BARS:-$BARS}

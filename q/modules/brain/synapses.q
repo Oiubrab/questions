@@ -13,6 +13,11 @@ INIT_MIN: 25i              / lowest initial weight; fixed whatever the floor, so
 / --decay-mult D scales the primary brain's loss by D (cat_mouse/config.q); these are the defaults.
 DECAY_LO: 0.98
 DECAY_SPAN: 0.015
+/ Reward multipliers per call (Fortran's adaptive rule): reinforce REINF_MULT/STEP_MULT^steps, punish
+/ PUNISH_MULT*STEP_MULT^steps, so one call's log-step grows with the steps per bar. .scale uses them too.
+REINF_MULT: 1.2
+PUNISH_MULT: 0.8
+STEP_MULT: 0.95
 
 / Initialize 4D synapse array (rows x cols x 8 x 8 integer)
 / Returns nested list: rows lists, each containing cols 8x8 int matrices
@@ -44,7 +49,7 @@ applySparseReinforce:{[syns;usage;numSteps]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: `float$1.2%0.95 xexp numSteps;
+  mult: `float$REINF_MULT%STEP_MULT xexp numSteps;
   noise: 0.9 + 0.2*(count idx)?1.0;
   flat:@[flat;idx;:;.syn.MAX_STRENGTH & `int$`float$old*mult*noise];
   shape:`int$(count syns;count first syns;8i;8i);
@@ -54,7 +59,7 @@ applySparseReinforceN:{[syns;usage;numSteps;calls]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: (`float$1.2%0.95 xexp numSteps) xexp calls;
+  mult: (`float$REINF_MULT%STEP_MULT xexp numSteps) xexp calls;
   noise: 0.9 + 0.2*(calls*count idx)?1.0;
   noiseShape:`int$(calls;count idx);
   noise:prd each flip noiseShape#noise;
@@ -66,7 +71,7 @@ applySparsePunish:{[syns;usage;numSteps]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: `float$0.8*0.95 xexp numSteps;
+  mult: `float$PUNISH_MULT*STEP_MULT xexp numSteps;
   noise: 0.9 + 0.2*(count idx)?1.0;
   flat:@[flat;idx;:;.syn.MIN_STRENGTH | `int$`float$old*mult*noise];
   shape:`int$(count syns;count first syns;8i;8i);
@@ -76,7 +81,7 @@ applySparsePunishN:{[syns;usage;numSteps;calls]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: (`float$0.8*0.95 xexp numSteps) xexp calls;
+  mult: (`float$PUNISH_MULT*STEP_MULT xexp numSteps) xexp calls;
   noise: 0.9 + 0.2*(calls*count idx)?1.0;
   noiseShape:`int$(calls;count idx);
   noise:prd each flip noiseShape#noise;
@@ -93,7 +98,7 @@ applySparseReinforceNL:{[syns;usage;numSteps;calls;lam]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: (`float$1.2%0.95 xexp numSteps) xexp calls;
+  mult: (`float$REINF_MULT%STEP_MULT xexp numSteps) xexp calls;
   noise: 0.9 + 0.2*(calls*count idx)?1.0;
   noise:prd each flip (`int$(calls;count idx))#noise;
   updated: .syn.MAX_STRENGTH & `int$`float$old*(mult*noise) xexp lam;
@@ -106,7 +111,7 @@ applySparsePunishNL:{[syns;usage;numSteps;calls;lam]
   flat: raze raze raze syns;
   idx: usageIndices usage;
   old: flat[idx];
-  mult: (`float$0.8*0.95 xexp numSteps) xexp calls;
+  mult: (`float$PUNISH_MULT*STEP_MULT xexp numSteps) xexp calls;
   noise: 0.9 + 0.2*(calls*count idx)?1.0;
   noise:prd each flip (`int$(calls;count idx))#noise;
   updated: .syn.MIN_STRENGTH | `int$`float$old*(mult*noise) xexp lam;
@@ -238,7 +243,7 @@ punishCell:{[mult;sc;uc]
 / Multiplier = 1.2 / (0.95^numSteps), scaled by random noise 0.9-1.1
 / Mirrors apply_adaptive_reinforcement in synapses_module.f90
 applyReinforce:{[syns;su;numSteps]
-  mult: `float$1.2 % 0.95 xexp numSteps;
+  mult: `float$REINF_MULT % STEP_MULT xexp numSteps;
   flat: raze raze raze syns;
   used: raze raze raze su;
   noise: 0.9 + 0.2*(count flat)?1.0;
@@ -250,7 +255,7 @@ applyReinforce:{[syns;su;numSteps]
 / Multiplier = 0.8 * (0.95^numSteps), scaled by random noise 0.9-1.1
 / Mirrors apply_adaptive_punishment in synapses_module.f90
 applyPunish:{[syns;su;numSteps]
-  mult: `float$0.8 * 0.95 xexp numSteps;
+  mult: `float$PUNISH_MULT * STEP_MULT xexp numSteps;
   flat: raze raze raze syns;
   used: raze raze raze su;
   noise: 0.9 + 0.2*(count flat)?1.0;

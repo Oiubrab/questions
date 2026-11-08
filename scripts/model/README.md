@@ -12,6 +12,7 @@ Python 3 with numpy. Inputs and outputs live under `results/model/` (gitignored;
 | `kin.py` | The kinematic model: a fixed slice → move lookup on the wrapped field, no brain. Running it prints the validation against the scripted reactive cat (§2) and the task ceilings (§3.5). |
 | `export.q` | Exports trained weights for the model: `q scripts/model/export.q results/model/w ARM [ARM ...] < /dev/null` |
 | `spont_arm.py` | Weights-only spontaneity of any exported arm, paired against the first: `python3 scripts/model/spont_arm.py ARM [ARM ...]` (plan task T.3) |
+| `spont_any.py` | The same measure for a modular brain of any central depth (Phase R): reproduces `spont_arm.py`'s deviation exactly on today's brains; alt. share agrees within 1% |
 
 ## What produced which table
 

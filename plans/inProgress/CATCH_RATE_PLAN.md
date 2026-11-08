@@ -98,8 +98,41 @@ Same course as before: analysis, write-up, plan, execute, test. No simulator run
 - [x] **R.0** Make main the default (§7 decision 1). Acceptance: a default run is byte-identical to the explicit main run; legacy flags reproduce the old golden digest; tests pass; docs updated. *(2026-11-08: done. Seed 1, 20k bars: default and `--punish-calls 4 --floor 100 --weight-ratio 20000 --decay-mult 0.5` give identical weights and simulation logs. `--punish-calls legacy --floor 25 --decay-mult 1` restores the old default and reproduces its golden digest (checked in test_golden.q). Without `--weight-ratio` the cap now stays at 2,000,000 whatever the floor. New golden digest 5af7ecb8…; cat_mouse.q, CLAUDE.md and revival §2 (new point 10) updated; the experiment driver's arms now name all four settings)*
 - [ ] **R.1** Analysis: for each constant the theory ties to the configuration (punish calls, floor, decay, cap, Hebb, steps per bar), the formula and what it depends on: steps per bar, strategic scope and magnitude, catch window, the task's catch-rate ceiling, path length and use rate through the brain, number of input slices. Derive the size-dependent quantities (path length, use rate) from the untrained brain's Markov chain (THEORY.md, `.theory.chain`), so the brain can measure its own geometry at start-up. Give decay a derivation instead of a sweep value. Written up in `researchNotes/CONSTANT_SCALING.md`. Measures existing runs and saved brains only.
 - [ ] **R.2** Analysis: why the gate arm can't re-learn after the leg reversal (§6.3), from its existing logs and weights (§7 decision 5: investigate).
-- [ ] **R.3** Plan: the start-up rules and their margins, chosen so today's configuration gives (or nearly gives) 4 / 100 / ×0.5; predictions for other sizes, fixed before any run.
-- [ ] **R.4** Execute: compute the constants at start-up from the configuration, print and record them in summary.csv; explicit flags still override. Tests: the rules give the expected values on today's brain and on hand-worked cases.
+- [x] **R.3** Plan: the start-up rules and their margins, chosen so today's configuration gives (or nearly gives) 4 / 100 / ×0.5; predictions for other sizes, fixed before any run. *(2026-11-08: done, below)*
+
+  **Rules (CONSTANT_SCALING.md §8), computed at start-up unless the constant's own flag is given:**
+
+  | Constant | Rule | Flag that overrides it | Margin setting |
+  |---|---|---|---|
+  | Steps per bar S | smallest S with F(S) ≥ F(12) of the tested brain (modular, central rows 3), F from the bias-only chain of the requested brain | `--steps-per-bar` (new) | none |
+  | Punish calls n | smallest n with nP(S) ≥ m_sep · C_ref, C_ref = λ(20 ln 1.1 + 20 c_ref ln 1.5) | `--punish-calls` | `--separation-margin` 1.1, `--catch-ref` 0.1265 |
+  | Hebb h | round(F (e^(m_h nP) − 1)); with `--punish-calls legacy`, 250 | `--hebb` | `--hebb-margin` 1.5 |
+  | Primary decay multiplier | 0.5 × 8 / K (K = vision slices) | `--decay-mult` | |
+  | Floor, cap | 100, 2,000,000 (fixed weight scale) | `--floor`, `--weight-ratio` | |
+
+  The meta-brain keeps 24 steps per bar (spread evenly over the primary steps) and its rewards keep the step count 12, whatever S is; at S = 12 both are exactly today's. The derived values are printed at start-up and recorded in summary.csv. Today's brain derives S 12, n 4, h 252, decay ×0.5: the tested configuration except h (250 → 252). The literals behind C_ref (strategic scope floor 20, catch window 20) become named constants used by both the rule and the bar loop.
+
+  **R.5 arms**, open world 10,000 bars plus re-learning (`A:10000,L180:5000,A:5000`), fresh seeds 33–48:
+
+  | Arm | Central rows | Flags | Derived S / n / h |
+  |---|---|---|---|
+  | c3_fixed | 3 | `--steps-per-bar 12 --punish-calls 4 --hebb 250` (the tested default) | |
+  | c3_derived | 3 | none | 12 / 4 / 252 |
+  | c6_fixed | 6 | `--steps-per-bar 12 --punish-calls 4 --hebb 250` | |
+  | c6_steps | 6 | `--punish-calls 4 --hebb 250` (S derived only) | 21 / – / – |
+  | c6_derived | 6 | none | 21 / 3 / 332 |
+  | c9_fixed | 9 | `--steps-per-bar 12 --punish-calls 4 --hebb 250` | |
+  | c9_steps | 9 | `--punish-calls 4 --hebb 250` | 29 / – / – |
+  | c9_derived | 9 | none | 29 / 2 / 261 |
+
+  **Predictions (fixed 2026-11-08, before any run):**
+  - **PR1.** At central rows 3, derived and fixed don't differ (paired alignment CI includes 0).
+  - **PR2.** At central rows 6 and 9, derived beats fixed on last-epoch alignment (paired CI excluding 0), and the gap is larger at 9 than at 6.
+  - **PR3.** At central rows 6, derived meets the §0 target (≥ 14/16 seeds ≥ 0.7). At 9 no level is predicted.
+  - **PR4.** Most of the gain at 6 and 9 comes from steps per bar: the steps-only arm is closer to derived than to fixed.
+  - **PR5.** Deviation (weights-only) rises with depth for the derived arms, since paths are longer (CONSTANT_SCALING §5); no compensation is built in.
+  - **PR6.** Re-learning after the leg reversal is no worse for derived than for fixed at each size.
+- [x] **R.4** Execute: compute the constants at start-up from the configuration, print and record them in summary.csv; explicit flags still override. Tests: the rules give the expected values on today's brain and on hand-worked cases. *(2026-11-08: done. `q/modules/brain/scaling.q` (`.scale`): a cell-level bias-only chain (`exitCdf`) and the rules; `params.q` derives steps per bar, punish calls, Hebb and decay unless their flags are given, prints them and records `stepsPerBar` in summary.csv. New flags `--steps-per-bar`, `--separation-margin`, `--hebb-margin`, `--catch-ref`. The meta-brain keeps its own clock (24 cycles a bar spread over the steps; reward step count 12); the strategic and catch-window literals are named constants. **Refactor check:** with `--hebb 250` the new code reproduces the previous default byte for byte (seed 1, 20k bars), so the only change to today's default is Hebb 250 → 252 (new golden digest 3521e4e0…; legacy flags still give the old one). Tests: `test_scaling.q` (15: the exit chain equals `.theory`'s to 1e-12 for modular and single brains; S = 12, 10, 15, 21, 29 and 15 single; P, C, n, h by hand) and 9 more in test_weights.q (derived values recorded, central rows 6 gives 21 / 3 / 332, overrides, margin 2 gives 7 calls, bad values rejected). All 49 test files pass. `scripts/model/spont_any.py` measures spontaneity at any depth)*
 - [ ] **R.5** Test on other brain sizes (e.g. `--central-rows 6`, `--single-brain`, and any larger brain the infrastructure allows): derived constants against today's fixed ones, fresh seeds. Success: the derived constants keep the §0 conditions where fixed ones lose them, or match them where nothing should change.
 
 ## 6. Results
@@ -196,3 +229,5 @@ Catches per 1,000 bars; paired difference in catches per run against base (CI).
 - **2026-11-08.** T.2, T.3, E.1, E.2 done (details on each task). Also, at the user's request, defined every symbol in the analysis note (a notation table at the top, and inline at each equation). E.3 and E.4 started: `scripts/experiments/catch_rate_experiment.sh 20261108` (log `results/cr_run_20261108.log`, reports `results/cr_report_20261108/`).
 - **2026-11-08.** E.3, E.4, S.1 done (§6). Main meets all three §0 conditions: 16/16 seeds ≥ 0.7 (mean 0.853 against base 0.695), catches +38%, spontaneity up, re-learning no worse, no loss in pillars, rooms or blink. Gate fails re-learning after the leg reversal (0/16), cause unknown. The model was right on the open world and wrong on re-learning. Waiting on the user for §7 decisions 1 and 5.
 - **2026-11-08.** The user approved main as the default and asked for the constants to be derived from the equations so they scale with the brain (revival §2 point 10), and for the gate failure to be investigated. R.0 done (byte-identical default; legacy flags reproduce the old digest). Phase R added.
+- **2026-11-08.** R.1 and R.2 done: `researchNotes/CONSTANT_SCALING.md`. Brain size enters the conditions only through steps per bar; a deeper brain at 12 steps keeps moving but on stale input (F(12) = 0.15 at 6 central rows, 0.006 at 9; simulator check agrees). Rules for S, n, h and decay derived; today's brain gives 12 / 4 / 252 / ×0.5. Gate arm: its catch-count gate stays shut for 99% of the reversed block, so strategic never returns. R.3 written with predictions PR1–PR6, fixed before any run.
+- **2026-11-08.** R.4 done (details on the task). R.5 started: `scripts/experiments/scaling_experiment.sh r5` (central rows 3, 6, 9; seeds 33–48; reports `results/cr_report_r5_c*/`).

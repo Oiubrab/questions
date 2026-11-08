@@ -26,7 +26,6 @@ if[relearn;
 if[relearn & scripted; -2 "--policy baselines don't take --relearn-schedule"; exit 1]
 / Current world's legs, eyes and goal sign (identity / chase when no schedule)
 legPerm: `int$til 8; eyePerm: `int$til 8; goalSign: 1f; fleeNow: 0b; worldNow: `A
-STEPS_PER_BAR: 12i
 SNAPSHOT_INTERVAL: 1000i
 MOUSE_MOVE_INTERVAL: 10i
 FIELD_SIZE: FIELD_ARG                          / 100 unless --field-size (G.5)
@@ -43,9 +42,43 @@ META_INPUT_MAP_LEN: 5i
 OVERFLOW_OFFSET: 1i            / row offset into primary brain (0-indexed)
 OVERFLOW_MAP_LEN: 4i
 
+/ Strategic reinforcement (meta-brain outputs -> scope and magnitude) and the catch boost window, in bars
+STRAT_SCOPE_MIN: 20i; STRAT_SCOPE_MAX: 120i; STRAT_SCOPE_PER_OUT: 40i   / scope = MIN | MAX & out[0] * PER_OUT
+STRAT_MAG_MIN: 1i              / magnitude = MIN | out[1]
+STRAT_MULT: 1.1                / strategic multiplier per lookback bar, per magnitude step, before the reward scale
+CATCH_WINDOW: 20i              / bars of history the catch boost reaches back
+/ The meta-brain keeps its own clock whatever the primary brain's steps per bar: 24 cycles a bar, spread evenly over
+/ the primary steps (2 per step at 12 steps), and its rewards use the step count 12, as when both were tied to 12.
+META_STEPS_PER_BAR: 24i
+META_REWARD_STEPS: 12i
 RATE_WINDOW: 200i
 MAX_CATCHES_IN_WINDOW: 200i
 HISTORY_SIZE: 100i             / synapse history circular buffer depth
+
+/ ================================================================
+/ CONSTANTS FROM THE EQUATIONS (Phase R; researchNotes/CONSTANT_SCALING.md; revival plan §2 point 10)
+/ Each is derived from this brain's configuration unless its own flag was given. Today's brain gives
+/ 12 steps per bar, 4 punish calls, hebb 252, primary decay x0.5.
+/ ================================================================
+/ Steps per bar: a bar passes the same share of an untrained vision unit's energy as the tested brain does in 12 steps
+SCALE_GEOM: `modular`senseRows`centRows`nC`inOff`inLen`outOff`outLen!(MODULAR;SENSE_ROWS;$[MODULAR;CENTRAL_ROWS;ROWS];COLS;IN_OFF;IN_LEN;OUT_OFF;OUT_LEN)
+SCALE_FREF: (.scale.exitCdf[.scale.REF;.dirs.vBias;.scale.REF_STEPS]) .scale.REF_STEPS-1
+STEPS_PER_BAR: $[null STEPS_ARG; .scale.steps[.scale.exitCdf[SCALE_GEOM;.dirs.vBias;.scale.HORIZON];SCALE_FREF]; STEPS_ARG]
+SCALE_FBAR: last .scale.exitCdf[SCALE_GEOM;.dirs.vBias;STEPS_PER_BAR]   / share this brain passes per bar (recorded)
+/ Punish calls: punishment per wrong move beats the undirected gain every used route gets (nP >= margin x C)
+PUNISH_STEP: .scale.punishStep[STEPS_PER_BAR;REWARD_SCALE]
+COMMON_MODE: .scale.commonMode[REWARD_SCALE;STRAT_SCOPE_MIN;STRAT_MAG_MIN;STRAT_MULT;CATCH_WINDOW;CATCH_REF;CATCH_BOOST]
+if[PUNISH_RULE=`derived; PUNISH_CALLS: .scale.punishCalls[PUNISH_STEP;COMMON_MODE;SEP_MARGIN]]
+/ Hebb: lifts a punished route off the floor by HEBB_MARGIN x its punishment (re-learning limit); 250 with the legacy rule
+if[null .brain.HEBB; .brain.HEBB: $[PUNISH_RULE=`legacy; 250i; .scale.hebb[.syn.MIN_STRENGTH;PUNISH_CALLS*PUNISH_STEP;HEBB_MARGIN]]]
+/ Primary decay: 0.5 of the original loss per slice visit, so 0.5 x 8 / vision slices per bar
+if[null DECAY_MULT; DECAY_MULT: 0.5*8f%IN_LEN]
+PRIM_DECAY: $[DECAY_MULT=1f; (.syn.DECAY_LO;.syn.DECAY_SPAN); (1f-DECAY_MULT*1f-.syn.DECAY_LO;DECAY_MULT*.syn.DECAY_SPAN)]
+/ Meta cycles in each primary step: 24 spread evenly over the steps (2 each at 12 steps)
+META_SCHED: `int$deltas floor (META_STEPS_PER_BAR*1+til STEPS_PER_BAR)%STEPS_PER_BAR
+-1 "Derived constants: steps per bar ",(string STEPS_PER_BAR)," (passes ",(string SCALE_FBAR)," of input per bar; reference ",(string SCALE_FREF),
+  "), punish calls ",$[null PUNISH_CALLS;"legacy rule";string PUNISH_CALLS]," (nP ",(string PUNISH_CALLS*PUNISH_STEP)," vs common mode ",(string COMMON_MODE),
+  "), hebb ",(string .brain.HEBB),", decay x",string DECAY_MULT;
 
 / Movement deltas (0-indexed directions 0-7 matching .dirs)
 / move_directions in Fortran: row=y, col=x

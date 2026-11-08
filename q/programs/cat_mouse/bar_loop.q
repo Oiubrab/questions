@@ -171,9 +171,8 @@ while[bar<=MAX_BARS;
     prim: .engine.runCycle[prim];
     accOut: accOut | prim`out;
 
-    / Meta-brain: run TWICE per primary step (smaller brain, needs more steps)
-    metaBr: .engine.runCycleSimple[metaBr];
-    metaBr: .engine.runCycleSimple[metaBr];
+    / Meta-brain: its own clock, META_STEPS_PER_BAR cycles a bar spread over the primary steps (2 per step at 12)
+    do[META_SCHED step; metaBr: .engine.runCycleSimple[metaBr]];
     accMetaOut: accMetaOut | metaBr`out;
     / the viewer shows the whole primary side: sight, touch and central stacked (modular brain)
     if[.viz.enabled; .viz.pubStep[bar;step;$[MODULAR; sightB[`br],touchB[`br],prim`br; prim`br];metaBr`br]];
@@ -207,10 +206,10 @@ while[bar<=MAX_BARS;
   / ---- META-BRAIN STRATEGY REINFORCEMENT ----
   / temporal scope: output[0]*40 clamped to [20,120]
   / magnitude:      output[1] clamped to [1,2]
-  temporalScope: `int$ 20i | 120i & (metaBr`out)[0] * 40i;
-  magnitude:     `int$ 1i  | (metaBr`out)[1];
+  temporalScope: `int$ STRAT_SCOPE_MIN | STRAT_SCOPE_MAX & (metaBr`out)[0] * STRAT_SCOPE_PER_OUT;
+  magnitude:     `int$ STRAT_MAG_MIN | (metaBr`out)[1];
   / --ablate-meta: behave as if meta output were all-zero (the clamps above give 20 and 1)
-  if[ablateMeta; temporalScope: 20i; magnitude: 1i];
+  if[ablateMeta; temporalScope: STRAT_SCOPE_MIN; magnitude: STRAT_MAG_MIN];
 
   / Strategic reinforcement rewards catching, so it is off in a FLEE world (G.4). It needs STRAT_GATE catches in the
   / last 200 bars (--strategic-gate; default 3); a high gate keeps it from cancelling punishment while hunting is poor
@@ -220,7 +219,7 @@ while[bar<=MAX_BARS;
     lookback: $[noMetaRewards; `int$(); .syn.lookbackBars[bar;temporalScope;HISTORY_SIZE]];
     / Fortran applied x1.1 `magnitude` times (x1.1 or x1.21); the original q port
     / used magnitude*1.1 (x2.2) — restored to Fortran (REVIVAL_PLAN.md F17)
-    mag: 1.1 xexp magnitude;
+    mag: STRAT_MULT xexp magnitude;
     lookbackSlots: .syn.histSlot[histIdx;bar;lookback;HISTORY_SIZE];
     prim[`syns]: .syn.applySparseLookbackScale[prim`syns;hist[lookbackSlots];.syn.scaleMult[mag;REWARD_SCALE]]];
 
@@ -232,10 +231,10 @@ while[bar<=MAX_BARS;
   / reaches the primary brain (cross-flow, strategic scope and magnitude), so routes that help the
   / cat eat are the ones that survive. This is the meta-brain's only reward.
   if[not noLearning;
-    $[satCell=4i; [metaBr[`syns]: .syn.applySparseReinforceN[metaBr`syns;metaBr`su;STEPS_PER_BAR;2i]];
-      satCell=3i; [metaBr[`syns]: .syn.applySparseReinforce[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
-      satCell=1i; [metaBr[`syns]: .syn.applySparsePunish[metaBr`syns;metaBr`su;STEPS_PER_BAR]];
-      satCell=0i; [metaBr[`syns]: .syn.applySparsePunishN[metaBr`syns;metaBr`su;STEPS_PER_BAR;2i]];
+    $[satCell=4i; [metaBr[`syns]: .syn.applySparseReinforceN[metaBr`syns;metaBr`su;META_REWARD_STEPS;2i]];
+      satCell=3i; [metaBr[`syns]: .syn.applySparseReinforce[metaBr`syns;metaBr`su;META_REWARD_STEPS]];
+      satCell=1i; [metaBr[`syns]: .syn.applySparsePunish[metaBr`syns;metaBr`su;META_REWARD_STEPS]];
+      satCell=0i; [metaBr[`syns]: .syn.applySparsePunishN[metaBr`syns;metaBr`su;META_REWARD_STEPS;2i]];
       0]];
 
   / ---- DECAY (every 5 bars) ----
@@ -330,7 +329,7 @@ while[bar<=MAX_BARS;
           / j is slots back from the write head (1 = current bar); q's mod is floored
           i: `int$(hi-j) mod HISTORY_SIZE;
           .syn.applySparseScale[syns;histBuf[i];CATCH_MULT]
-        }[hist;histIdx]/)[prim`syns;1i+til 20i]];
+        }[hist;histIdx]/)[prim`syns;1i+til CATCH_WINDOW]];
 
       / Respawn mouse 30-45 units from cat
       rdx: (2*(rand 1.0))-1.0; rdy: (2*(rand 1.0))-1.0;
@@ -352,7 +351,7 @@ while[bar<=MAX_BARS;
       if[2f>.vision.pathDist[oldCat;oldCat+actualMove;oldCat+dogV];
         dogContacts+:1i;
         if[not noLearning;
-          prim[`syns]: ({[histBuf;hi;syns;j] .syn.applySparseScale[syns;histBuf[`int$(hi-j) mod HISTORY_SIZE];1f%CATCH_MULT]}[hist;histIdx]/)[prim`syns;1i+til 20i]];
+          prim[`syns]: ({[histBuf;hi;syns;j] .syn.applySparseScale[syns;histBuf[`int$(hi-j) mod HISTORY_SIZE];1f%CATCH_MULT]}[hist;histIdx]/)[prim`syns;1i+til CATCH_WINDOW]];
         dogPos: $[worldOn; .world.clearPos[WT;2f;ringPos[(newX;newY);FIELD_SIZE]]; ringPos[(newX;newY);FIELD_SIZE;0]]];
       dn: .vision.norm dogV;
       if[(not noLearning) & (dn<DOG_NEAR) & (dn>0.001) & dogSlice>=0i;
