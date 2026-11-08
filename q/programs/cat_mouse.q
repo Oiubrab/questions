@@ -22,7 +22,7 @@
 /   --pg-eta E            step size for --pg-update (default 0.3)
 /   --rpe                 with --pg-update: reward = cosine minus its running average (G.R1)
 /   --rpe-rate B          running-average rate for --rpe (default 0.01, ~100 moves)
-/   --hebb N              unconditional per-use reinforcement of a route (default 250; original 1000; G.R3)
+/   --hebb N              unconditional per-use reinforcement of a route (derived; 252 for today's brain; original 1000; G.R3)
 /   --walled-world        the cat is clamped to the box while the mouse wraps (the original world, F12).
 /                         The default is the wrapped world (§7 decision 1); --wrap-world is still accepted
 /   --weight-ratio R      synapse cap = R x floor (G.R4). Without it the cap is 2,000,000 whatever the floor
@@ -30,12 +30,21 @@
 /                         every route explorable (MAX-MIN Ant System); R x floor >= 1000 so initial weights fit
 / Catch-rate defaults (since 2026-11-08, plans/inProgress/CATCH_RATE_PLAN.md §6): 4 punish calls from bar 1, floor 100,
 / primary decay x0.5. Restore the originals with --punish-calls legacy --floor 25 --decay-mult 1.
-/   --punish-calls N      neutral and bad moves both get N punish calls, from bar 1 (default 4). legacy: the
+/   --punish-calls N      neutral and bad moves both get N punish calls, from bar 1 (derived; 4). legacy: the
 /                         original rule (bad moves 1 + 2 x epoch/numEpochs calls, neutral 1 call from bar 2,001)
 /   --strategic-gate N    strategic reinforcement needs >= N catches in the last 200 bars (default 3)
 /   --floor F             weight floor (default 100; original 25; 1-999). Initial weights stay 25-1000
-/   --decay-mult D        scale the primary brain's decay loss by D (default 0.5; original 1; not with
+/   --decay-mult D        scale the primary brain's decay loss by D (derived; 0.5; original 1; not with
 /                         --two-timescale). The meta-brain's decay is unchanged
+/ Phase R (since 2026-11-08; researchNotes/CONSTANT_SCALING.md): steps per bar, punish calls, hebb and the decay
+/ multiplier are DERIVED from the brain's configuration at start-up (q/modules/brain/scaling.q) unless their own flag
+/ is given. Today's brain gives 12 / 4 / 252 / x0.5; --central-rows 6 gives 21 / 3 / 332. They're printed and recorded.
+/   --steps-per-bar S     propagation steps per bar (derived: a bar passes the share of an untrained input's energy
+/                         that the tested brain passes in 12 steps)
+/   --separation-margin M punish calls: the fewest with n x P >= M x common mode (default 1.1)
+/   --hebb-margin M       hebb = floor x (exp(M x n x P) - 1), the re-learning limit kept by factor M (default 1.5)
+/   --catch-ref C         catch rate (per bar) behind the common mode's catch-boost term (default 0.1265, reactive cat)
+/ Restore everything before 2026-11-08 with --punish-calls legacy --floor 25 --decay-mult 1 --steps-per-bar 12.
 /   --wiring W            output slot -> move direction: angle (default; slot s -> direction at 45s degrees,
 /                         the vision slices' order), grid (the original NW N NE W E SW S SE)
 /                         or random (a fixed permutation per seed). REVIVAL_PLAN.md §7 decision 6

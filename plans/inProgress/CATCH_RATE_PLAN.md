@@ -133,7 +133,7 @@ Same course as before: analysis, write-up, plan, execute, test. No simulator run
   - **PR5.** Deviation (weights-only) rises with depth for the derived arms, since paths are longer (CONSTANT_SCALING §5); no compensation is built in.
   - **PR6.** Re-learning after the leg reversal is no worse for derived than for fixed at each size.
 - [x] **R.4** Execute: compute the constants at start-up from the configuration, print and record them in summary.csv; explicit flags still override. Tests: the rules give the expected values on today's brain and on hand-worked cases. *(2026-11-08: done. `q/modules/brain/scaling.q` (`.scale`): a cell-level bias-only chain (`exitCdf`) and the rules; `params.q` derives steps per bar, punish calls, Hebb and decay unless their flags are given, prints them and records `stepsPerBar` in summary.csv. New flags `--steps-per-bar`, `--separation-margin`, `--hebb-margin`, `--catch-ref`. The meta-brain keeps its own clock (24 cycles a bar spread over the steps; reward step count 12); the strategic and catch-window literals are named constants. **Refactor check:** with `--hebb 250` the new code reproduces the previous default byte for byte (seed 1, 20k bars), so the only change to today's default is Hebb 250 → 252 (new golden digest 3521e4e0…; legacy flags still give the old one). Tests: `test_scaling.q` (15: the exit chain equals `.theory`'s to 1e-12 for modular and single brains; S = 12, 10, 15, 21, 29 and 15 single; P, C, n, h by hand) and 9 more in test_weights.q (derived values recorded, central rows 6 gives 21 / 3 / 332, overrides, margin 2 gives 7 calls, bad values rejected). All 49 test files pass. `scripts/model/spont_any.py` measures spontaneity at any depth)*
-- [ ] **R.5** Test on other brain sizes (e.g. `--central-rows 6`, `--single-brain`, and any larger brain the infrastructure allows): derived constants against today's fixed ones, fresh seeds. Success: the derived constants keep the §0 conditions where fixed ones lose them, or match them where nothing should change.
+- [~] **R.5** Test on other brain sizes (e.g. `--central-rows 6`, `--single-brain`, and any larger brain the infrastructure allows): derived constants against today's fixed ones, fresh seeds. Success: the derived constants keep the §0 conditions where fixed ones lose them, or match them where nothing should change. *(2026-11-09: run and scored, §6.7. Met at 6 central rows (derived 16/16 against fixed 9/16, re-learning far better); **not met at 9**, where the derived punishment (2 calls) loses to scaling the steps alone and no arm reaches 0.7. Open: the depth-9 failure, §6.7 candidates 1–3)*
 
 ## 6. Results
 
@@ -215,6 +215,39 @@ Catches per 1,000 bars; paired difference in catches per run against base (CI).
 
 **Main meets all three conditions.** Whether it becomes the default is §7 decision 1.
 
+### 6.7 Phase R: derived against fixed constants at three brain sizes (R.5)
+
+**Run 2026-11-08/09**, fresh seeds 33–48, open world 10,000 bars and re-learning `A:10000,L180:5000,A:5000`, each size paired against its own fixed arm (`--steps-per-bar 12 --punish-calls 4 --hebb 250`). Reports in `results/cr_report_r5_c3/`, `_c6/`, `_c9/`; spontaneity from `scripts/model/spont_any.py`.
+
+| Central rows | Arm | S / n / h | Alignment (epoch 5) | Seeds ≥ 0.7 | Catches/1k | Δ alignment vs fixed (CI) | Deviation (median) | L180 missing 0.6 | L180 recovered, Δ vs fixed (CI) |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 | fixed | 12 / 4 / 250 | 0.818 | 16/16 | 103.0 | | 0.332 | 13/16 | |
+| 3 | derived | 12 / 4 / 252 | 0.851 | 16/16 | 110.3 | +0.033 (+0.008, +0.061) | 0.331 | 14/16 | −0.02 (−0.17, +0.13) |
+| 6 | fixed | 12 / 4 / 250 | 0.697 | 9/16 | 82.6 | | 0.552 | 16/16 | |
+| 6 | steps only | 21 / 4 / 250 | 0.819 | 15/16 | 111.9 | +0.122 (+0.046, +0.194) | 0.382 | 15/16 | +0.05 (−0.02, +0.18) |
+| 6 | **derived** | **21 / 3 / 332** | **0.835** | **16/16** | **111.9** | **+0.137 (+0.075, +0.206)** | 0.473 | **4/16** | **+0.63 (+0.48, +0.76)** |
+| 9 | fixed | 12 / 4 / 250 | 0.324 | 0/16 | 30.1 | | 0.909 | 16/16 | |
+| 9 | steps only | 29 / 4 / 250 | **0.469** | 0/16 | **51.7** | **+0.145 (+0.032, +0.253)** | 0.829 | 16/16 | +0.08 (+0.06, +0.10) |
+| 9 | derived | 29 / 2 / 261 | 0.344 | 0/16 | 32.6 | +0.020 (−0.100, +0.141) | 0.888 | 16/16 | +0.18 (+0.13, +0.23) |
+
+Learning curves (mean alignment by epoch 1→5): at 6 rows, derived 0.67 → 0.83, fixed 0.28 → 0.70. At 9 rows, **derived plateaus at about 0.35 from epoch 2** (0.26, 0.35, 0.36, 0.36, 0.34), the lock-in signature of the original analysis, while fixed (0.08 → 0.32) and steps-only (0.20 → 0.47) are still climbing at bar 10,000.
+
+**Predictions:**
+
+| | Prediction | Outcome |
+|---|---|---|
+| PR1 | At 3 rows derived = fixed | **Refuted at face value** (+0.033, CI excluding 0). The only difference is hebb 252 vs 250; I don't believe that causes it. With divergent trajectories pairing removes little noise, and this is one of about ten comparisons in the test, so chance is the likely reason. Untested |
+| PR2 | Derived beats fixed at 6 and 9, more at 9 | **Confirmed at 6** (+0.137). **Refuted at 9** (+0.020, ns) |
+| PR3 | Derived meets ≥ 14/16 at 6 rows | **Confirmed** (16/16) |
+| PR4 | Most of the gain comes from steps per bar | **Confirmed at 6** (steps-only 0.819 against derived 0.835 and fixed 0.697). At 9 steps-only is the best arm, and the derived punishment and Hebb *lose* most of its gain |
+| PR5 | Deviation rises with depth for derived | **Confirmed**: medians 0.33, 0.47, 0.89 |
+| PR6 | Re-learning no worse for derived | **Confirmed**, and much better at 6 rows (4/16 missing against 16/16) |
+
+**Verdict.** At 6 central rows the derived constants do what the user asked: the fixed constants lose the §0 target (9/16) and the derived ones keep it (16/16), with better re-learning. **At 9 rows no arm comes close, and the derived punishment (2 calls) makes things worse than scaling the steps alone.** Why isn't established. Candidates for the next analysis, none tested:
+1. **The common-mode bound misses something that grows with depth.** Central routes are shared by several slices, so their direct reward averages over slices while the common mode doesn't; the per-use separation condition assumes one slice per route. The early plateau fits a separation failure.
+2. **One reward call's size grows with steps per bar** (P = λ(ln 1.25 + S ln(1/0.95))): at 29 steps a call is 2.0× today's, like doubling the reward scale, which the original analysis found noisier.
+3. **10,000 bars may be too short** for a 9-row brain: two arms are still climbing.
+
 ## 7. Decisions for the user
 
 1. ~~If main or gate passes, does it become the default?~~ **Answered (user, 2026-11-08): yes, main is the default (R.0), and its constants should come from the equations and scale with the brain (Phase R).**
@@ -222,6 +255,7 @@ Catches per 1,000 bars; paired difference in catches per run against base (CI).
 3. **Decay ×0.5 on the primary brain only.** I applied it to the primary brain only, to match the model, which has no meta-brain. Should the meta-brain's decay follow?
 4. ~~If the guard worlds show a loss~~: moot, none did (§6.4).
 5. ~~The gate arm's re-learning failure~~ **Answered (user, 2026-11-08): investigate (R.2).**
+6. **Depth 9 (§6.7):** should the next step be an analysis of why the derived rule fails at 9 central rows (candidates 1–3), before anything else changes? Until then, `--central-rows 9` runs with derived constants that are worse than steps-only.
 
 ## 8. Progress log
 
@@ -231,3 +265,5 @@ Catches per 1,000 bars; paired difference in catches per run against base (CI).
 - **2026-11-08.** The user approved main as the default and asked for the constants to be derived from the equations so they scale with the brain (revival §2 point 10), and for the gate failure to be investigated. R.0 done (byte-identical default; legacy flags reproduce the old digest). Phase R added.
 - **2026-11-08.** R.1 and R.2 done: `researchNotes/CONSTANT_SCALING.md`. Brain size enters the conditions only through steps per bar; a deeper brain at 12 steps keeps moving but on stale input (F(12) = 0.15 at 6 central rows, 0.006 at 9; simulator check agrees). Rules for S, n, h and decay derived; today's brain gives 12 / 4 / 252 / ×0.5. Gate arm: its catch-count gate stays shut for 99% of the reversed block, so strategic never returns. R.3 written with predictions PR1–PR6, fixed before any run.
 - **2026-11-08.** R.4 done (details on the task). R.5 started: `scripts/experiments/scaling_experiment.sh r5` (central rows 3, 6, 9; seeds 33–48; reports `results/cr_report_r5_c*/`).
+
+- **2026-11-09.** R.5 run and scored (§6.7): derived constants keep the §0 target at 6 central rows where fixed ones lose it (16/16 vs 9/16; re-learning 4/16 vs 16/16 missing). At 9 rows they fail: 2 punish calls plateau at 0.35 while steps-only climbs to 0.47. PR1 refuted at face value (+0.033 from hebb 252 vs 250, likely chance). Waiting on the user (§7 decision 6).

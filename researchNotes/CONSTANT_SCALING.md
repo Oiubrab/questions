@@ -2,6 +2,8 @@
 
 **What this is.** Tasks R.1 and R.2 of [CATCH_RATE_PLAN.md](../plans/inProgress/CATCH_RATE_PLAN.md) Phase R (2026-11-08): the analysis behind the user's principle that "the equations that created what is possible here should be built into any future runs of the brain … if I request a larger brain, some of these constants … should scale based on the mathematics automatically" (revival plan §2 point 10).
 
+**Tested 2026-11-09** ([CATCH_RATE_PLAN.md](../plans/inProgress/CATCH_RATE_PLAN.md) §6.7, seeds 33–48): at 6 central rows the derived constants keep the 0.7 target (16/16 seeds) where today's fixed ones lose it (9/16), and re-learn far better. **At 9 rows the rules fail**: the derived 2 punish calls lock in at 0.35, worse than scaling the steps alone (0.47), and no arm reaches 0.7. Steps per bar (§2) is confirmed as the main size effect; the punish rule (§3) doesn't hold at that depth, for reasons not yet established.
+
 **What this is not.** Not a test. Nothing here ran the simulator with a new setting. The only runs are existing configurations with learning off (`--central-rows N --no-learning`), to check the geometry calculation in §2.
 
 Notation is as in [CATCH_RATE_ANALYSIS.md](CATCH_RATE_ANALYSIS.md) (its table at the top). New here:

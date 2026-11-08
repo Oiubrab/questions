@@ -43,7 +43,7 @@ for stage in $STAGES; do
     q q/programs/analysis/compare.q "${DIRS[@]}" < /dev/null > "$REP/open_compare.txt" 2>&1
     mkdir -p results/model/w
     q scripts/model/export.q results/model/w "${EXP[@]}" < /dev/null > /dev/null 2>&1
-    python3 scripts/model/spont_arm.py "${EXP[@]}" > "$REP/open_spontaneity.txt" 2>&1
+    python3 scripts/model/spont_any.py "${EXP[@]}" > "$REP/open_spontaneity.txt" 2>&1
     cat "$REP/open_target.txt" "$REP/open_spontaneity.txt" ;;
   relearn)
     RA=()
