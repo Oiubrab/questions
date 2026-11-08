@@ -11,7 +11,7 @@ system "c 50 250" / wide console so epoch tables aren't truncated
 
 / Column types by name, so summaries written before or after a column was added both load.
 / Columns not listed here are skipped; arms with different columns are union-joined (nulls).
-SUM_TYPES: `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIIS"
+SUM_TYPES: `seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges`punishCalls`strategicGate`floor`decayMult!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIISIIIF"
 EPOCH_TYPES: `epoch`bars`catches`towards`away`perp`meanAlignment!"IIIIIIF"
 
 / Read one CSV from every s<id>/ subdirectory of an arm, tagging rows with label and id

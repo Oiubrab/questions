@@ -148,7 +148,7 @@ See [scripts/experiments/META_EXPERIMENT_README.md](scripts/experiments/META_EXP
 |---|---|
 | [OBSTACLES_RESULTS.md](researchNotes/OBSTACLES_RESULTS.md) | **Read first:** what every element did in every world, what to keep, what to do next |
 | [OBSTACLES_PLAN.md](plans/completed/OBSTACLES_PLAN.md) | The completed obstacles plan: harder worlds, a hidden mouse, internal-structure probes |
-| [VISION_PLAN.md](plans/future/VISION_PLAN.md), [VIEWER_UPLIFT_PLAN.md](plans/future/VIEWER_UPLIFT_PLAN.md), [PARAMETERS_PLAN.md](plans/future/PARAMETERS_PLAN.md), [METRONOME_PLAN.md](plans/future/METRONOME_PLAN.md) | Future plans: richer vision, a better viewer, no hard-coded values, a clock-like internal input |
+| [VISION_PLAN.md](plans/future/VISION_PLAN.md), [VIEWER_UPLIFT_PLAN.md](plans/future/VIEWER_UPLIFT_PLAN.md), [PARAMETERS_PLAN.md](plans/future/PARAMETERS_PLAN.md), [METRONOME_PLAN.md](plans/future/METRONOME_PLAN.md), [EVOLUTION_PLAN.md](plans/future/EVOLUTION_PLAN.md) | Future plans: richer vision, a better viewer, no hard-coded values, a clock-like internal input, an evolutionary search over the setup |
 | [3D_PLAN.md](plans/future/3D_PLAN.md) | Future plan: a 3D world and brain, and the substrate research it builds on |
 | [REVIVAL_PLAN.md](plans/completed/REVIVAL_PLAN.md) | The completed revival: design intent, audit findings, fixes, every result so far |
 | [KX_DASHBOARDS_PLAN.md](plans/completed/KX_DASHBOARDS_PLAN.md) | The completed live viewer and the side-by-side run comparison |

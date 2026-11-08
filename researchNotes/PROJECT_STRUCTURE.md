@@ -40,6 +40,7 @@
 │   │   │   └── outputs.q        #   end of run: CSVs, weights file, summary, logs
 │   │   ├── analysis/            # Read finished runs in results/ (arguments are arm directories)
 │   │   │   ├── compare.q        # Paired multi-seed comparison of experiment arms
+│   │   │   ├── target_report.q  # §0 target: last-epoch alignment per seed, seeds ≥ 0.7, paired CIs (catch-rate plan)
 │   │   │   ├── world_report.q   # Obstacle-world report: catches, visibility, behaviour while the mouse is hidden
 │   │   │   ├── relearn_report.q # Re-learning speed report: every switch metric, ratios, savings (G.4)
 │   │   │   ├── policy_ceiling.q # Weights-only predicted alignment vs measured, per arm (G.R0)
@@ -73,11 +74,14 @@
 │   ├── experiments/             # Multi-arm experiments built on run_trials.sh, each ending in a report
 │   │   ├── phase3_experiment.sh    # The controlled re-test (train 16 brains, 4 arms, report)
 │   │   ├── relearn_experiment.sh   # G.4 re-learning experiment (schedule + fresh controls + report)
+│   │   ├── catch_rate_experiment.sh # Catch-rate plan: open world, re-learning and guard worlds on seeds 17-32
 │   │   ├── world_experiment.sh     # Obstacle worlds: brain arms vs scripted baselines, per world
 │   │   ├── obstacles_closeout.sh   # Obstacles plan close-out batch (resumable; skips finished arms)
 │   │   └── META_EXPERIMENT_README.md
 │   ├── probes/
 │   │   └── lesion_map.sh        # I.4: freeze each trained brain of an arm, lesion one cell at a time
+│   ├── model/                   # Python mean-field and kinematic models behind CATCH_RATE_ANALYSIS.md, the
+│   │                            #   weight export, the spontaneity measure and the reward ledger (see its README)
 │   └── lab/
 │       └── lab_sweep.sh         # Named substrate-lab sweeps → results/lab/<sweep>/
 ├── dashboards/                  # KX Dashboards definitions (Cat Brain live, Cat Brain Compare), connection,
@@ -89,6 +93,7 @@
 │   ├── inProgress/              # (none active)
 │   ├── future/
 │   │   ├── METRONOME_PLAN.md    # A sparse clock-like internal input at a fixed spot (replaces --spontaneous)
+│   │   ├── EVOLUTION_PLAN.md    # An evolutionary search over the setup: genome of settings, then structure; fitness on shared seeds
 │   │   ├── VIEWER_UPLIFT_PLAN.md  # A purpose-built web viewer: world, brain modules and flow, senses and motor, learning
 │   │   ├── PARAMETERS_PLAN.md   # Removing hard-coded values: a parameter registry with defaults in config files
 │   │   ├── VISION_PLAN.md       # Seeing walls and other objects (colour, depth, motion) without flooding the sight brain

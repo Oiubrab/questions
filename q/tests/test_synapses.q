@@ -46,6 +46,22 @@ gotNext:rand 1.0;
 .t.eq["decay preserves RNG stream";gotNext;expectedNext];
 .t.ok["unused synapses stay unchanged";.syn.applyReinforce[syns;unused;12i]~syns];
 
+/ Catch-rate plan: applyDecay is applyDecayBy with the default constants; --decay-mult D gives lo = 1-D*(1-0.98),
+/ span = D*0.015, which scales the mean loss (1.25% per period) by D; the floor holds
+system "S 77";
+Wd: (2;2;8;8)#`int$100000+900000*256?1f;
+system "S 5"; d1: .syn.applyDecay[Wd];
+system "S 5"; d1b: .syn.applyDecayBy[Wd;.syn.DECAY_LO;.syn.DECAY_SPAN];
+.t.ok["applyDecay = applyDecayBy with DECAY_LO, DECAY_SPAN";d1~d1b];
+loss:{[W;W2] avg 1-(`float$raze raze raze W2)%`float$raze raze raze W};
+system "S 5"; dh: .syn.applyDecayBy[Wd;1f-0.5*1f-.syn.DECAY_LO;0.5*.syn.DECAY_SPAN];
+.t.near["default mean loss is 1.25% per period";loss[Wd;d1];0.0125;0.0005];
+.t.near["decay-mult 0.5 halves the mean loss";loss[Wd;dh];0.00625;0.0003];
+oldFloor: .syn.MIN_STRENGTH; .syn.MIN_STRENGTH: 100i;
+Wl: (2;2;8;8)#100i;
+.t.ok["decay never takes a weight below a raised floor";all 100=raze raze raze .syn.applyDecayBy[Wl;.syn.DECAY_LO;.syn.DECAY_SPAN]];
+.syn.MIN_STRENGTH: oldFloor;
+
 / G.R5 two-timescale weights
 system "S 9";
 W: (2;2;8;8)#`int$25+10000*256?1f;              / a 2x2 brain, weights 25..10025

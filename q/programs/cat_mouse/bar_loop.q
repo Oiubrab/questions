@@ -212,8 +212,9 @@ while[bar<=MAX_BARS;
   / --ablate-meta: behave as if meta output were all-zero (the clamps above give 20 and 1)
   if[ablateMeta; temporalScope: 20i; magnitude: 1i];
 
-  / Strategic reinforcement rewards catching, so it is off in a FLEE world (G.4)
-  if[(not noLearning)&(not fleeNow)&((noDirectRewards & rateCounter>=1i) | rateCounter>=3i);
+  / Strategic reinforcement rewards catching, so it is off in a FLEE world (G.4). It needs STRAT_GATE catches in the
+  / last 200 bars (--strategic-gate; default 3); a high gate keeps it from cancelling punishment while hunting is poor
+  if[(not noLearning)&(not fleeNow)&((noDirectRewards & rateCounter>=1i) | rateCounter>=STRAT_GATE);
     / Reinforce primary brain synapses active during lookback window
     / lookback: bars bar-1, bar-2, ..., bar-temporalScope (clamped to history buffer depth)
     lookback: $[noMetaRewards; `int$(); .syn.lookbackBars[bar;temporalScope;HISTORY_SIZE]];
@@ -244,7 +245,7 @@ while[bar<=MAX_BARS;
   if[(not noLearning)&(0i=bar mod 5i);
     $[twoTS;
       [prim[`syns]: .syn.relaxDecay[prim`syns;slowM;TAU_FAST]; slowM: .syn.consolidate[prim`syns;slowM;TAU_SLOW]];
-      prim[`syns]: .syn.applyDecay[prim`syns]];
+      prim[`syns]: .syn.applyDecayBy[prim`syns;PRIM_DECAY 0;PRIM_DECAY 1]];   / --decay-mult scales the loss
     metaBr[`syns]: .syn.applyDecay[metaBr`syns]];
 
   / ---- STORE SYNAPSE USAGE IN HISTORY BUFFER ----
@@ -424,12 +425,15 @@ while[bar<=MAX_BARS;
            prim[`syns]: .syn.applySparseReinforceNL[prim`syns;prim`su;STEPS_PER_BAR;reinforceCalls;REWARD_SCALE];
            lastRewDir: outAction;
            ];
+          / Bad move. --punish-calls N (catch-rate plan): N calls from bar 1, so a wrong route's punishment
+          / can beat the reinforcement every used route gets (nP > C, CATCH_RATE_ANALYSIS.md §3.1)
           goalDot<-0.01;
-          [punishCalls:`int$1.0+epochProg*2.0;
+          [punishCalls:$[null PUNISH_CALLS; `int$1.0+epochProg*2.0; PUNISH_CALLS];
            prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;punishCalls;REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
-          currentEpoch>0i;
-          [prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;1i;REWARD_SCALE];
+          / Neutral move: 1 call from bar 2,001 by default; with --punish-calls, N calls from bar 1
+          (currentEpoch>0i)|not null PUNISH_CALLS;
+          [prim[`syns]: .syn.applySparsePunishNL[prim`syns;prim`su;STEPS_PER_BAR;$[null PUNISH_CALLS;1i;PUNISH_CALLS];REWARD_SCALE];
            lastRewDir: 0i; momStreak: 0i];
           0]]]];
 

@@ -49,3 +49,6 @@ results/
 *.txt
 *.png
 simulation_log.csv
+
+# Ignore local environment files
+.env

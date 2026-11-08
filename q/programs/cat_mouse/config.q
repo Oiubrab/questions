@@ -9,7 +9,8 @@ args: .z.x
 KNOWN_FLAGS: ("--seed";"--bars";"--output-dir";"--load-weights";
               "--meta-only";"--no-direct-rewards";"--no-meta-rewards";"--ablate-meta";"--no-learning";"--cos-reward";"--reward-scale";"--pg-update";"--pg-eta";"--rpe";"--rpe-rate";"--hebb";"--relearn-schedule";"--wrap-world";"--weight-ratio";"--wiring";"--world";"--see-through";"--blink";"--hidden-reward";"--policy";"--efference";
               "--raw-dot-reward";"--walled-world";"--random-tie";"--mice";"--sat-edges";"--evasive";"--distractor";"--layout-every";"--lesion";"--log-state";"--single-brain";"--central-rows";"--no-touch";"--meta-entry";"--mouse-step";"--field-size";
-              "--two-timescale";"--tau-fast";"--tau-slow";"--viz-port";"--viz-delay-ms")
+              "--two-timescale";"--tau-fast";"--tau-slow";"--viz-port";"--viz-delay-ms";
+              "--punish-calls";"--strategic-gate";"--floor";"--decay-mult")
 / Fail on typos: a misspelt ablation flag would otherwise silently run the control arm
 badFlags: (args where args like "--*") except KNOWN_FLAGS
 if[count badFlags; -2 "Unknown flag(s): ",", " sv badFlags; exit 1]
@@ -108,9 +109,31 @@ if[((hasFlag "--tau-fast")|hasFlag "--tau-slow") & not twoTS; -2 "--tau-fast/--t
 / G.R4 bounded weights (MAX-MIN Ant System): cap/floor ratio. With the default 80,000:1 a floor route
 / next to a capped one is chosen ~0.001% of the time, so old habits are slow to un-learn. Lowering R
 / guarantees every route a minimum chance. Initial weights are 25-1000, so R must be >= 40.
+/ Catch-rate plan (plans/inProgress/CATCH_RATE_PLAN.md): the weight floor. Default 25. A higher floor keeps punished
+/ routes more available (spontaneity), but re-learning needs ln(1 + hebb/floor) > punish log-step per bar
+/ (CATCH_RATE_ANALYSIS.md §3.2). Initial weights stay 25-1000 (.syn.INIT_MIN); the floor applies from the first decay.
+FLOOR: $[count flagVal "--floor"; "I"$flagVal "--floor"; .syn.MIN_STRENGTH]
+if[(null FLOOR)|(FLOOR<1i)|FLOOR>=.syn.MAX_INIT; -2 "--floor must be an integer from 1 to ",(string .syn.MAX_INIT-1i); exit 1]
+.syn.MIN_STRENGTH: FLOOR
 WEIGHT_RATIO: $[count flagVal "--weight-ratio"; "F"$flagVal "--weight-ratio"; 80000f]
-if[(null WEIGHT_RATIO)|WEIGHT_RATIO<40f; -2 "--weight-ratio must be >= 40 (initial weights go up to 1000)"; exit 1]
+if[(null WEIGHT_RATIO)|.syn.MAX_INIT>WEIGHT_RATIO*FLOOR; -2 "--weight-ratio x floor must be >= ",(string .syn.MAX_INIT)," (initial weights go up to it): ratio >= 40 at floor 25"; exit 1]
 .syn.MAX_STRENGTH: `int$WEIGHT_RATIO*.syn.MIN_STRENGTH
+/ Catch-rate plan: decay strength of the primary brain. Each decay period (5 bars) multiplies a weight by
+/ 1 - D*(1-u), u = DECAY_LO + DECAY_SPAN*U(0,1), so D scales the loss (D = 0.5 halves it). The meta-brain's decay is
+/ unchanged (the plan's model has no meta-brain; plan §7 decision 3). D = 1 uses the original constants exactly.
+DECAY_MULT: $[count flagVal "--decay-mult"; "F"$flagVal "--decay-mult"; 1f]
+if[(null DECAY_MULT)|(DECAY_MULT<0f)|DECAY_MULT>1f%1f-.syn.DECAY_LO; -2 "--decay-mult must be from 0 to ",string 1f%1f-.syn.DECAY_LO; exit 1]
+PRIM_DECAY: $[DECAY_MULT=1f; (.syn.DECAY_LO;.syn.DECAY_SPAN); (1f-DECAY_MULT*1f-.syn.DECAY_LO;DECAY_MULT*.syn.DECAY_SPAN)]
+if[twoTS & hasFlag "--decay-mult"; -2 "--decay-mult doesn't apply with --two-timescale (it relaxes towards the slow memory instead)"; exit 1]
+/ Catch-rate plan: punishment and the strategic gate (CATCH_RATE_ANALYSIS.md §3.1: a wrong route only falls if its
+/ punishment beats the reinforcement every used route gets, nP > C).
+/ --punish-calls N: neutral and bad moves both get N punish calls, from bar 1. Unset keeps the original rule: bad
+/ moves 1 + 2*epoch/numEpochs calls, neutral moves 1 call from bar 2,001.
+PUNISH_CALLS: $[count flagVal "--punish-calls"; "I"$flagVal "--punish-calls"; 0Ni]
+if[(hasFlag "--punish-calls") & (null PUNISH_CALLS)|PUNISH_CALLS<1i; -2 "--punish-calls must be a positive integer"; exit 1]
+/ --strategic-gate N: strategic reinforcement needs at least N catches in the last RATE_WINDOW (200) bars (default 3)
+STRAT_GATE: $[count flagVal "--strategic-gate"; "I"$flagVal "--strategic-gate"; 3i]
+if[(null STRAT_GATE)|STRAT_GATE<1i; -2 "--strategic-gate must be a positive integer"; exit 1]
 / G.3(b): rewards multiply weights, so they are steps in log space (reinforce +0.80, punish -0.84,
 / catch boost +0.41 per bar, strategic +0.095*m per lookback bar). REWARD_SCALE multiplies every
 / primary-brain step by L, keeping the same RNG draws; 1 is the original behaviour exactly.

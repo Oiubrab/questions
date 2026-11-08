@@ -26,7 +26,15 @@
 /   --walled-world        the cat is clamped to the box while the mouse wraps (the original world, F12).
 /                         The default is the wrapped world (§7 decision 1); --wrap-world is still accepted
 /   --weight-ratio R      synapse cap = R x floor (default 80000 = 2,000,000/25; G.R4). Lower R keeps
-/                         every route explorable (MAX-MIN Ant System); R >= 40 so initial weights fit
+/                         every route explorable (MAX-MIN Ant System); R x floor >= 1000 so initial weights fit
+/   Catch-rate plan (plans/inProgress/CATCH_RATE_PLAN.md); every default reproduces the original rule exactly:
+/   --punish-calls N      neutral and bad moves both get N punish calls, from bar 1 (default: bad moves
+/                         1 + 2 x epoch/numEpochs calls, neutral moves 1 call from bar 2,001)
+/   --strategic-gate N    strategic reinforcement needs >= N catches in the last 200 bars (default 3)
+/   --floor F             weight floor (default 25; 1-999). Initial weights stay 25-1000. Raises the cap too
+/                         (cap = ratio x floor): give --weight-ratio to keep it, e.g. 20000 at floor 100
+/   --decay-mult D        scale the primary brain's decay loss by D (default 1; 0.5 halves it; not with
+/                         --two-timescale). The meta-brain's decay is unchanged
 /   --wiring W            output slot -> move direction: angle (default; slot s -> direction at 45s degrees,
 /                         the vision slices' order), grid (the original NW N NE W E SW S SE)
 /                         or random (a fixed permutation per seed). REVIVAL_PLAN.md §7 decision 6

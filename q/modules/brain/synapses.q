@@ -6,14 +6,19 @@
 \d .syn
 
 MAX_STRENGTH: 2000000i
-MIN_STRENGTH: 25i
+MIN_STRENGTH: 25i          / weight floor; --floor sets it (CATCH_RATE_PLAN.md)
 MAX_INIT: 1000i
+INIT_MIN: 25i              / lowest initial weight; fixed whatever the floor, so --floor leaves the starting brain unchanged
+/ Decay multiplier per element per decay period: DECAY_LO + DECAY_SPAN*U(0,1), i.e. 0.98-0.995 (0.5-2% loss).
+/ --decay-mult D scales the primary brain's loss by D (cat_mouse/config.q); these are the defaults.
+DECAY_LO: 0.98
+DECAY_SPAN: 0.015
 
 / Initialize 4D synapse array (rows x cols x 8 x 8 integer)
 / Returns nested list: rows lists, each containing cols 8x8 int matrices
 init:{[nR;nC]
   / Projection f[;nC] fixes nC so inner lambda can generate fresh random matrices per row
-  f:{[x;n] {`int$(MIN_STRENGTH + (MAX_INIT - MIN_STRENGTH) * 8 8#64?1.0)} each til n};
+  f:{[x;n] {`int$(INIT_MIN + (MAX_INIT - INIT_MIN) * 8 8#64?1.0)} each til n};
   f[;nC] each til nR}
 
 / Initialize synapse usage tracker (nR x nC x 8 x 8 boolean)
@@ -189,13 +194,14 @@ decayCell:{[sc]
   noise: 8 8 # 0.98 + 0.015*(64?1.0);
   MIN_STRENGTH | `int$(`float$sc) * noise}
 
-/ Apply decay to entire synapse array
-applyDecay:{[syns]
+/ Apply decay to entire synapse array: each weight times lo + span*U(0,1), floored
+applyDecayBy:{[syns;lo;span]
   flat: raze raze raze syns;
-  noise: 0.98 + 0.015*(count flat)?1.0;
+  noise: lo + span*(count flat)?1.0;
   updated: MIN_STRENGTH | `int$`float$flat*noise;
   shape: `int$(count syns;count first syns;8i;8i);
   shape#updated}
+applyDecay:{[syns] applyDecayBy[syns;DECAY_LO;DECAY_SPAN]}
 
 / G.R5 two-timescale weights (REVIVAL_PLAN.md; Benna & Fusi 2016). M is the slow memory in log-weights,
 / a flat float vector in the order of raze raze raze syns.

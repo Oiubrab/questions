@@ -30,7 +30,7 @@ wf: get hsym `$dir,"frozen/weights_seed5.bin";
 / Defaults since 2026-10-29: cosine reward, reward scale 0.25, hebb 250, wrapped world, angle wiring.
 / Each restore flag is recorded and changes learning (same seed, same bars).
 run "--seed 5 --bars 200 --raw-dot-reward --output-dir ",dir,"cos";
-SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIIS"
+SUM_TYPES:`seed`bars`directRewards`metaRewards`ablateMeta`noLearning`weightFile`catches`totalMoves`towards`away`perp`meanPressure`meanAlignment`acquisitionTime`cosReward`rewardScale`pgUpdate`pgEta`rpe`rpeRate`hebb`relearnSchedule`wrapWorld`weightRatio`wiring`wiringPerm`world`blink`policy`hiddenReward`seeThrough`visibleFrac`alignVisible`alignHidden`blockedFrac`catchTimeMed`efference`spontaneous`meanSatietyCell`randomTie`mouseStep`fieldSize`twoTimescale`tauFast`tauSlow`architecture`centralRows`touch`metaEntry`mice`evasive`distractor`dogContacts`layoutEvery`satEdges`punishCalls`strategicGate`floor`decayMult!"IIBBBBSIIIIIFFIBFBFBFISBFSSSSSSBFFFFFBFFBFFBFFSIBSIBBIISIIIF"
 logOf:{[d] read0 hsym `$dir,d,"/simulation_log.csv"}
 sumOf:{[d;c] f:hsym `$dir,d,"/summary.csv"; first ((SUM_TYPES `$"," vs first read0 f;enlist ",") 0: f) c}
 .t.eq["summary records cosReward=1 by default";sumOf["a";`cosReward];1b];
@@ -210,6 +210,25 @@ run "--seed 5 --bars 600 --world random --layout-every 200 --output-dir ",dir,"l
 run "--seed 5 --bars 300 --sat-edges 1,4,10,20 --output-dir ",dir,"sat";
 .t.eq["summary records satiety edges (default and --sat-edges)";(sumOf["a";`satEdges];sumOf["sat";`satEdges]);`$("0.5|2|5|10";"1|4|10|20")];
 .t.ok["--sat-edges 3,2,1,4 exits non-zero";`failed~@[run;"--seed 5 --bars 1 --sat-edges 3,2,1,4 --output-dir ",dir,"sat0";{`failed}]];
+
+/ Catch-rate plan flags (plans/inProgress/CATCH_RATE_PLAN.md): recorded, change the run, keep their bounds, validated.
+/ Their defaults reproducing the original run exactly is test_golden.q's job.
+.t.eq["summary records the catch-rate defaults (punish rule, gate 3, floor 25, decay x1)";sumOf["a"] each `punishCalls`strategicGate`floor`decayMult;(0Ni;3i;25i;1f)];
+run "--seed 5 --bars 300 --punish-calls 4 --output-dir ",dir,"p4";
+.t.ok["--punish-calls 4 changes learning (neutral moves punished from bar 1)";not (wa 0)~(get hsym `$dir,"p4/weights_seed5.bin") 0];
+run "--seed 5 --bars 300 --punish-calls 4 --strategic-gate 20 --floor 100 --weight-ratio 20000 --decay-mult 0.5 --output-dir ",dir,"cr";
+.t.eq["summary records --punish-calls, --strategic-gate, --floor, --decay-mult";sumOf["cr"] each `punishCalls`strategicGate`floor`decayMult;(4i;20i;100i;0.5)];
+wcr: get hsym `$dir,"cr/weights_seed5.bin";
+.t.ok["--floor 100 --weight-ratio 20000 keeps primary weights within [100, 2,000,000]";all (raze raze/[wcr 0]) within 100 2000000];
+.t.ok["--floor 100 lifts the floor (some primary weights sit at 100)";any 100=raze raze/[wcr 0]];
+run "--seed 5 --bars 0 --floor 100 --output-dir ",dir,"fl0";
+.t.ok["--floor leaves the initial weights unchanged (25-1000)";wi~get hsym `$dir,"fl0/weights_seed5.bin"];
+run "--seed 5 --bars 300 --strategic-gate 1000 --output-dir ",dir,"sg";
+.t.ok["--strategic-gate 1000 (strategic never on) changes learning";not (wa 0)~(get hsym `$dir,"sg/weights_seed5.bin") 0];
+run "--seed 5 --bars 300 --decay-mult 0.5 --output-dir ",dir,"dm";
+.t.ok["--decay-mult 0.5 changes learning";not (wa 0)~(get hsym `$dir,"dm/weights_seed5.bin") 0];
+bad:("--punish-calls 0";"--punish-calls x";"--strategic-gate 0";"--floor 0";"--floor 1000";"--floor 100 --weight-ratio 5";"--decay-mult -1";"--decay-mult 51";"--decay-mult 0.5 --two-timescale");
+{[b] .t.ok[b," exits non-zero";`failed~@[run;"--seed 5 --bars 1 ",b," --output-dir ",dir,"crbad";{`failed}]]} each bad;
 
 / A misspelt flag must abort, not silently run the control condition
 .t.ok["unknown flag exits non-zero";`failed~@[run;"--seed 5 --bars 1 --output-dir ",dir,"c --ablate_meta";{`failed}]];
